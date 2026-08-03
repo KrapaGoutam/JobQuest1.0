@@ -46,12 +46,16 @@ Run from `backend`:
 | `npm run seed` | Create/promote the environment-selected manager |
 | `npm run dev` | Start with Node watch mode |
 | `npm start` | Start normally |
-| `npm test` | Run unit/integration tests serially |
+| `npm test` | Run the complete automated suite serially |
+| `npm run test:backend` | Run backend API and authorization tests |
+| `npm run test:frontend` | Run frontend utility/component logic tests |
+| `npm run test:integration` | Run cross-resource integration tests |
+| `npm run test:e2e` | Run the authenticated end-to-end workflow test |
 | `npm run lint` | Parse-check backend and frontend sources |
 | `npm run typecheck` | Run the supported static syntax checks (the project is JavaScript, not TypeScript) |
 | `npm run build` | Validate frontend source and clean-database migrations; no compilation is needed |
 
-There is no dependency installation step because the project has no third-party runtime or development dependencies. Browser E2E infrastructure is not committed; API-level integration tests cover the authenticated workflows.
+There is no dependency installation step because the project has no third-party runtime or development dependencies. End-to-end coverage exercises the complete browser-facing API workflow; focused frontend tests cover theme, calendar, aging, and accessible widget movement logic.
 
 ## Authentication, authorization, and ownership
 
@@ -67,7 +71,7 @@ There is no dependency installation step because the project has no third-party 
 
 ## Applications and trackers
 
-Applications support complete job metadata, validation, duplicate detection, stage changes, activity history, search, stage/priority filters, sorting, and pagination. The UI exposes application add/edit/delete/stage fields and tables. Related endpoints and screens cover multiple interviews, rejections, application follow-ups, networking contacts, daily goals, and Monday-to-Sunday weekly goals. Managers see cross-user lists and aggregate/user metrics without impersonation.
+Applications support complete job metadata, validation, duplicate detection, stage history, visual timelines, tags, pinning, archive/restore, saved views, search/filter/sort/pagination, and manual, Quick Add, JSON, or structured-text entry. Related screens cover resumes and effectiveness analytics, interviews, rejections, calculated follow-ups, networking, reminders and custom categories, month/week/agenda calendars, goal snapshots/history/trends/streaks, application aging, stage duration, and versioned exports. Users and managers have persistent configurable dashboard layouts with accessible drag, keyboard, and mobile reordering.
 
 Dashboard percentages use all tracked applications as the denominator and return zero for an empty dataset:
 
@@ -87,7 +91,7 @@ JSON must be a non-empty array of objects. Structured text uses `field: value`, 
 
 Canonical fields:
 
-`company`, `job_title`, `job_url`, `location`, `work_arrangement`, `employment_type`, `date_found`, `date_applied`, `source`, `stage`, `priority`, `salary_min`, `salary_max`, `salary_currency`, `salary_range`, `resume_version`, `cover_letter_version`, `recruiter_name`, `recruiter_email`, `recruiter_phone`, `job_description`, `notes`, `next_action`, `next_action_date`, `last_response_date`, `external_job_id`.
+`company`, `job_title`, `job_url`, `location`, `work_arrangement`, `employment_type`, `date_applied`, `source`, `stage`, `priority`, `salary_min`, `salary_max`, `salary_currency`, `salary_range`, `resume_version`, `cover_letter_version`, `recruiter_name`, `recruiter_email`, `recruiter_phone`, `job_description`, `notes`, `next_action`, `next_action_date`, `last_response_date`, `external_job_id`, `tags`, `pinned`, `important`, and `favorite`.
 
 Aliases: `company_name → company`, `title`/`role → job_title`, `application_status`/`status`/`application_stage → stage`, `applied_date`/`date → date_applied`, `url`/`job_link → job_url`, `work_type → work_arrangement`, `resume → resume_version`, and `cover_letter → cover_letter_version`.
 
@@ -97,12 +101,14 @@ Unknown and ownership/authorization fields are errors; nothing is silently disca
 
 - `001_jobsearch.sql`: users, applications, activity, interviews, rejections, follow-ups, networking, goals, import history, audit records, foreign keys, checks, and ownership/date indexes.
 - `002_sessions.sql`: expiring server-side sessions and expiry index.
+- `003_complete_manager.sql`: additive ownership-safe schema for timelines, stage history, resumes, reminders, goals, dashboard preferences, saved views, tags, and checklists, plus non-destructive backfills.
+- `004_followup_completion.sql`: suggested and completed follow-up dates with supporting index.
 
 Migrations are forward-only and transactional. Back up the SQLite file before production upgrades. Rollback requires restoring that backup; the application does not destructively reset databases.
 
 ## Git and CI
 
-Development occurs on `development` with focused commits. `.github/workflows/ci.yml` runs on pushes and pull requests targeting `development`, `main`, or `master`, plus manual dispatch. It uses Node 24 and gates migration validation, lint/static checks, tests, and build validation.
+Development occurs on `development` with focused commits. `.github/workflows/ci.yml` runs on pushes and pull requests targeting `development`, `main`, or `master`, plus manual dispatch. It uses Node 24 and separately gates clean migrations, lint/static checks, backend, frontend, integration and end-to-end tests, production build validation, dependency audit, and committed-secret/database checks.
 
 No remote or deployment target existed, so none was invented. After creating a GitHub repository:
 
@@ -113,9 +119,6 @@ git push -u origin development
 
 The workflow will run once pushed. Continuous deployment remains intentionally unconfigured until a target and its security requirements are chosen.
 
-## Current limitations
+## Deployment boundary
 
-- The application table exposes the core search, stage, priority, and pagination controls; advanced combinations such as saved filters and Kanban are not included.
-- Interview preparation time is manually entered; other goal progress can be inferred from dated tracker records in future reporting extensions.
-- There is no email delivery, password-reset flow, CSV export, soft-delete recovery, or committed browser E2E harness.
-- The service is designed for a single Node process. A multi-instance deployment should replace SQLite/in-process request handling with shared infrastructure while preserving the API ownership rules.
+The service is designed for one Node process with persistent SQLite storage. Set a persistent `DATABASE_PATH`, run `npm run migrate` during release, and start with `npm start`. A free host without a persistent disk will lose SQLite data on rebuild or restart; use an external persistent database or a paid persistent disk before treating such a deployment as durable. No provider-specific deployment configuration is committed because the repository does not assume a deployment target.
