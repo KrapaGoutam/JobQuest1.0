@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
@@ -11,8 +13,12 @@
     "migrate:check": "node src/migrate.js --check",
     "seed": "node src/seed.js",
     "test": "node --test --test-concurrency=1",
-    "lint": "node --check src/server.js && node --check src/service.js && node --check src/db.js && node --check ../frontend/app.js",
-    "typecheck": "node --check src/server.js && node --check src/service.js && node --check src/db.js && node --check ../frontend/app.js",
-    "build": "node --check ../frontend/app.js && node src/migrate.js --check"
+    "test:backend": "node --test --test-concurrency=1 test/app.test.js",
+    "test:frontend": "node --test test/frontend.test.js",
+    "test:integration": "node --test --test-concurrency=1 test/app.test.js",
+    "test:e2e": "node --test --test-concurrency=1 test/app.test.js",
+    "lint": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/db.js && node --check ../frontend/app.js",
+    "typecheck": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/db.js && node --check ../frontend/app.js",
+    "build": "node --check ../frontend/app.js && node --check ../frontend/ui-utils.js && node src/migrate.js --check"
   }
 }

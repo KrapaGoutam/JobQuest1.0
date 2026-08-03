@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  quality:
+  static-quality:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -30,8 +30,47 @@ jobs:
         run: npm run lint
       - name: Type-oriented static checks
         run: npm run typecheck
-      - name: Unit and integration tests
-        run: npm test
       - name: Production build validation
         run: npm run build
+
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [backend, frontend, integration, e2e]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run ${{ matrix.suite }} tests
+        run: npm run test:${{ matrix.suite }}
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+      - name: Reject committed runtime secrets and databases
+        working-directory: .
+        run: |
+          test -z "$(git ls-files '*.sqlite' '*.sqlite3' '.env' '.env.*' | grep -vE '(^|/)\.env\.example$')"
+          ! git grep -nE '(MANAGER_PASSWORD|SESSION_SECRET)=[^$]' -- ':!JOBSEARCH_MANAGER_IMPLEMENTATION_PROMPT.md' ':!.env.example'
 
