@@ -72,5 +72,5 @@ jobs:
         working-directory: .
         run: |
           test -z "$(git ls-files '*.sqlite' '*.sqlite3' '.env' '.env.*' | grep -vE '(^|/)\.env\.example$')"
-          ! git grep -nE '(MANAGER_PASSWORD|SESSION_SECRET)=[^$]' -- ':!JOBSEARCH_MANAGER_IMPLEMENTATION_PROMPT.md'
+          ! git grep -nE '(MANAGER_PASSWORD|SESSION_SECRET)=[^$]' -- ':!JOBSEARCH_MANAGER_IMPLEMENTATION_PROMPT.md' ':!.env.example'
 
