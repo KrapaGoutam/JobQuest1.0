@@ -5,6 +5,9 @@ import {
   applyTheme,
   monthCells,
   agingBand,
+  selectAllWidgets,
+  deselectAllWidgets,
+  widgetSelectionState,
 } from "../../frontend/ui-utils.js";
 
 test("widget reordering supports keyboard and mobile move directions", () => {
@@ -25,6 +28,33 @@ test("widget reordering supports keyboard and mobile move directions", () => {
     moveWidget(widgets, 0, -1).map((item) => item.widget_id),
     ["a", "b", "c"],
   );
+});
+
+test("dashboard bulk selection preserves order, sizes, and mixed state", () => {
+  const defaults = [
+    { widget_id: "a", position: 0, width: 1, height: 1, enabled: 1 },
+    { widget_id: "b", position: 1, width: 2, height: 1, enabled: 1 },
+    { widget_id: "c", position: 2, width: 3, height: 1, enabled: 0 },
+  ];
+  const draft = [
+    { ...defaults[1], position: 0, width: 3, enabled: 1 },
+    { ...defaults[0], position: 1, enabled: 1 },
+    { ...defaults[2], position: 2, width: 0, enabled: 0 },
+  ];
+  const all = selectAllWidgets(draft, defaults);
+  assert.deepEqual(all.map((item) => item.widget_id), ["b", "a", "c"]);
+  assert.equal(all[0].width, 3);
+  assert.equal(all[2].width, 3);
+  assert.deepEqual(widgetSelectionState(all), {
+    checked: true,
+    indeterminate: false,
+  });
+  const none = deselectAllWidgets(all);
+  assert.ok(none.every((item) => !item.enabled));
+  assert.deepEqual(widgetSelectionState([{ enabled: 1 }, { enabled: 0 }]), {
+    checked: false,
+    indeterminate: true,
+  });
 });
 
 test("theme resolution supports light, dark, and system", () => {

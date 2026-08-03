@@ -5,6 +5,9 @@ import {
   applyTheme,
   monthCells,
   agingBand,
+  selectAllWidgets,
+  deselectAllWidgets,
+  widgetSelectionState,
 } from "./ui-utils.js";
 
 const state = {
@@ -152,13 +155,15 @@ async function saveTheme(theme) {
   go(state.page);
 }
 
-function authView(register = false, error = "") {
-  app.innerHTML = `<div class="auth-shell"><section class="auth-brand"><div class="eyebrow">Own your search</div><h1>JobQuest</h1><p>Applications, momentum, reminders, and evidence—organized in one private workspace.</p></section><section class="auth-panel"><form id="auth-form"><h2>${register ? "Create your account" : "Welcome back"}</h2>${error ? errorBox(error) : ""}${register ? field("full_name", "Full name", "text", "", "required autocomplete='name'") + field("email", "Email", "email", "", "autocomplete='email'") + field("phone", "Phone", "tel") : ""}${field("username", "Username", "text", "", "required autocomplete='username'")}${field("password", "Password", "password", "", "required minlength='10' autocomplete='current-password'")}<div class="actions"><button class="btn">${register ? "Register" : "Sign in"}</button><button class="btn secondary" id="toggle-auth" type="button">${register ? "I have an account" : "Create account"}</button></div></form></section></div>`;
-  qs("#toggle-auth").onclick = () => authView(!register);
+function authView(register = false, error = "", transition = false) {
+  const pinField = field("pin", "Four-digit PIN", "password", "", "required inputmode='numeric' pattern='[0-9]{4}' minlength='4' maxlength='4' autocomplete='current-password'");
+  app.innerHTML = `<div class="auth-shell"><section class="auth-brand"><div class="eyebrow">Own your search</div><h1>JobQuest</h1><p>Applications, momentum, reminders, and evidence—organized in one private workspace.</p></section><section class="auth-panel"><form id="auth-form"><h2>${transition ? "Set up your PIN" : register ? "Create your account" : "Welcome back"}</h2>${error ? errorBox(error) : ""}${register ? field("full_name", "Full name", "text", "", "required autocomplete='name'") + field("email", "Email", "email", "", "autocomplete='email'") + field("phone", "Phone", "tel") : ""}${field("username", "Username", "text", "", "required autocomplete='username'")}${transition ? field("current_password", "Current password", "password", "", "required autocomplete='current-password'") : ""}${pinField}${register || transition ? field("confirm_pin", "Confirm PIN", "password", "", "required inputmode='numeric' pattern='[0-9]{4}' minlength='4' maxlength='4' autocomplete='new-password'") : ""}<div class="actions"><button class="btn">${transition ? "Set PIN and sign in" : register ? "Register" : "Sign in"}</button><button class="btn secondary" id="toggle-auth" type="button">${register || transition ? "Back to sign in" : "Create account"}</button>${!register && !transition ? '<button class="btn secondary" id="legacy-auth" type="button">Existing password account</button>' : ""}</div></form></section></div>`;
+  qs("#toggle-auth").onclick = () => authView(register || transition ? false : true);
+  if (!register && !transition) qs("#legacy-auth").onclick = () => authView(false, "", true);
   qs("#auth-form").onsubmit = async (event) => {
     event.preventDefault();
     try {
-      const result = await api(`/api/auth/${register ? "register" : "login"}`, {
+      const result = await api(`/api/auth/${transition ? "transition-pin" : register ? "register" : "login"}`, {
         method: "POST",
         body: JSON.stringify(
           Object.fromEntries(new FormData(event.currentTarget)),
@@ -169,9 +174,17 @@ function authView(register = false, error = "") {
       applyTheme(state.user.theme || "system");
       go("dashboard");
     } catch (error) {
-      authView(register, error);
+      authView(register, error, transition);
     }
   };
+  qsa("input[name=pin], input[name=confirm_pin]").forEach(
+    (input) =>
+      (input.oninput = (event) => {
+        event.target.value = event.target.value.replace(/\D/g, "").slice(0, 4);
+        if (!register && !transition && event.target.value.length === 4)
+          event.currentTarget.form.requestSubmit();
+      }),
+  );
 }
 async function logout() {
   try {
@@ -512,12 +525,16 @@ async function renderDashboard(manager = false) {
 }
 function renderDashboardSettings(layout, manager) {
   state.layoutDraft = layout.widgets.map((item) => ({ ...item }));
+  const defaults = (layout.defaults || layout.widgets).map((item) => ({
+    ...item,
+    settings: { ...(item.settings || {}) },
+  }));
   const draw = () => {
     shell(
       pageHead(
         "Dashboard Settings",
         "Enable, size, and reorder widgets with drag, keyboard, or mobile controls",
-        `<div class="actions"><button class="btn" id="layout-save">Save Layout</button><button class="btn secondary" id="layout-reset">Reset</button><button class="btn secondary" id="layout-cancel">Cancel</button></div>`,
+        `<div class="actions"><label class="select-all-control"><input type="checkbox" id="layout-select-all"> Select All</label><button class="btn secondary" id="layout-deselect-all">Deselect All</button><button class="btn secondary" id="layout-reset">Restore Defaults</button><button class="btn" id="layout-save">Save Layout</button><button class="btn secondary" id="layout-cancel">Cancel</button></div>`,
       ) +
         `<div id="layout-list" class="layout-editor">${state.layoutDraft
           .map(
@@ -538,11 +555,26 @@ function renderDashboardSettings(layout, manager) {
     bind();
   };
   const bind = () => {
+    const selectAll = qs("#layout-select-all"),
+      selection = widgetSelectionState(state.layoutDraft);
+    selectAll.checked = selection.checked;
+    selectAll.indeterminate = selection.indeterminate;
+    selectAll.setAttribute(
+      "aria-checked",
+      selection.indeterminate ? "mixed" : String(selection.checked),
+    );
+    selectAll.onchange = () => {
+      state.layoutDraft = selectAll.checked
+        ? selectAllWidgets(state.layoutDraft, defaults)
+        : deselectAllWidgets(state.layoutDraft);
+      draw();
+    };
     qsa("[data-enable]").forEach(
       (input) =>
-        (input.onchange = () =>
-          (state.layoutDraft[Number(input.dataset.enable)].enabled =
-            input.checked)),
+        (input.onchange = () => {
+          state.layoutDraft[Number(input.dataset.enable)].enabled = input.checked;
+          draw();
+        }),
     );
     qsa("select[name^='size-']").forEach(
       (input) =>
@@ -602,12 +634,15 @@ function renderDashboardSettings(layout, manager) {
       toast("Dashboard layout saved");
       renderDashboard(manager);
     };
-    qs("#layout-reset").onclick = async () => {
-      const result = await api(
-        `/api/dashboard/layout?type=${manager ? "manager" : "user"}`,
-        { method: "DELETE" },
-      );
-      state.layoutDraft = result.widgets;
+    qs("#layout-deselect-all").onclick = () => {
+      state.layoutDraft = deselectAllWidgets(state.layoutDraft);
+      draw();
+    };
+    qs("#layout-reset").onclick = () => {
+      state.layoutDraft = defaults.map((item) => ({
+        ...item,
+        settings: { ...(item.settings || {}) },
+      }));
       draw();
     };
     qs("#layout-cancel").onclick = () => renderDashboard(manager);

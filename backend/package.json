@@ -11,6 +11,9 @@
     "dev": "node --watch src/server.js",
     "migrate": "node src/migrate.js",
     "migrate:check": "node src/migrate.js --check",
+    "migrate:postgres": "node src/postgres-migrate.js",
+    "sqlite:inspect": "node src/sqlite-backup.js",
+    "migrate:sqlite-to-postgres": "node src/sqlite-to-postgres.js",
     "seed": "node src/seed.js",
     "test": "node --test --test-concurrency=1",
     "test:backend": "node --test --test-concurrency=1 test/app.test.js",
@@ -20,5 +23,8 @@
     "lint": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/db.js && node --check ../frontend/app.js",
     "typecheck": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/db.js && node --check ../frontend/app.js",
     "build": "node --check ../frontend/app.js && node --check ../frontend/ui-utils.js && node src/migrate.js --check"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
   }
 }

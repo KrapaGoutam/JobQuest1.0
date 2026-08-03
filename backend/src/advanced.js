@@ -1114,6 +1114,7 @@ export async function handleAdvanced(context, helpers) {
         json(response, 200, {
           dashboard_type: type,
           widgets: stored.length ? stored : DEFAULT_WIDGETS,
+          defaults: DEFAULT_WIDGETS,
         }),
         true
       );
@@ -1171,7 +1172,9 @@ export async function handleAdvanced(context, helpers) {
     if (kind === "aging") {
       const items = rows(
         db.prepare(
-          "SELECT a.*,coalesce(max(te.event_date),a.date_applied) last_activity,CAST(julianday('now')-julianday(coalesce(max(te.event_date),a.date_applied)) AS INTEGER) days_inactive FROM applications a LEFT JOIN timeline_events te ON te.application_id=a.id WHERE a.user_id=? GROUP BY a.id ORDER BY days_inactive DESC",
+          db.dialect === "postgres"
+            ? "SELECT a.*,coalesce(max(te.event_date),a.date_applied) last_activity,CAST(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP-coalesce(max(te.event_date)::timestamp,a.date_applied::timestamp)))/86400 AS INTEGER) days_inactive FROM applications a LEFT JOIN timeline_events te ON te.application_id=a.id WHERE a.user_id=? GROUP BY a.id ORDER BY days_inactive DESC"
+            : "SELECT a.*,coalesce(max(te.event_date),a.date_applied) last_activity,CAST(julianday('now')-julianday(coalesce(max(te.event_date),a.date_applied)) AS INTEGER) days_inactive FROM applications a LEFT JOIN timeline_events te ON te.application_id=a.id WHERE a.user_id=? GROUP BY a.id ORDER BY days_inactive DESC",
         ),
         [userId],
       ).map((item) => ({

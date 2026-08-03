@@ -523,7 +523,9 @@ export function listApplications(db, actor, query) {
     .get(...params).count;
   const items = rows(
     db.prepare(
-      `SELECT a.*,u.username owner_username,CAST(julianday('now')-julianday(COALESCE((SELECT max(event_date) FROM timeline_events te WHERE te.application_id=a.id),a.date_applied)) AS INTEGER) days_inactive,(SELECT group_concat(t.name,', ') FROM application_tags at JOIN tags t ON t.id=at.tag_id WHERE at.application_id=a.id) tags FROM applications a JOIN users u ON u.id=a.user_id ${clause} ORDER BY a.pinned DESC,a.${sort} ${direction},a.id DESC LIMIT ? OFFSET ?`,
+      db.dialect === "postgres"
+        ? `SELECT a.*,u.username owner_username,CAST(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP-COALESCE((SELECT max(event_date)::timestamp FROM timeline_events te WHERE te.application_id=a.id),a.date_applied::timestamp)))/86400 AS INTEGER) days_inactive,(SELECT string_agg(t.name,', ') FROM application_tags app_tag JOIN tags t ON t.id=app_tag.tag_id WHERE app_tag.application_id=a.id) tags FROM applications a JOIN users u ON u.id=a.user_id ${clause} ORDER BY a.pinned DESC,a.${sort} ${direction},a.id DESC LIMIT ? OFFSET ?`
+        : `SELECT a.*,u.username owner_username,CAST(julianday('now')-julianday(COALESCE((SELECT max(event_date) FROM timeline_events te WHERE te.application_id=a.id),a.date_applied)) AS INTEGER) days_inactive,(SELECT group_concat(t.name,', ') FROM application_tags at JOIN tags t ON t.id=at.tag_id WHERE at.application_id=a.id) tags FROM applications a JOIN users u ON u.id=a.user_id ${clause} ORDER BY a.pinned DESC,a.${sort} ${direction},a.id DESC LIMIT ? OFFSET ?`,
     ),
     [...params, pageSize, (page - 1) * pageSize],
   );
