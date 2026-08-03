@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [development, main, master]
+  pull_request:
+    branches: [development, main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify migrations on a clean database
+        run: npm run migrate:check
+      - name: Lint and syntax checks
+        run: npm run lint
+      - name: Type-oriented static checks
+        run: npm run typecheck
+      - name: Unit and integration tests
+        run: npm test
+      - name: Production build validation
+        run: npm run build
+
