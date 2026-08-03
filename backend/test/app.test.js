@@ -96,6 +96,9 @@ test("related tracker ownership and manager access are enforced", async () => {
   const relogin = await request("/api/auth/login", { method: "POST", input: { username: "manager", password: "correct-horse-battery" } });
   const managerAuth = { cookie: relogin.cookie, csrf: relogin.data.csrf_token };
   const appResult = await request("/api/applications", { method: "POST", auth: owner, input: { company: "Owned", job_title: "Role", date_applied: "2026-08-03" } });
+  const managerApp = await request("/api/applications", { method: "POST", auth: managerAuth, input: { target_user_id: owner.user.id, company: "Manager Created", job_title: "Analyst", date_applied: "2026-08-03" } });
+  assert.equal(managerApp.status, 201);
+  assert.equal((await request(`/api/applications/${managerApp.data.id}`, { auth: owner })).status, 200);
   const denied = await request("/api/interviews", { method: "POST", auth: outsider, input: { application_id: appResult.data.id, interview_round: "1", interview_type: "Technical", scheduled_at: "2026-08-04T10:00" } });
   assert.equal(denied.status, 400);
   const managerCreated = await request("/api/interviews", { method: "POST", auth: managerAuth, input: { target_user_id: owner.user.id, application_id: appResult.data.id, interview_round: "1", interview_type: "Technical", scheduled_at: "2026-08-04T10:00" } });
