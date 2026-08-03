@@ -48,4 +48,3 @@ Restore the previous application version, restore the prior `DATABASE_PATH`, red
 ## Secret handling
 
 Connection URLs belong only in Render secret environment variables or a secure local shell. Commands sanitize URL-shaped error text. Do not paste URLs into issues, logs, reports, fixtures, `.env.example`, or Git.
-
