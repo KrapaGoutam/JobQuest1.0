@@ -162,7 +162,9 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
       }
       if (url.pathname === "/api/applications" && request.method === "GET") return json(response, 200, listApplications(db, requireAuth(context), Object.fromEntries(url.searchParams)));
       if (url.pathname === "/api/applications" && request.method === "POST") {
-        const actor = requireAuth(context, { csrf: true }), input = await body(request), owner = targetOwner(db, actor, input), result = createApplication(db, owner, actor.id, input);
+        const actor = requireAuth(context, { csrf: true }), input = await body(request), owner = targetOwner(db, actor, input), payload = { ...input };
+        delete payload.target_user_id;
+        const result = createApplication(db, owner, actor.id, payload);
         return json(response, result.errors ? 400 : 201, result);
       }
       const appMatch = url.pathname.match(/^\/api\/applications\/(\d+)(?:\/(stage|activity))?$/);
@@ -234,4 +236,3 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT || 3000);
   server.listen(port, process.env.HOST || "127.0.0.1", () => console.log(`JobQuest running at http://${process.env.HOST || "127.0.0.1"}:${port}`));
 }
-
