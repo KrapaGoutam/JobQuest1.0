@@ -1,0 +1,63 @@
+export const STAGES = [
+  "Saved",
+  "Preparing",
+  "Applied",
+  "Assessment",
+  "Recruiter Screen",
+  "Interview",
+  "Final Interview",
+  "Offer",
+  "Rejected",
+  "Withdrawn",
+  "Ghosted",
+  "Position Closed",
+  "Accepted",
+];
+export const STAGE_CLASS = Object.fromEntries(
+  STAGES.map((stage) => [
+    stage,
+    `stage-${stage.toLowerCase().replaceAll(" ", "-")}`,
+  ]),
+);
+
+export function moveWidget(items, index, direction) {
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= items.length) return [...items];
+  const next = [...items];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next.map((item, position) => ({ ...item, position }));
+}
+
+export function applyTheme(
+  preference,
+  root = document.documentElement,
+  media = window.matchMedia("(prefers-color-scheme: dark)"),
+) {
+  const resolved =
+    preference === "system" ? (media.matches ? "dark" : "light") : preference;
+  root.dataset.theme = resolved;
+  root.dataset.themePreference = preference;
+  return resolved;
+}
+
+export function monthCells(year, month) {
+  const first = new Date(Date.UTC(year, month, 1));
+  const start = new Date(first);
+  start.setUTCDate(first.getUTCDate() - first.getUTCDay());
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setUTCDate(start.getUTCDate() + index);
+    return {
+      date: date.toISOString().slice(0, 10),
+      currentMonth: date.getUTCMonth() === month,
+    };
+  });
+}
+
+export function agingBand(days) {
+  if (days <= 3) return "New";
+  if (days <= 7) return "Waiting";
+  if (days <= 14) return "Follow-Up Recommended";
+  if (days <= 30) return "Stale";
+  return "Long Waiting";
+}

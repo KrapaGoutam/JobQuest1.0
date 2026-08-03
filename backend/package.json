@@ -11,8 +11,8 @@
     "migrate:check": "node src/migrate.js --check",
     "seed": "node src/seed.js",
     "test": "node --test --test-concurrency=1",
-    "lint": "node --check src/server.js && node --check src/service.js && node --check src/db.js && node --check ../frontend/app.js",
-    "typecheck": "node --check src/server.js && node --check src/service.js && node --check src/db.js && node --check ../frontend/app.js",
-    "build": "node --check ../frontend/app.js && node src/migrate.js --check"
+    "lint": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/db.js && node --check ../frontend/app.js",
+    "typecheck": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/db.js && node --check ../frontend/app.js",
+    "build": "node --check ../frontend/app.js && node --check ../frontend/ui-utils.js && node src/migrate.js --check"
   }
 }
