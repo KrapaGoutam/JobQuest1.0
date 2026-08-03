@@ -24,7 +24,7 @@ import { handleAdvanced } from "./advanced.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const frontendDir = join(here, "..", "..", "frontend");
 const LOCKOUT_ATTEMPTS = 5,
-  LOCKOUT_MINUTES = 15,
+  LOCKOUT_MINUTES = 5,
   SESSION_HOURS = 12;
 
 function json(response, status, body, headers = {}) {
@@ -407,7 +407,10 @@ function updateTracker(db, actor, table, id, input) {
 }
 
 export function createRequestHandler({ db = openDatabase() } = {}) {
-  migrate(db);
+  if (db.dialect === "postgres") {
+    const ready = db.prepare("SELECT version FROM schema_migrations WHERE version=?").get("005_four_digit_pin.sql");
+    if (!ready) throw new Error("PostgreSQL schema is not current; run the controlled migration command");
+  } else migrate(db);
   return async function handler(request, response) {
     const url = new URL(request.url, "http://localhost");
     const context = {
@@ -420,6 +423,10 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
     try {
       if (url.pathname === "/api/health")
         return json(response, 200, { status: "ok" });
+      if (url.pathname === "/api/ready") {
+        db.prepare("SELECT 1 ready").get();
+        return json(response, 200, { status: "ready", database: "available" });
+      }
       if (url.pathname === "/api/auth/register" && request.method === "POST") {
         const input = await body(request);
         if (!/^[a-zA-Z0-9_.-]{3,40}$/.test(input.username || ""))
@@ -429,11 +436,15 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
             ),
             { status: 400 },
           );
-        if (typeof input.password !== "string" || input.password.length < 10)
+        if (!/^\d{4}$/.test(String(input.pin || "")))
           throw Object.assign(
-            new Error("Password must contain at least 10 characters"),
+            new Error("PIN must contain exactly four digits"),
             { status: 400 },
           );
+        if (input.pin !== input.confirm_pin)
+          throw Object.assign(new Error("PIN confirmation does not match"), {
+            status: 400,
+          });
         if (!String(input.full_name || "").trim())
           throw Object.assign(new Error("Full name is required"), {
             status: 400,
@@ -441,14 +452,15 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
         try {
           const result = db
             .prepare(
-              "INSERT INTO users(username,email,full_name,phone,password_hash,role) VALUES (?,?,?,?,?,'USER')",
+              "INSERT INTO users(username,email,full_name,phone,password_hash,pin_hash,auth_method,role) VALUES (?,?,?,?,?,?, 'pin','USER')",
             )
             .run(
               input.username.trim(),
               input.email?.trim() || null,
               input.full_name.trim(),
               input.phone?.trim() || null,
-              hashPassword(input.password),
+              hashPassword(input.pin),
+              hashPassword(input.pin),
             );
           const session = createSession(db, Number(result.lastInsertRowid));
           return json(
@@ -487,13 +499,15 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
           !user ||
           !user.is_active ||
           locked ||
-          !verifyPassword(String(input.password || ""), user.password_hash)
+          !/^\d{4}$/.test(String(input.pin || "")) ||
+          !user.pin_hash ||
+          !verifyPassword(String(input.pin), user.pin_hash)
         ) {
           if (user && !locked)
             db.prepare(
               "UPDATE users SET failed_login_count=failed_login_count+1,locked_until=CASE WHEN failed_login_count+1>=? THEN datetime('now',?) ELSE locked_until END WHERE id=?",
             ).run(LOCKOUT_ATTEMPTS, `+${LOCKOUT_MINUTES} minutes`, user.id);
-          throw Object.assign(new Error("Invalid username or password"), {
+          throw Object.assign(new Error("Invalid username or PIN"), {
             status: 401,
           });
         }
@@ -509,6 +523,23 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
             "Set-Cookie": `jobquest_session=${session.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`,
           },
         );
+      }
+      if (url.pathname === "/api/auth/transition-pin" && request.method === "POST") {
+        const input = await body(request),
+          user = db.prepare("SELECT * FROM users WHERE username=? COLLATE NOCASE").get(String(input.username || "")),
+          locked = user?.locked_until && Date.parse(`${user.locked_until}Z`) > Date.now(),
+          validPin = /^\d{4}$/.test(String(input.pin || "")) && input.pin === input.confirm_pin,
+          validLegacy = user && user.auth_method === "legacy_password" && verifyPassword(String(input.current_password || ""), user.password_hash);
+        if (!user || !user.is_active || locked || !validPin || !validLegacy) {
+          if (user && !locked)
+            db.prepare("UPDATE users SET failed_login_count=failed_login_count+1,locked_until=CASE WHEN failed_login_count+1>=? THEN datetime('now',?) ELSE locked_until END WHERE id=?").run(LOCKOUT_ATTEMPTS, `+${LOCKOUT_MINUTES} minutes`, user.id);
+          throw Object.assign(new Error("Unable to update credentials"), { status: 401 });
+        }
+        db.prepare("UPDATE users SET pin_hash=?,auth_method='pin',failed_login_count=0,locked_until=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(hashPassword(input.pin), user.id);
+        const session = createSession(db, user.id);
+        return json(response, 200, { user: publicUser(user), csrf_token: session.csrf }, {
+          "Set-Cookie": `jobquest_session=${session.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`,
+        });
       }
       if (url.pathname === "/api/auth/logout" && request.method === "POST") {
         requireAuth(context, { csrf: true });
@@ -827,4 +858,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       `JobQuest running at http://${process.env.HOST || "127.0.0.1"}:${port}`,
     ),
   );
+  const shutdown = () => server.close(() => { db.close(); process.exit(0); });
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
 }

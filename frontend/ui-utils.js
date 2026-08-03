@@ -28,6 +28,38 @@ export function moveWidget(items, index, direction) {
   return next.map((item, position) => ({ ...item, position }));
 }
 
+export function selectAllWidgets(items, defaults) {
+  const enabled = items.filter((item) => item.enabled);
+  const enabledIds = new Set(enabled.map((item) => item.widget_id));
+  const byId = new Map(items.map((item) => [item.widget_id, item]));
+  const appended = defaults
+    .filter((item) => !enabledIds.has(item.widget_id))
+    .map((fallback) => {
+      const saved = byId.get(fallback.widget_id);
+      return {
+        ...fallback,
+        ...(saved || {}),
+        enabled: 1,
+        width: saved?.width > 0 ? saved.width : fallback.width,
+        height: saved?.height > 0 ? saved.height : fallback.height,
+      };
+    });
+  return [...enabled.map((item) => ({ ...item, enabled: 1 })), ...appended].map(
+    (item, position) => ({ ...item, position }),
+  );
+}
+
+export const deselectAllWidgets = (items) =>
+  items.map((item) => ({ ...item, enabled: 0 }));
+
+export function widgetSelectionState(items) {
+  const selected = items.filter((item) => item.enabled).length;
+  return {
+    checked: items.length > 0 && selected === items.length,
+    indeterminate: selected > 0 && selected < items.length,
+  };
+}
+
 export function applyTheme(
   preference,
   root = document.documentElement,

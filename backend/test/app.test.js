@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { openDatabase } from "../src/db.js";
 import { createRequestHandler } from "../src/server.js";
+import { hashPassword } from "../src/security.js";
 
-const db = openDatabase(":memory:");
+const db = openDatabase(process.env.TEST_DATABASE_URL || ":memory:");
 const server = createServer(createRequestHandler({ db }));
 let base;
 
@@ -45,7 +46,8 @@ async function register(username) {
       username,
       full_name: `${username} Person`,
       email: `${username}@example.test`,
-      password: "correct-horse-battery",
+      pin: "0123",
+      confirm_pin: "0123",
     },
   });
   assert.equal(result.status, 201);
@@ -62,7 +64,8 @@ test("registration creates regular users and public role input is ignored", asyn
     input: {
       username: "regular",
       full_name: "Regular User",
-      password: "correct-horse-battery",
+      pin: "0042",
+      confirm_pin: "0042",
       role: "MANAGER",
     },
   });
@@ -70,19 +73,56 @@ test("registration creates regular users and public role input is ignored", asyn
   assert.equal(result.data.user.role, "USER");
 });
 
+test("PIN validation accepts leading zero and rejects non-four-digit values", async () => {
+  for (const pin of ["123", "12345", "12a4", "12#4"]) {
+    const result = await request("/api/auth/register", {
+      method: "POST",
+      input: { username: `bad${pin.replace(/\W/g, "x")}`, full_name: "Bad PIN", pin, confirm_pin: pin },
+    });
+    assert.equal(result.status, 400);
+  }
+  const mismatch = await request("/api/auth/register", {
+    method: "POST",
+    input: { username: "mismatch", full_name: "Mismatch", pin: "0123", confirm_pin: "0124" },
+  });
+  assert.equal(mismatch.status, 400);
+  const valid = await request("/api/auth/register", {
+    method: "POST",
+    input: { username: "leadingzero", full_name: "Leading Zero", pin: "0007", confirm_pin: "0007" },
+  });
+  assert.equal(valid.status, 201);
+  const stored = db.prepare("SELECT password_hash,pin_hash FROM users WHERE username=?").get("leadingzero");
+  assert.ok(stored.pin_hash.startsWith("scrypt$"));
+  assert.equal(stored.pin_hash.includes("0007"), false);
+  assert.equal(JSON.stringify(valid.data).includes("pin_hash"), false);
+});
+
+test("existing password accounts can establish a PIN without changing identity", async () => {
+  const inserted = db.prepare("INSERT INTO users(username,full_name,password_hash,role) VALUES (?,?,?,'USER')").run("legacy", "Legacy User", hashPassword("existing-long-password"));
+  const id = Number(inserted.lastInsertRowid);
+  const transition = await request("/api/auth/transition-pin", {
+    method: "POST",
+    input: { username: "legacy", current_password: "existing-long-password", pin: "0019", confirm_pin: "0019" },
+  });
+  assert.equal(transition.status, 200);
+  assert.equal(transition.data.user.id, id);
+  const login = await request("/api/auth/login", { method: "POST", input: { username: "legacy", pin: "0019" } });
+  assert.equal(login.status, 200);
+});
+
 test("login has generic errors and locks after repeated failures", async () => {
   await register("locked");
   for (let index = 0; index < 5; index++) {
     const result = await request("/api/auth/login", {
       method: "POST",
-      input: { username: "locked", password: "totally-wrong" },
+      input: { username: "locked", pin: "9999" },
     });
     assert.equal(result.status, 401);
-    assert.equal(result.data.error, "Invalid username or password");
+    assert.equal(result.data.error, "Invalid username or PIN");
   }
   const correct = await request("/api/auth/login", {
     method: "POST",
-    input: { username: "locked", password: "correct-horse-battery" },
+    input: { username: "locked", pin: "0123" },
   });
   assert.equal(correct.status, 401);
 });
@@ -250,7 +290,7 @@ test("related tracker ownership and manager access are enforced", async () => {
   db.prepare("UPDATE users SET role='MANAGER' WHERE id=?").run(manager.user.id);
   const relogin = await request("/api/auth/login", {
     method: "POST",
-    input: { username: "manager", password: "correct-horse-battery" },
+    input: { username: "manager", pin: "0123" },
   });
   const managerAuth = { cookie: relogin.cookie, csrf: relogin.data.csrf_token };
   const appResult = await request("/api/applications", {
@@ -748,7 +788,7 @@ test("complete end-to-end workflow reaches manager scoped views", async () => {
   db.prepare("UPDATE users SET role='MANAGER' WHERE id=?").run(manager.user.id);
   const login = await request("/api/auth/login", {
     method: "POST",
-    input: { username: "e2emanager", password: "correct-horse-battery" },
+    input: { username: "e2emanager", pin: "0123" },
   });
   const managerAuth = { cookie: login.cookie, csrf: login.data.csrf_token };
   await request("/api/goals/settings", {

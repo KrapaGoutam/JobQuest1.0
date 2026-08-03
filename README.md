@@ -4,9 +4,9 @@ JobQuest is a secure, multi-user job-search manager for manually recording appli
 
 ## Stack
 
-- Node.js 24 HTTP service and built-in SQLite driver; no runtime packages
+- Node.js 24 HTTP service, PostgreSQL runtime driver, and migration-only built-in SQLite reader
 - Versioned SQL migrations in `backend/jobsearch/migrations`
-- Server-side opaque sessions, HttpOnly/SameSite cookies, CSRF tokens, and scrypt password hashes
+- Server-side opaque sessions, HttpOnly/SameSite cookies, CSRF tokens, and salted scrypt PIN hashes
 - Responsive HTML/CSS/JavaScript single-page interface served by the backend
 - Node's built-in test runner and GitHub Actions CI
 
@@ -18,22 +18,23 @@ Requirements: Node.js 24 or newer.
 
 ```powershell
 cd backend
-npm run migrate
+npm install
+$env:DATABASE_URL = 'postgresql://jobquest:local-only@127.0.0.1:5432/jobquest_dev'
 npm start
 ```
 
-Open `http://127.0.0.1:3000`. Public registration creates regular users only. The database defaults to `backend/data/jobsearch.sqlite3`, which is ignored by Git. Override `HOST`, `PORT`, or `DATABASE_PATH` as shown in `.env.example`; environment files are not loaded automatically and should be provided by the shell or process manager.
+Open `http://127.0.0.1:3000`. Public registration creates regular users only. Production requires `DATABASE_URL` and never falls back to SQLite. SQLite remains available only for source backup, transfer tooling, and isolated compatibility tests. Environment files are not loaded automatically.
 
 Create or reset a protected manager account by passing secrets through the environment, never the command line or repository:
 
 ```powershell
 $env:MANAGER_USERNAME = "manager"
-$env:MANAGER_PASSWORD = "use-a-long-random-password"
+$env:MANAGER_PIN = "0123"
 $env:MANAGER_FULL_NAME = "JobQuest Manager"
 npm run seed
 ```
 
-The seed is idempotent by username. Do not reuse the example password. Existing hashes and user IDs are retained by normal migrations.
+The seed is idempotent by username. Replace the example PIN. Existing password accounts use the protected “Existing password account” flow once to establish a four-digit PIN without changing identity or deleting their legacy hash.
 
 ## Commands
 
@@ -43,6 +44,10 @@ Run from `backend`:
 | --- | --- |
 | `npm run migrate` | Apply pending migrations to the configured database |
 | `npm run migrate:check` | Apply every migration to a clean in-memory database and check foreign keys |
+| `npm run migrate:postgres` | Apply controlled PostgreSQL migrations through `DIRECT_URL` or a guarded test URL |
+| `npm run sqlite:inspect -- --source <path> --output <path>` | Validate and create raw/structured SQLite backups |
+| `npm run migrate:sqlite-to-postgres -- --source <path> --dry-run` | Dry-run the SQLite mapping |
+| `npm run migrate:sqlite-to-postgres -- --source <path>` | Transactionally import and validate SQLite data |
 | `npm run seed` | Create/promote the environment-selected manager |
 | `npm run dev` | Start with Node watch mode |
 | `npm start` | Start normally |
@@ -55,12 +60,12 @@ Run from `backend`:
 | `npm run typecheck` | Run the supported static syntax checks (the project is JavaScript, not TypeScript) |
 | `npm run build` | Validate frontend source and clean-database migrations; no compilation is needed |
 
-There is no dependency installation step because the project has no third-party runtime or development dependencies. End-to-end coverage exercises the complete browser-facing API workflow; focused frontend tests cover theme, calendar, aging, and accessible widget movement logic.
+Use `npm ci` for repeatable installation. CI exercises PostgreSQL plus the SQLite migration fixture. End-to-end coverage exercises the browser-facing API workflow; focused frontend tests cover themes, dashboard bulk selection, calendar, aging, and accessible widget movement.
 
 ## Authentication, authorization, and ownership
 
-- Passwords require at least 10 characters and are stored as salted scrypt hashes.
-- Five failed logins lock the account for 15 minutes; errors remain generic.
+- PINs are exactly four numeric characters, remain strings so leading zeros survive, and are stored as salted scrypt hashes.
+- Five failed logins lock the account for five minutes; errors remain generic.
 - Sessions are opaque random tokens stored only as SHA-256 hashes in SQLite and expire after 12 hours.
 - Mutations require a session-bound CSRF token. Production cookies add `Secure` when `NODE_ENV=production`.
 - Registration always stores role `USER`; only a manager-protected endpoint or protected seed can grant `MANAGER`.
@@ -103,22 +108,16 @@ Unknown and ownership/authorization fields are errors; nothing is silently disca
 - `002_sessions.sql`: expiring server-side sessions and expiry index.
 - `003_complete_manager.sql`: additive ownership-safe schema for timelines, stage history, resumes, reminders, goals, dashboard preferences, saved views, tags, and checklists, plus non-destructive backfills.
 - `004_followup_completion.sql`: suggested and completed follow-up dates with supporting index.
+- `005_four_digit_pin.sql`: additive PIN hash and backward-compatible authentication transition state.
 
 Migrations are forward-only and transactional. Back up the SQLite file before production upgrades. Rollback requires restoring that backup; the application does not destructively reset databases.
 
 ## Git and CI
 
-Development occurs on `development` with focused commits. `.github/workflows/ci.yml` runs on pushes and pull requests targeting `development`, `main`, or `master`, plus manual dispatch. It uses Node 24 and separately gates clean migrations, lint/static checks, backend, frontend, integration and end-to-end tests, production build validation, dependency audit, and committed-secret/database checks.
+Development occurs on `development` with focused commits. `.github/workflows/ci.yml` runs on pushes and pull requests targeting `development`, `main`, or `master`, plus manual dispatch. It uses Node 24 and isolated PostgreSQL 17 services to gate schema migration, SQLite fixture transfer, lint/static checks, backend, frontend, integration and end-to-end tests, production build validation, dependency audit, and committed-secret/database checks.
 
-No remote or deployment target existed, so none was invented. After creating a GitHub repository:
-
-```powershell
-git remote add origin <your-repository-url>
-git push -u origin development
-```
-
-The workflow will run once pushed. Continuous deployment remains intentionally unconfigured until a target and its security requirements are chosen.
+The existing authenticated GitHub remote and Render deployment are used by the gated `development`-to-`main` workflow.
 
 ## Deployment boundary
 
-The service is designed for one Node process with persistent SQLite storage. Set a persistent `DATABASE_PATH`, run `npm run migrate` during release, and start with `npm start`. A free host without a persistent disk will lose SQLite data on rebuild or restart; use an external persistent database or a paid persistent disk before treating such a deployment as durable. No provider-specific deployment configuration is committed because the repository does not assume a deployment target.
+Render uses the pooled Neon `DATABASE_URL` at runtime and the direct `DIRECT_URL` only in the controlled `preDeployCommand`. Do not remove the existing Render `DATABASE_PATH` setting until the live SQLite source is backed up, migrated, count-validated, verified in production, and proven durable after restart. See [docs/NEON_MIGRATION.md](docs/NEON_MIGRATION.md) for Path B, rollback, test isolation, and secret handling.
