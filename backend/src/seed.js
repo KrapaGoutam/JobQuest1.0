@@ -9,7 +9,19 @@ if (!username || !/^\d{4}$/.test(pin || "")) {
   process.exit(1);
 }
 const db = openDatabase();
-migrate(db);
+if (db.dialect === "postgres") {
+  const schemaReady = db
+    .prepare("SELECT 1 AS ready FROM schema_migrations WHERE version=?")
+    .get("005_four_digit_pin.sql");
+  if (!schemaReady) {
+    db.close();
+    throw new Error(
+      "PostgreSQL schema is not current; run npm run migrate:postgres first",
+    );
+  }
+} else {
+  migrate(db);
+}
 const hash = hashPassword(pin);
 db.prepare("INSERT INTO users(username,full_name,password_hash,pin_hash,auth_method,role) VALUES (?,?,?,?, 'pin','MANAGER') ON CONFLICT(username) DO UPDATE SET full_name=excluded.full_name,pin_hash=excluded.pin_hash,auth_method='pin',role='MANAGER',is_active=1").run(username, fullName, hash, hash);
 console.log(`Manager ${username} is ready.`);
