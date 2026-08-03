@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: jobquest
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci
+    preDeployCommand: npm run migrate:postgres
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+

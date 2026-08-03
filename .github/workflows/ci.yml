@@ -24,6 +24,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Install dependencies
+        run: npm ci
       - name: Verify migrations on a clean database
         run: npm run migrate:check
       - name: Lint and syntax checks
@@ -43,6 +45,22 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: jobquest
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: jobquest_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jobquest -d jobquest_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://jobquest:test-only-password@127.0.0.1:5432/jobquest_test
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -50,6 +68,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Install dependencies
+        run: npm ci
+      - name: Apply PostgreSQL migrations
+        if: matrix.suite != 'frontend'
+        run: npm run migrate:postgres
       - name: Run ${{ matrix.suite }} tests
         run: npm run test:${{ matrix.suite }}
 
@@ -66,6 +89,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Install dependencies
+        run: npm ci
       - name: Dependency audit
         run: npm audit --audit-level=high
       - name: Reject committed runtime secrets and databases
@@ -73,4 +98,34 @@ jobs:
         run: |
           test -z "$(git ls-files '*.sqlite' '*.sqlite3' '.env' '.env.*' | grep -vE '(^|/)\.env\.example$')"
           ! git grep -nE '(MANAGER_PASSWORD|SESSION_SECRET)=[^$]' -- ':!JOBSEARCH_MANAGER_IMPLEMENTATION_PROMPT.md' ':!.env.example'
+
+  sqlite-postgres-migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: jobquest
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: migration_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U jobquest -d migration_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://jobquest:test-only-password@127.0.0.1:5432/migration_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run migrate:postgres
+      - run: node --test test/migration.test.js
 
