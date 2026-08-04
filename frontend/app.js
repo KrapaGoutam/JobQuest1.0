@@ -9,6 +9,7 @@ import {
   deselectAllWidgets,
   widgetSelectionState,
 } from "./ui-utils.js";
+import { createApplicationTable } from "./application-table.js";
 
 const state = {
   user: null,
@@ -862,21 +863,13 @@ async function renderApplications(params = new URLSearchParams()) {
     view === "kanban"
       ? `<div class="kanban" aria-label="Application Kanban board">${data.columns.map((column) => `<section class="kanban-column ${preference.collapsed_columns.includes(column.stage) ? "collapsed" : ""}"><header><button class="column-toggle" data-collapse="${esc(column.stage)}" aria-expanded="${!preference.collapsed_columns.includes(column.stage)}">${badge(column.stage)} <strong>${column.total}</strong></button></header><div class="kanban-cards" data-drop-stage="${esc(column.stage)}">${column.items.map(card).join("") || empty("No applications")}</div></section>`).join("")}</div>`
       : "";
-  const bodyRows = items
-    .map(
-      (item) =>
-        `<tr class="clickable-row" data-open="${item.id}" tabindex="0"><td>${esc(item.date_applied)}</td><td><strong>${esc(item.company)}</strong></td><td>${esc(item.job_title)}</td><td>${esc(item.location || "â€”")}</td><td>${esc(item.work_arrangement || "â€”")}</td><td>${badge(item.stage)}</td><td>${esc(item.priority)}</td><td>${esc(item.source || "â€”")}</td><td>${item.resume_id ? `<button class="link-button" data-page="resumes">${esc(item.linked_resume_version || "Linked resume")}</button>` : "No resume linked"}</td><td>${esc(item.next_action || "â€”")}</td><td>${esc(item.next_action_date || "â€”")}</td><td>${esc(item.updated_at)}</td><td><button class="btn small secondary" data-move="${item.id}">Move</button></td></tr>`,
-    )
-    .join("");
-  const filterButton = (field, label) =>
-    `<button class="column-filter" type="button" data-column-filter="${field}" aria-label="Filter ${label}">âŒ•</button>`;
   shell(
     pageHead(
       "Applications",
       `${data.total} applications`,
       `<div class="actions"><div class="view-switcher" role="group" aria-label="Applications view"><button class="btn small ${view === "table" ? "" : "secondary"}" data-view="table" aria-pressed="${view === "table"}">Table</button><button class="btn small ${view === "kanban" ? "" : "secondary"}" data-view="kanban" aria-pressed="${view === "kanban"}">Kanban</button></div><button class="btn" data-page="quick-add">Quick Add</button><button class="btn secondary" id="open-export">Export</button></div>`,
     ) +
-      `<section class="card full application-workspace"><div class="toolbar"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select></div><form id="app-filters" class="toolbar advanced-filter-bar"><input name="search" placeholder="Search company, title, location" value="${esc(params.get("search") || "")}"><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">More Filters</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">Save View</button></form><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? table([`Applied ${filterButton("date_applied", "Date Applied")}`, `Company ${filterButton("company", "Company")}`, `Job Title ${filterButton("job_title", "Job Title")}`, "Location", "Arrangement", "Stage", "Priority", "Source", `Resume Version ${filterButton("resume_version", "Resume Version")}`, "Next Action", "Due", "Updated", "Actions"], bodyRows, "No applications match these filters") : board}</section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
+      `<section class="card full application-workspace"><div class="toolbar"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select></div><form id="app-filters" class="toolbar advanced-filter-bar"><input name="search" placeholder="Search company, title, location" value="${esc(params.get("search") || "")}"><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">More Filters</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">Save View</button></form><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? '<div id="applications-table-root"></div>' : board}</section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
         "format",
         "Format",
         [
@@ -896,6 +889,36 @@ async function renderApplications(params = new URLSearchParams()) {
         "date_applied",
       )}${field("date_from", "Start date", "date", params.get("date_from") || "")}${field("date_to", "End date", "date", params.get("date_to") || "")}<div class="actions full"><button class="btn" value="export">Export</button><button class="btn secondary" value="cancel">Cancel</button></div></form></dialog>`,
   );
+  if (view === "table") {
+    qs("#applications-table-root").append(
+      createApplicationTable(document, {
+        items,
+        sort: params.get("sort") || "updated_at",
+        direction: params.get("direction") || "desc",
+        onSort: (sort, direction) => {
+          params.set("sort", sort);
+          params.set("direction", direction);
+          renderApplications(params);
+        },
+        onFilter: (column, label) => {
+          const value = prompt(`Filter ${label} contains:`);
+          if (value !== null) {
+            params.set(
+              "column_filters",
+              JSON.stringify([{ field: column, operator: "contains", value }]),
+            );
+            renderApplications(params);
+          }
+        },
+        onOpen: (item) => go(`detail:${item.id}`),
+        onMove: async (item) => {
+          const stage = prompt(`Move to stage:\n${STAGES.join(", ")}`);
+          if (stage && STAGES.includes(stage)) await move(item.id, stage);
+        },
+        onResume: () => go("resumes"),
+      }),
+    );
+  }
   qs("#app-filters").onsubmit = (event) => {
     event.preventDefault();
     const next = new URLSearchParams(new FormData(event.currentTarget));
@@ -980,25 +1003,6 @@ async function renderApplications(params = new URLSearchParams()) {
           body: JSON.stringify({ collapsed_columns: [...collapsed] }),
         });
         renderApplications(params);
-      }),
-  );
-  qsa("[data-column-filter]").forEach(
-    (button) =>
-      (button.onclick = () => {
-        const value = prompt(`Filter ${button.dataset.columnFilter} contains:`);
-        if (value !== null) {
-          params.set(
-            "column_filters",
-            JSON.stringify([
-              {
-                field: button.dataset.columnFilter,
-                operator: "contains",
-                value,
-              },
-            ]),
-          );
-          renderApplications(params);
-        }
       }),
   );
   const dialog = qs("#export-dialog");

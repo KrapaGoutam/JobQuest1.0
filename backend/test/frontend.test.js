@@ -11,6 +11,41 @@ import {
   deselectAllWidgets,
   widgetSelectionState,
 } from "../../frontend/ui-utils.js";
+import { parseHTML } from "linkedom";
+import { createApplicationTable } from "../../frontend/application-table.js";
+
+test("application headers use safe interactive DOM without escaped markup", () => {
+  const { document } = parseHTML("<html><body></body></html>");
+  const calls = [];
+  document.body.append(
+    createApplicationTable(document, {
+      items: [
+        {
+          id: 7,
+          company: '<img src=x onerror="alert(1)">',
+          job_title: "Engineer",
+          stage: "Applied",
+          date_applied: "2026-08-03",
+        },
+      ],
+      onFilter: (field) => calls.push(["filter", field]),
+      onSort: (field, direction) => calls.push(["sort", field, direction]),
+    }),
+  );
+  const filter = document.querySelector('button[aria-label="Filter Company"]');
+  const sort = document.querySelector('button[aria-label="Sort by Company"]');
+  assert.ok(filter, "column filter must be a real button");
+  assert.ok(sort, "sortable heading must be a real button");
+  assert.equal(document.querySelector("tbody img"), null);
+  assert.ok(document.body.textContent.includes("<img src=x"));
+  assert.doesNotMatch(document.body.textContent, /<BUTTON|CLASS=/i);
+  filter.click();
+  sort.click();
+  assert.deepEqual(calls, [
+    ["filter", "company"],
+    ["sort", "company", "asc"],
+  ]);
+});
 
 test("widget reordering supports keyboard and mobile move directions", () => {
   const widgets = [
@@ -85,10 +120,11 @@ test("calendar month has stable six-week grid and aging bands", () => {
 });
 
 test("feature upgrade UI includes accessible Table, Kanban, filters, settings, goal chart, and export controls", () => {
-  const source = readFileSync(
-    new URL("../../frontend/app.js", import.meta.url),
-    "utf8",
-  );
+  const source = ["app.js", "application-table.js"]
+    .map((file) =>
+      readFileSync(new URL(`../../frontend/${file}`, import.meta.url), "utf8"),
+    )
+    .join("\n");
   const css = readFileSync(
     new URL("../../frontend/styles.css", import.meta.url),
     "utf8",
