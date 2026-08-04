@@ -77,36 +77,65 @@ test("PIN validation accepts leading zero and rejects non-four-digit values", as
   for (const pin of ["123", "12345", "12a4", "12#4"]) {
     const result = await request("/api/auth/register", {
       method: "POST",
-      input: { username: `bad${pin.replace(/\W/g, "x")}`, full_name: "Bad PIN", pin, confirm_pin: pin },
+      input: {
+        username: `bad${pin.replace(/\W/g, "x")}`,
+        full_name: "Bad PIN",
+        pin,
+        confirm_pin: pin,
+      },
     });
     assert.equal(result.status, 400);
   }
   const mismatch = await request("/api/auth/register", {
     method: "POST",
-    input: { username: "mismatch", full_name: "Mismatch", pin: "0123", confirm_pin: "0124" },
+    input: {
+      username: "mismatch",
+      full_name: "Mismatch",
+      pin: "0123",
+      confirm_pin: "0124",
+    },
   });
   assert.equal(mismatch.status, 400);
   const valid = await request("/api/auth/register", {
     method: "POST",
-    input: { username: "leadingzero", full_name: "Leading Zero", pin: "0007", confirm_pin: "0007" },
+    input: {
+      username: "leadingzero",
+      full_name: "Leading Zero",
+      pin: "0007",
+      confirm_pin: "0007",
+    },
   });
   assert.equal(valid.status, 201);
-  const stored = db.prepare("SELECT password_hash,pin_hash FROM users WHERE username=?").get("leadingzero");
+  const stored = db
+    .prepare("SELECT password_hash,pin_hash FROM users WHERE username=?")
+    .get("leadingzero");
   assert.ok(stored.pin_hash.startsWith("scrypt$"));
   assert.equal(stored.pin_hash.includes("0007"), false);
   assert.equal(JSON.stringify(valid.data).includes("pin_hash"), false);
 });
 
 test("existing password accounts can establish a PIN without changing identity", async () => {
-  const inserted = db.prepare("INSERT INTO users(username,full_name,password_hash,role) VALUES (?,?,?,'USER')").run("legacy", "Legacy User", hashPassword("existing-long-password"));
+  const inserted = db
+    .prepare(
+      "INSERT INTO users(username,full_name,password_hash,role) VALUES (?,?,?,'USER')",
+    )
+    .run("legacy", "Legacy User", hashPassword("existing-long-password"));
   const id = Number(inserted.lastInsertRowid);
   const transition = await request("/api/auth/transition-pin", {
     method: "POST",
-    input: { username: "legacy", current_password: "existing-long-password", pin: "0019", confirm_pin: "0019" },
+    input: {
+      username: "legacy",
+      current_password: "existing-long-password",
+      pin: "0019",
+      confirm_pin: "0019",
+    },
   });
   assert.equal(transition.status, 200);
   assert.equal(transition.data.user.id, id);
-  const login = await request("/api/auth/login", { method: "POST", input: { username: "legacy", pin: "0019" } });
+  const login = await request("/api/auth/login", {
+    method: "POST",
+    input: { username: "legacy", pin: "0019" },
+  });
   assert.equal(login.status, 200);
 });
 
@@ -678,14 +707,12 @@ test("dashboard layouts persist order, sizes, reset, and remain isolated", async
   const user = await register("layoutuser"),
     other = await register("layoutother");
   const initial = await request("/api/dashboard/layout", { auth: user });
-  const widgets = initial.data.widgets
-    .slice(0, 3)
-    .map((item, index) => ({
-      ...item,
-      position: 2 - index,
-      width: index + 1,
-      enabled: index !== 1,
-    }));
+  const widgets = initial.data.widgets.slice(0, 3).map((item, index) => ({
+    ...item,
+    position: 2 - index,
+    width: index + 1,
+    enabled: index !== 1,
+  }));
   const saved = await request("/api/dashboard/layout", {
     method: "PUT",
     auth: user,
@@ -878,5 +905,152 @@ test("complete end-to-end workflow reaches manager scoped views", async () => {
       })
     ).status,
     200,
+  );
+});
+
+test("feature upgrade application views, kanban movement, resume revisions, goal series, and Excel export are owner scoped", async () => {
+  const user = await register("upgradeuser"),
+    other = await register("upgradeother");
+  const resume = await request("/api/resumes", {
+    method: "POST",
+    auth: user,
+    input: {
+      version_name: "QA v1",
+      target_role: "QA Engineer",
+      change_summary: "Initial version",
+    },
+  });
+  assert.equal(resume.status, 201);
+  const created = await request("/api/applications", {
+    method: "POST",
+    auth: user,
+    input: {
+      company: "=Formula Corp",
+      job_title: "QA Engineer",
+      date_applied: "2026-08-03",
+      stage: "Applied",
+      resume_id: resume.data.id,
+    },
+  });
+  assert.equal(created.status, 201);
+
+  const preference = await request("/api/application-view-preferences", {
+    method: "PUT",
+    auth: user,
+    input: {
+      preferred_view: "kanban",
+      collapsed_columns: ["Rejected"],
+      board_sort: "custom",
+    },
+  });
+  assert.equal(preference.status, 200);
+  assert.equal(preference.data.preferred_view, "kanban");
+  assert.deepEqual(preference.data.collapsed_columns, ["Rejected"]);
+  assert.equal(
+    (await request("/api/application-view-preferences", { auth: other })).data
+      .preferred_view,
+    "table",
+  );
+
+  const filtered = await request(
+    `/api/applications/query?column_filters=${encodeURIComponent(JSON.stringify([{ field: "company", operator: "contains", value: "Formula" }]))}`,
+    { auth: user },
+  );
+  assert.equal(filtered.status, 200);
+  assert.equal(filtered.data.total, 1);
+  assert.equal(filtered.data.items[0].linked_resume_version, "QA v1");
+  assert.equal(
+    (await request("/api/applications/kanban", { auth: other })).data.total,
+    0,
+  );
+
+  const moved = await request(`/api/applications/${created.data.id}/stage`, {
+    method: "PATCH",
+    auth: user,
+    input: { stage: "Rejected", reason: "Role closed" },
+  });
+  assert.equal(moved.status, 200);
+  assert.equal(
+    db
+      .prepare(
+        "SELECT count(*) count FROM stage_history WHERE application_id=?",
+      )
+      .get(created.data.id).count,
+    2,
+  );
+  assert.equal(
+    db
+      .prepare(
+        "SELECT count(*) count FROM timeline_events WHERE application_id=? AND event_type='stage_changed'",
+      )
+      .get(created.data.id).count,
+    1,
+  );
+  assert.equal(
+    db
+      .prepare("SELECT count(*) count FROM rejections WHERE application_id=?")
+      .get(created.data.id).count,
+    1,
+  );
+  assert.equal(
+    (
+      await request(`/api/applications/${created.data.id}/stage`, {
+        method: "PATCH",
+        auth: other,
+        input: { stage: "Offer" },
+      })
+    ).status,
+    404,
+  );
+
+  const clone = await request(`/api/resumes/${resume.data.id}/clone`, {
+    method: "POST",
+    auth: user,
+    input: {
+      version_name: "QA v2",
+      revision_label: "2",
+      change_summary: "Improved outcomes",
+    },
+  });
+  assert.equal(clone.status, 201);
+  assert.equal(
+    (
+      await request(`/api/resumes/${resume.data.id}/clone`, {
+        method: "POST",
+        auth: other,
+        input: { version_name: "Stolen" },
+      })
+    ).status,
+    404,
+  );
+  const comparison = await request(
+    `/api/resumes/compare?left=${resume.data.id}&right=${clone.data.id}`,
+    { auth: user },
+  );
+  assert.equal(comparison.status, 200);
+  assert.equal(comparison.data.comparison_type, "metadata_and_performance");
+
+  const series = await request(
+    "/api/goals/progress-series?metric=applications&date_from=2026-08-01&date_to=2026-08-07",
+    { auth: user },
+  );
+  assert.equal(series.status, 200);
+  assert.equal(series.data.metric, "applications");
+
+  const excel = await fetch(
+    `${base}/api/exports/applications.xlsx?archived=all`,
+    { headers: { Cookie: user.cookie } },
+  );
+  assert.equal(excel.status, 200);
+  assert.match(excel.headers.get("content-type"), /spreadsheetml/);
+  const bytes = new Uint8Array(await excel.arrayBuffer());
+  assert.equal(String.fromCharCode(bytes[0], bytes[1]), "PK");
+  assert.equal(
+    (
+      await fetch(`${base}/api/exports/applications.xlsx`, {
+        headers: { Cookie: other.cookie },
+      })
+    ).status,
+    404,
   );
 });
