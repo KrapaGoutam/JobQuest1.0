@@ -20,6 +20,7 @@ import {
   changeStage,
 } from "./service.js";
 import { handleAdvanced } from "./advanced.js";
+import { handleFeatureUpgrade } from "./feature-upgrade.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const frontendDir = join(here, "..", "..", "frontend");
@@ -408,8 +409,13 @@ function updateTracker(db, actor, table, id, input) {
 
 export function createRequestHandler({ db = openDatabase() } = {}) {
   if (db.dialect === "postgres") {
-    const ready = db.prepare("SELECT version FROM schema_migrations WHERE version=?").get("005_four_digit_pin.sql");
-    if (!ready) throw new Error("PostgreSQL schema is not current; run the controlled migration command");
+    const ready = db
+      .prepare("SELECT version FROM schema_migrations WHERE version=?")
+      .get("006_feature_upgrade_one.sql");
+    if (!ready)
+      throw new Error(
+        "PostgreSQL schema is not current; run the controlled migration command",
+      );
   } else migrate(db);
   return async function handler(request, response) {
     const url = new URL(request.url, "http://localhost");
@@ -524,22 +530,48 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
           },
         );
       }
-      if (url.pathname === "/api/auth/transition-pin" && request.method === "POST") {
+      if (
+        url.pathname === "/api/auth/transition-pin" &&
+        request.method === "POST"
+      ) {
         const input = await body(request),
-          user = db.prepare("SELECT * FROM users WHERE username=? COLLATE NOCASE").get(String(input.username || "")),
-          locked = user?.locked_until && Date.parse(`${user.locked_until}Z`) > Date.now(),
-          validPin = /^\d{4}$/.test(String(input.pin || "")) && input.pin === input.confirm_pin,
-          validLegacy = user && user.auth_method === "legacy_password" && verifyPassword(String(input.current_password || ""), user.password_hash);
+          user = db
+            .prepare("SELECT * FROM users WHERE username=? COLLATE NOCASE")
+            .get(String(input.username || "")),
+          locked =
+            user?.locked_until &&
+            Date.parse(`${user.locked_until}Z`) > Date.now(),
+          validPin =
+            /^\d{4}$/.test(String(input.pin || "")) &&
+            input.pin === input.confirm_pin,
+          validLegacy =
+            user &&
+            user.auth_method === "legacy_password" &&
+            verifyPassword(
+              String(input.current_password || ""),
+              user.password_hash,
+            );
         if (!user || !user.is_active || locked || !validPin || !validLegacy) {
           if (user && !locked)
-            db.prepare("UPDATE users SET failed_login_count=failed_login_count+1,locked_until=CASE WHEN failed_login_count+1>=? THEN datetime('now',?) ELSE locked_until END WHERE id=?").run(LOCKOUT_ATTEMPTS, `+${LOCKOUT_MINUTES} minutes`, user.id);
-          throw Object.assign(new Error("Unable to update credentials"), { status: 401 });
+            db.prepare(
+              "UPDATE users SET failed_login_count=failed_login_count+1,locked_until=CASE WHEN failed_login_count+1>=? THEN datetime('now',?) ELSE locked_until END WHERE id=?",
+            ).run(LOCKOUT_ATTEMPTS, `+${LOCKOUT_MINUTES} minutes`, user.id);
+          throw Object.assign(new Error("Unable to update credentials"), {
+            status: 401,
+          });
         }
-        db.prepare("UPDATE users SET pin_hash=?,auth_method='pin',failed_login_count=0,locked_until=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(hashPassword(input.pin), user.id);
+        db.prepare(
+          "UPDATE users SET pin_hash=?,auth_method='pin',failed_login_count=0,locked_until=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        ).run(hashPassword(input.pin), user.id);
         const session = createSession(db, user.id);
-        return json(response, 200, { user: publicUser(user), csrf_token: session.csrf }, {
-          "Set-Cookie": `jobquest_session=${session.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`,
-        });
+        return json(
+          response,
+          200,
+          { user: publicUser(user), csrf_token: session.csrf },
+          {
+            "Set-Cookie": `jobquest_session=${session.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`,
+          },
+        );
       }
       if (url.pathname === "/api/auth/logout" && request.method === "POST") {
         requireAuth(context, { csrf: true });
@@ -564,6 +596,15 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
           csrf_token: actor.csrf_token,
         });
       }
+      if (
+        await handleFeatureUpgrade(context, {
+          json,
+          body,
+          requireAuth,
+          targetOwner,
+        })
+      )
+        return;
       if (
         await handleAdvanced(context, { json, body, requireAuth, targetOwner })
       )
@@ -858,7 +899,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       `JobQuest running at http://${process.env.HOST || "127.0.0.1"}:${port}`,
     ),
   );
-  const shutdown = () => server.close(() => { db.close(); process.exit(0); });
+  const shutdown = () =>
+    server.close(() => {
+      db.close();
+      process.exit(0);
+    });
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);
 }
