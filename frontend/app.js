@@ -8,7 +8,10 @@ import {
   selectAllWidgets,
   deselectAllWidgets,
   widgetSelectionState,
+  groupKanbanItems,
 } from "./ui-utils.js";
+import { createApplicationTable } from "./application-table.js";
+import { createApplicationPreview } from "./application-preview.js";
 
 const state = {
   user: null,
@@ -25,6 +28,8 @@ const state = {
   dashboardDays: 30,
   applicationView: "table",
   navigationCounts: {},
+  expandedKanbanGroups: new Set(),
+  selectedApplications: new Set(),
 };
 const app = document.querySelector("#app");
 const esc = (value = "") =>
@@ -127,15 +132,11 @@ function shell(content) {
           )
           .join("")}`
       : "";
-  app.innerHTML = `<div class="shell"><aside><div class="logo">JobQuest</div><nav>${nav.map(([id, label]) => `<button data-page="${id}" class="${state.page === id ? "active" : ""}">${label}</button>`).join("")}${manager}</nav><div class="user-card"><strong>${esc(state.user.full_name)}</strong><br>${esc(state.user.username)} · ${state.user.role}<div class="actions"><button class="btn small secondary" id="theme-cycle" aria-label="Change color theme">Theme: ${esc(state.user.theme || "system")}</button><button class="btn small secondary" id="logout">Sign out</button></div></div></aside><main id="content">${content}</main></div>`;
+  app.innerHTML = `<div class="shell"><aside><header class="sidebar-head"><div class="logo"><span class="logo-mark" aria-hidden="true">JQ</span><span class="logo-word">JobQuest</span></div><button class="icon-button sidebar-close" id="sidebar-close" aria-label="Close navigation">×</button></header><nav>${nav.map(([id, label]) => `<button data-page="${id}" class="${state.page === id ? "active" : ""}"><span class="nav-label">${label}</span></button>`).join("")}${manager}</nav><div class="user-card"><strong>${esc(state.user.full_name)}</strong><span>${esc(state.user.username)} · ${state.user.role}</span><div class="actions"><button class="btn small secondary" id="theme-cycle" aria-label="Change color theme">Theme: ${esc(state.user.theme || "system")}</button><button class="btn small secondary" id="logout">Sign out</button></div></div></aside><div class="workspace"><header class="topbar"><div class="topbar-leading"><button class="icon-button mobile-menu" id="mobile-menu" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">☰</button><button class="icon-button desktop-collapse" id="desktop-collapse" aria-label="Collapse navigation" aria-pressed="false">⇤</button><span class="topbar-title">${esc(pretty(state.page.split(":")[0]))}</span></div><div class="topbar-actions"><button class="btn small" data-page="quick-add">Quick Add</button></div></header><main id="content" tabindex="-1">${content}</main></div></div>`;
   const sidebar = qs(".shell aside");
   sidebar.id = "sidebar";
   sidebar.setAttribute("aria-label", "Primary navigation");
-  app.insertAdjacentHTML(
-    "afterbegin",
-    '<button class="mobile-menu btn secondary" id="mobile-menu" aria-expanded="false" aria-controls="sidebar">Menu</button>',
-  );
-  qs(".shell main").insertAdjacentHTML(
+  qs(".workspace").insertAdjacentHTML(
     "beforebegin",
     '<div class="sidebar-backdrop" id="sidebar-backdrop"></div>',
   );
@@ -144,16 +145,24 @@ function shell(content) {
   );
   const navRoot = qs("aside nav");
   const groupedNavigation = [
-    ["Main", ["dashboard", "applications", "add", "bulk", "calendar"]],
+    ["Primary", ["dashboard", "applications", "add"]],
     [
       "Activity",
-      ["interviews", "follow_ups", "reminders", "networking_contacts"],
+      [
+        "calendar",
+        "reminders",
+        "interviews",
+        "rejections",
+        "follow_ups",
+        "networking_contacts",
+      ],
     ],
-    ["Career Assets", ["resumes"]],
+    ["Career Assets", ["resumes", "bulk"]],
     [
-      "Insights & Reports",
-      ["goal-history", "aging", "stage-analytics", "rejections", "exports"],
+      "Insights",
+      ["goal-history", "aging", "stage-analytics", "exports"],
     ],
+    ["Settings", ["settings"]],
   ];
   groupedNavigation.forEach(([label, ids], index) => {
     const details = document.createElement("details");
@@ -171,18 +180,85 @@ function shell(content) {
   });
   qs("#logout").onclick = logout;
   qs("#theme-cycle").onclick = cycleTheme;
+  let navigationTrigger = null;
   const toggleNavigation = (open) => {
+    if (open) navigationTrigger = document.activeElement;
     sidebar.classList.toggle("open", open);
     qs("#sidebar-backdrop").classList.toggle("open", open);
     qs("#mobile-menu").setAttribute("aria-expanded", String(open));
     document.body.classList.toggle("nav-open", open);
+    if (open) qs("#sidebar-close").focus();
+    else navigationTrigger?.focus?.();
   };
   qs("#mobile-menu").onclick = () =>
     toggleNavigation(!sidebar.classList.contains("open"));
   qs("#sidebar-backdrop").onclick = () => toggleNavigation(false);
-  document.onkeydown = (event) => {
-    if (event.key === "Escape") toggleNavigation(false);
+  qs("#sidebar-close").onclick = () => toggleNavigation(false);
+  qs("#desktop-collapse").onclick = async (event) => {
+    const collapsed = !qs(".shell").classList.contains("navigation-collapsed");
+    qs(".shell").classList.toggle("navigation-collapsed", collapsed);
+    event.currentTarget.setAttribute("aria-pressed", String(collapsed));
+    event.currentTarget.setAttribute(
+      "aria-label",
+      collapsed ? "Expand navigation" : "Collapse navigation",
+    );
+    await api("/api/navigation/preferences", {
+      method: "PUT",
+      body: JSON.stringify({ collapsed, groups: {} }),
+    });
   };
+  let shortcutPrefix = "";
+  document.onkeydown = (event) => {
+    if (event.key === "Escape") {
+      toggleNavigation(false);
+      document.querySelector("dialog[open]")?.close();
+    }
+    if (
+      event.key === "Tab" &&
+      sidebar.classList.contains("open") &&
+      matchMedia("(max-width: 780px)").matches
+    ) {
+      const focusable = [
+        ...sidebar.querySelectorAll("button,[href],input,select"),
+      ].filter((node) => !node.disabled && node.offsetParent !== null);
+      const first = focusable[0],
+        last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target.matches("input,select,textarea,[contenteditable=true]")) return;
+    if (event.key === "/" && state.page === "applications") {
+      event.preventDefault();
+      qs('#app-filters input[name="search"]')?.focus();
+    } else if (event.key.toLowerCase() === "q") {
+      go("quick-add");
+    } else if (shortcutPrefix === "g") {
+      const routes = { d: "dashboard", a: "applications", c: "calendar" };
+      if (routes[event.key.toLowerCase()]) go(routes[event.key.toLowerCase()]);
+      shortcutPrefix = "";
+    } else if (event.key.toLowerCase() === "g") {
+      shortcutPrefix = "g";
+      setTimeout(() => (shortcutPrefix = ""), 1200);
+    }
+  };
+  api("/api/navigation/preferences")
+    .then((preference) => {
+      qs(".shell").classList.toggle(
+        "navigation-collapsed",
+        preference.collapsed,
+      );
+      qs("#desktop-collapse").setAttribute(
+        "aria-pressed",
+        String(preference.collapsed),
+      );
+    })
+    .catch(() => {});
   api("/api/navigation/counts")
     .then((counts) => {
       state.navigationCounts = counts;
@@ -345,6 +421,19 @@ const WIDGET_NAMES = {
   "pinned-applications": "Pinned Applications",
   "health-summary": "Application Health Summary",
   "calendar-preview": "Calendar Preview",
+};
+const DASHBOARD_DRILL = {
+  "applications-today": { date_from: date(), date_to: date() },
+  "active-applications": { archived: "false" },
+  "follow-ups-due": { page: "follow_ups" },
+  "overdue-follow-ups": { page: "follow_ups" },
+  "upcoming-interviews": { page: "interviews" },
+  rejections: { stage: "Rejected" },
+  ghosted: { stage: "Ghosted" },
+  offers: { stage: "Offer" },
+  acceptances: { stage: "Accepted" },
+  "reminder-center": { page: "reminders" },
+  "calendar-preview": { page: "calendar" },
 };
 async function dashboardData(manager = false) {
   const scope =
@@ -570,7 +659,7 @@ async function renderDashboard(manager = false) {
       "A configurable view of momentum, health, goals, and next actions",
       `<div class="actions">${scopeSelect}<select id="dashboard-range" aria-label="Dashboard date range"><option value="1">Today</option><option value="7">Last 7 days</option><option value="30" ${state.dashboardDays === 30 ? "selected" : ""}>Last 30 days</option><option value="90">Last 90 days</option><option value="365">This year</option><option value="3650">All time</option></select><button class="btn secondary" id="dashboard-settings">Dashboard Settings</button></div>`,
     ) +
-      `<div class="widget-grid">${widgets.map((item) => `<section class="widget size-${item.width}" data-widget="${item.widget_id}"><h2>${esc(WIDGET_NAMES[item.widget_id])}</h2>${widgetContent(item.widget_id, data, manager)}</section>`).join("")}</div>`,
+      `<div class="widget-grid">${widgets.map((item) => `<section class="widget size-${item.width}" data-widget="${item.widget_id}"><header class="widget-header"><h2>${esc(WIDGET_NAMES[item.widget_id])}</h2>${DASHBOARD_DRILL[item.widget_id] ? `<button class="widget-drill" data-widget-drill="${item.widget_id}" aria-label="Open details for ${esc(WIDGET_NAMES[item.widget_id])}">View</button>` : ""}</header>${widgetContent(item.widget_id, data, manager)}</section>`).join("")}</div>`,
   );
   if (manager)
     qs("select[name=manager-user-scope]").onchange = (event) => {
@@ -606,6 +695,15 @@ async function renderDashboard(manager = false) {
   );
   qs("#dashboard-settings").onclick = () =>
     renderDashboardSettings(data.layout, manager);
+  qsa("[data-widget-drill]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        const target = DASHBOARD_DRILL[button.dataset.widgetDrill];
+        if (target.page) return go(target.page);
+        state.page = "applications";
+        renderApplications(new URLSearchParams(target));
+      }),
+  );
   qsa("[data-page]").forEach(
     (button) => (button.onclick = () => go(button.dataset.page)),
   );
@@ -837,6 +935,143 @@ async function renderApplications(params = new URLSearchParams()) {
       ? data.columns.flatMap((column) => column.items)
       : data.items;
   state.applications = items;
+  const requestFilter = (column, label) => {
+    const existing = (() => {
+      try {
+        return JSON.parse(params.get("column_filters") || "[]");
+      } catch {
+        return [];
+      }
+    })();
+    const dialog = document.createElement("dialog");
+    dialog.className = "filter-dialog";
+    const form = document.createElement("form");
+    form.method = "dialog";
+    const title = document.createElement("h2");
+    title.textContent = `Filter ${label}`;
+    form.append(title);
+    const dateColumn = [
+      "date_applied",
+      "next_action_date",
+      "updated_at",
+    ].includes(column);
+    const choices = {
+      stage: STAGES,
+      priority: ["High", "Medium", "Low"],
+      work_arrangement: ["Remote", "Hybrid", "Onsite"],
+    }[column];
+    let operator = null,
+      value = null,
+      valueTo = null;
+    if (choices) {
+      value = document.createElement("select");
+      value.multiple = true;
+      value.setAttribute("aria-label", `${label} values`);
+      for (const choice of choices) {
+        const option = document.createElement("option");
+        option.value = option.textContent = choice;
+        value.append(option);
+      }
+      form.append(value);
+    } else {
+      operator = document.createElement("select");
+      operator.setAttribute("aria-label", `${label} operator`);
+      const operators = dateColumn
+        ? ["equals", "before", "after", "between", "empty", "not_empty"]
+        : [
+            "contains",
+            "not_contains",
+            "equals",
+            "not_equal",
+            "starts_with",
+            "ends_with",
+            "empty",
+            "not_empty",
+          ];
+      for (const name of operators) {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = pretty(name);
+        operator.append(option);
+      }
+      value = document.createElement("input");
+      value.type = dateColumn ? "date" : "text";
+      value.setAttribute("aria-label", `${label} value`);
+      valueTo = document.createElement("input");
+      valueTo.type = "date";
+      valueTo.hidden = true;
+      valueTo.setAttribute("aria-label", `${label} end date`);
+      operator.onchange = () => {
+        value.hidden = ["empty", "not_empty"].includes(operator.value);
+        valueTo.hidden = operator.value !== "between";
+      };
+      form.append(operator, value, valueTo);
+    }
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    const apply = document.createElement("button");
+    apply.className = "btn";
+    apply.value = "apply";
+    apply.textContent = "Apply filter";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "btn secondary";
+    cancel.textContent = "Cancel";
+    cancel.onclick = () => dialog.close();
+    actions.append(apply, cancel);
+    form.append(actions);
+    dialog.append(form);
+    document.body.append(dialog);
+    dialog.onclose = () => {
+      if (dialog.returnValue === "apply") {
+        const filter = choices
+          ? {
+              field: column,
+              operator: "in",
+              value: [...value.selectedOptions].map((item) => item.value),
+            }
+          : {
+              field: column,
+              operator: operator.value,
+              value: value.value,
+              value_to: valueTo.value,
+            };
+        params.set(
+          "column_filters",
+          JSON.stringify([
+            ...existing.filter((item) => item.field !== column),
+            filter,
+          ]),
+        );
+        renderApplications(params);
+      }
+      dialog.remove();
+    };
+    dialog.showModal();
+    (operator || value).focus();
+  };
+  const preview = async (item) => {
+    const trigger = document.activeElement;
+    try {
+      const data = await api(`/api/applications/${item.id}/detail`);
+      const drawer = createApplicationPreview(document, data, {
+        onOpen: (application) => go(`detail:${application.id}`),
+        onEdit: (application) => {
+          state.editing = application;
+          go("add");
+        },
+      });
+      document.body.append(drawer);
+      drawer.addEventListener("close", () => {
+        drawer.remove();
+        trigger?.focus?.();
+      });
+      drawer.showModal();
+      drawer.querySelector("button")?.focus();
+    } catch (error) {
+      toast(error.message);
+    }
+  };
   const move = async (id, stage) => {
     const item = items.find((value) => value.id === Number(id));
     if (
@@ -856,27 +1091,80 @@ async function renderApplications(params = new URLSearchParams()) {
       renderApplications(params);
     }
   };
+  const requestMove = (item) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "stage-dialog";
+    const form = document.createElement("form");
+    form.method = "dialog";
+    const title = document.createElement("h2");
+    title.textContent = `Move ${item.company}`;
+    const label = document.createElement("label");
+    label.textContent = "Destination stage";
+    const select = document.createElement("select");
+    select.name = "stage";
+    for (const stage of STAGES) {
+      const option = document.createElement("option");
+      option.value = option.textContent = stage;
+      option.selected = stage === item.stage;
+      select.append(option);
+    }
+    label.append(select);
+    const help = document.createElement("p");
+    help.className = "muted";
+    help.textContent =
+      "This updates stage history, timeline, and audit history.";
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    const submit = document.createElement("button");
+    submit.className = "btn";
+    submit.value = "move";
+    submit.textContent = "Move application";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "btn secondary";
+    cancel.textContent = "Cancel";
+    cancel.onclick = () => dialog.close();
+    actions.append(submit, cancel);
+    form.append(title, label, help, actions);
+    dialog.append(form);
+    document.body.append(dialog);
+    dialog.onclose = async () => {
+      const stage = select.value;
+      const accepted = dialog.returnValue === "move";
+      dialog.remove();
+      if (accepted && stage !== item.stage) await move(item.id, stage);
+    };
+    dialog.showModal();
+    select.focus();
+  };
   const card = (item) =>
-    `<article class="kanban-card" draggable="true" tabindex="0" data-card="${item.id}"><strong>${esc(item.company)}</strong><h3>${esc(item.job_title)}</h3><p>${esc(item.linked_resume_version || "No resume linked")}</p><p>${badge(item.priority)} ${esc(item.date_applied)}</p><p>${esc(item.next_action || "No next action")} ${esc(item.next_action_date || "")}</p><div class="actions"><button class="btn small secondary" data-open-card="${item.id}">Open</button><button class="btn small secondary" data-move="${item.id}">Move to stage</button></div></article>`;
+    `<article class="kanban-card" draggable="true" tabindex="0" data-card="${item.id}"><strong>${esc(item.company)}</strong><h3>${esc(item.job_title)}</h3><p>${esc(item.linked_resume_version || "No resume linked")}</p><p>${badge(item.priority)} ${esc(item.date_applied)}</p><p>${esc(item.next_action || "No next action")} ${esc(item.next_action_date || "")}</p><div class="actions"><button class="btn small secondary" data-preview-card="${item.id}">Preview</button><button class="btn small secondary" data-open-card="${item.id}">Open</button><button class="btn small secondary" data-move="${item.id}">Move to stage</button></div></article>`;
+  const grouping = preference.kanban_grouping || "date_applied_day";
+  const collapsedGroups = new Set(
+    preference.collapsed_groups?.[grouping] || [],
+  );
+  const perGroup = preference.cards_per_group || 15;
+  const groupMarkup = (column) =>
+    groupKanbanItems(column.items, grouping)
+      .map((group) => {
+        const groupId = `${column.stage}:${group.key}`,
+          collapsed = collapsedGroups.has(groupId),
+          expanded = state.expandedKanbanGroups.has(`${grouping}:${groupId}`),
+          visible = expanded ? group.items : group.items.slice(0, perGroup);
+        return `<section class="kanban-group ${collapsed ? "collapsed" : ""}" data-group-section="${esc(groupId)}"><button class="kanban-group-toggle" data-group-collapse="${esc(groupId)}" aria-expanded="${!collapsed}"><span>${esc(group.label)}</span><strong>${group.items.length}</strong></button><div class="kanban-cards" data-drop-stage="${esc(column.stage)}">${visible.map(card).join("") || empty("No applications")}${!collapsed && !expanded && group.items.length > perGroup ? `<button class="btn small secondary show-more" data-show-group="${esc(groupId)}">Show ${group.items.length - perGroup} more</button>` : ""}</div></section>`;
+      })
+      .join("");
   const board =
     view === "kanban"
-      ? `<div class="kanban" aria-label="Application Kanban board">${data.columns.map((column) => `<section class="kanban-column ${preference.collapsed_columns.includes(column.stage) ? "collapsed" : ""}"><header><button class="column-toggle" data-collapse="${esc(column.stage)}" aria-expanded="${!preference.collapsed_columns.includes(column.stage)}">${badge(column.stage)} <strong>${column.total}</strong></button></header><div class="kanban-cards" data-drop-stage="${esc(column.stage)}">${column.items.map(card).join("") || empty("No applications")}</div></section>`).join("")}</div>`
+      ? `<div class="kanban-toolbar"><label>Group cards<select id="kanban-grouping"><option value="date_applied_day">Date Applied · Day</option><option value="date_applied_week">Date Applied · Week</option><option value="date_applied_month">Date Applied · Month</option><option value="last_updated_day">Last Updated · Day</option><option value="next_action_day">Next Action Date · Day</option><option value="none">No grouping</option></select></label></div><div class="kanban" aria-label="Application Kanban board">${data.columns.map((column) => `<section class="kanban-column ${preference.collapsed_columns.includes(column.stage) ? "collapsed" : ""}"><header><button class="column-toggle" data-collapse="${esc(column.stage)}" aria-expanded="${!preference.collapsed_columns.includes(column.stage)}">${badge(column.stage)} <strong>${column.total}</strong></button></header><div class="kanban-column-groups">${groupMarkup(column) || empty("No applications")}</div></section>`).join("")}</div>`
       : "";
-  const bodyRows = items
-    .map(
-      (item) =>
-        `<tr class="clickable-row" data-open="${item.id}" tabindex="0"><td>${esc(item.date_applied)}</td><td><strong>${esc(item.company)}</strong></td><td>${esc(item.job_title)}</td><td>${esc(item.location || "â€”")}</td><td>${esc(item.work_arrangement || "â€”")}</td><td>${badge(item.stage)}</td><td>${esc(item.priority)}</td><td>${esc(item.source || "â€”")}</td><td>${item.resume_id ? `<button class="link-button" data-page="resumes">${esc(item.linked_resume_version || "Linked resume")}</button>` : "No resume linked"}</td><td>${esc(item.next_action || "â€”")}</td><td>${esc(item.next_action_date || "â€”")}</td><td>${esc(item.updated_at)}</td><td><button class="btn small secondary" data-move="${item.id}">Move</button></td></tr>`,
-    )
-    .join("");
-  const filterButton = (field, label) =>
-    `<button class="column-filter" type="button" data-column-filter="${field}" aria-label="Filter ${label}">âŒ•</button>`;
   shell(
     pageHead(
       "Applications",
       `${data.total} applications`,
       `<div class="actions"><div class="view-switcher" role="group" aria-label="Applications view"><button class="btn small ${view === "table" ? "" : "secondary"}" data-view="table" aria-pressed="${view === "table"}">Table</button><button class="btn small ${view === "kanban" ? "" : "secondary"}" data-view="kanban" aria-pressed="${view === "kanban"}">Kanban</button></div><button class="btn" data-page="quick-add">Quick Add</button><button class="btn secondary" id="open-export">Export</button></div>`,
     ) +
-      `<section class="card full application-workspace"><div class="toolbar"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select></div><form id="app-filters" class="toolbar advanced-filter-bar"><input name="search" placeholder="Search company, title, location" value="${esc(params.get("search") || "")}"><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">More Filters</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">Save View</button></form><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? table([`Applied ${filterButton("date_applied", "Date Applied")}`, `Company ${filterButton("company", "Company")}`, `Job Title ${filterButton("job_title", "Job Title")}`, "Location", "Arrangement", "Stage", "Priority", "Source", `Resume Version ${filterButton("resume_version", "Resume Version")}`, "Next Action", "Due", "Updated", "Actions"], bodyRows, "No applications match these filters") : board}</section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
+      `<section class="card full application-workspace"><div class="toolbar"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select></div><form id="app-filters" class="toolbar advanced-filter-bar"><input name="search" placeholder="Search company, title, location" value="${esc(params.get("search") || "")}"><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">More Filters</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">Save View</button></form><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? '<div id="applications-table-root"></div>' : board}</section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
         "format",
         "Format",
         [
@@ -895,6 +1183,51 @@ async function renderApplications(params = new URLSearchParams()) {
         ],
         "date_applied",
       )}${field("date_from", "Start date", "date", params.get("date_from") || "")}${field("date_to", "End date", "date", params.get("date_to") || "")}<div class="actions full"><button class="btn" value="export">Export</button><button class="btn secondary" value="cancel">Cancel</button></div></form></dialog>`,
+  );
+  if (view === "table") {
+    qs("#applications-table-root").append(
+      createApplicationTable(document, {
+        items,
+        sort: params.get("sort") || "updated_at",
+        direction: params.get("direction") || "desc",
+        onSort: (sort, direction) => {
+          params.set("sort", sort);
+          params.set("direction", direction);
+          renderApplications(params);
+        },
+        onFilter: requestFilter,
+        onOpen: (item) => go(`detail:${item.id}`),
+        onMove: requestMove,
+        onResume: () => go("resumes"),
+        onPreview: preview,
+        selected: state.selectedApplications,
+        onSelect: (item, selected) => {
+          selected
+            ? state.selectedApplications.add(item.id)
+            : state.selectedApplications.delete(item.id);
+        },
+        onSelectAll: (visibleItems, selected) => {
+          for (const item of visibleItems)
+            selected
+              ? state.selectedApplications.add(item.id)
+              : state.selectedApplications.delete(item.id);
+          renderApplications(params);
+        },
+      }),
+    );
+  }
+  qs("#saved-view").setAttribute("aria-label", "Saved application views");
+  qs('#app-filters input[name="search"]').setAttribute(
+    "aria-label",
+    "Search applications",
+  );
+  qs('#app-filters select[name="stage"]').setAttribute(
+    "aria-label",
+    "Filter by stage",
+  );
+  qs('#app-filters select[name="priority"]').setAttribute(
+    "aria-label",
+    "Filter by priority",
   );
   qs("#app-filters").onsubmit = (event) => {
     event.preventDefault();
@@ -950,12 +1283,22 @@ async function renderApplications(params = new URLSearchParams()) {
     (button) =>
       (button.onclick = () => go(`detail:${button.dataset.openCard}`)),
   );
+  qsa("[data-preview-card]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        const item = items.find(
+          (value) => value.id === Number(button.dataset.previewCard),
+        );
+        if (item) preview(item);
+      }),
+  );
   qsa("[data-move]").forEach(
     (button) =>
-      (button.onclick = async () => {
-        const stage = prompt(`Move to stage:\n${STAGES.join(", ")}`);
-        if (stage && STAGES.includes(stage))
-          await move(button.dataset.move, stage);
+      (button.onclick = () => {
+        const item = items.find(
+          (value) => value.id === Number(button.dataset.move),
+        );
+        if (item) requestMove(item);
       }),
   );
   qsa("[data-card]").forEach(
@@ -982,23 +1325,43 @@ async function renderApplications(params = new URLSearchParams()) {
         renderApplications(params);
       }),
   );
-  qsa("[data-column-filter]").forEach(
+  if (view === "kanban") {
+    qs("#kanban-grouping").value = grouping;
+    qs("#kanban-grouping").onchange = async (event) => {
+      await api("/api/application-view-preferences", {
+        method: "PUT",
+        body: JSON.stringify({ kanban_grouping: event.target.value }),
+      });
+      state.expandedKanbanGroups.clear();
+      renderApplications(params);
+    };
+  }
+  qsa("[data-group-collapse]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        const next = new Set(collapsedGroups);
+        next.has(button.dataset.groupCollapse)
+          ? next.delete(button.dataset.groupCollapse)
+          : next.add(button.dataset.groupCollapse);
+        await api("/api/application-view-preferences", {
+          method: "PUT",
+          body: JSON.stringify({
+            collapsed_groups: {
+              ...(preference.collapsed_groups || {}),
+              [grouping]: [...next],
+            },
+          }),
+        });
+        renderApplications(params);
+      }),
+  );
+  qsa("[data-show-group]").forEach(
     (button) =>
       (button.onclick = () => {
-        const value = prompt(`Filter ${button.dataset.columnFilter} contains:`);
-        if (value !== null) {
-          params.set(
-            "column_filters",
-            JSON.stringify([
-              {
-                field: button.dataset.columnFilter,
-                operator: "contains",
-                value,
-              },
-            ]),
-          );
-          renderApplications(params);
-        }
+        state.expandedKanbanGroups.add(
+          `${grouping}:${button.dataset.showGroup}`,
+        );
+        renderApplications(params);
       }),
   );
   const dialog = qs("#export-dialog");

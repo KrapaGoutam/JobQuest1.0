@@ -940,12 +940,22 @@ test("feature upgrade application views, kanban movement, resume revisions, goal
     input: {
       preferred_view: "kanban",
       collapsed_columns: ["Rejected"],
+      kanban_grouping: "date_applied_week",
+      collapsed_groups: { date_applied_week: ["Applied:2026-08-03"] },
+      table_density: "comfortable",
+      cards_per_group: 20,
       board_sort: "custom",
     },
   });
   assert.equal(preference.status, 200);
   assert.equal(preference.data.preferred_view, "kanban");
   assert.deepEqual(preference.data.collapsed_columns, ["Rejected"]);
+  assert.equal(preference.data.kanban_grouping, "date_applied_week");
+  assert.deepEqual(preference.data.collapsed_groups, {
+    date_applied_week: ["Applied:2026-08-03"],
+  });
+  assert.equal(preference.data.table_density, "comfortable");
+  assert.equal(preference.data.cards_per_group, 20);
   assert.equal(
     (await request("/api/application-view-preferences", { auth: other })).data
       .preferred_view,

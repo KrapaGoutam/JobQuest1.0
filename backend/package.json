@@ -20,12 +20,21 @@
     "test:frontend": "node --test test/frontend.test.js",
     "test:integration": "node --test --test-concurrency=1 test/app.test.js",
     "test:e2e": "node --test --test-concurrency=1 test/app.test.js",
-    "lint": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/feature-upgrade.js && node --check src/db.js && node --check ../frontend/app.js",
-    "typecheck": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/feature-upgrade.js && node --check src/db.js && node --check ../frontend/app.js",
-    "build": "node --check ../frontend/app.js && node --check ../frontend/ui-utils.js && node src/migrate.js --check"
+    "test:browser": "playwright test",
+    "test:accessibility": "playwright test -g accessibility --project=desktop --project=mobile",
+    "test:visual": "playwright test --grep \"responsive visual states|light dark and system themes|settings forms reports\"",
+    "test:visual:update": "playwright test --grep \"responsive visual states|light dark and system themes|settings forms reports\" --update-snapshots",
+    "lint": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/feature-upgrade.js && node --check src/db.js && node --check ../frontend/app.js && node --check ../frontend/application-table.js && node --check ../frontend/application-preview.js",
+    "typecheck": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/feature-upgrade.js && node --check src/db.js && node --check ../frontend/app.js && node --check ../frontend/application-table.js && node --check ../frontend/application-preview.js",
+    "build": "node --check ../frontend/app.js && node --check ../frontend/ui-utils.js && node --check ../frontend/application-table.js && node --check ../frontend/application-preview.js && node src/migrate.js --check"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
     "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.62.1",
+    "linkedom": "^0.18.13"
   }
 }

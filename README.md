@@ -2,6 +2,8 @@
 
 JobQuest is a secure, multi-user job-search manager for manually recording applications already submitted. It tracks the application pipeline, activity, interviews, rejections, follow-ups, networking, daily and weekly goals, imports, and user/manager dashboards. It does not scrape job boards, discover jobs, or apply on a user's behalf.
 
+The authoritative interface contract is [DESIGN.md](DESIGN.md). The repaired Applications table, persisted date-grouped Kanban, preview drawer, responsive navigation, dashboard drill-throughs, accessibility coverage, and visual regression setup are documented in [docs/FEATURE_UI_UPGRADE_1_1.md](docs/FEATURE_UI_UPGRADE_1_1.md).
+
 ## Stack
 
 - Node.js 24 HTTP service, PostgreSQL runtime driver, and migration-only built-in SQLite reader
@@ -56,6 +58,9 @@ Run from `backend`:
 | `npm run test:frontend`                                           | Run frontend utility/component logic tests                                         |
 | `npm run test:integration`                                        | Run cross-resource integration tests                                               |
 | `npm run test:e2e`                                                | Run the authenticated end-to-end workflow test                                     |
+| `npm run test:browser`                                            | Run Chromium functional, accessibility, responsive, and visual tests               |
+| `npm run test:accessibility`                                      | Run focused desktop and mobile Axe accessibility checks                            |
+| `npm run test:visual`                                             | Compare responsive and theme screenshots with reviewed baselines                   |
 | `npm run lint`                                                    | Parse-check backend and frontend sources                                           |
 | `npm run typecheck`                                               | Run the supported static syntax checks (the project is JavaScript, not TypeScript) |
 | `npm run build`                                                   | Validate frontend source and clean-database migrations; no compilation is needed   |

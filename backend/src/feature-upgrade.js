@@ -179,6 +179,26 @@ function buildApplicationWhere(actor, query = {}) {
       } else if (filter.operator === "empty") where.push(`a.${field} IS NULL`);
       else if (filter.operator === "not_empty")
         where.push(`a.${field} IS NOT NULL`);
+    } else if (ENUM_FIELDS.has(field)) {
+      const values = Array.isArray(filter.value)
+        ? filter.value
+        : [filter.value].filter(Boolean);
+      if (values.length) {
+        where.push(`a.${field} IN (${values.map(() => "?").join(",")})`);
+        params.push(...values);
+      }
+    } else if (BOOL_FIELDS.has(field)) {
+      const value = boolValue(filter.value);
+      if (value !== null) {
+        if (field === "archived")
+          where.push(
+            value ? "a.archived_at IS NOT NULL" : "a.archived_at IS NULL",
+          );
+        else {
+          where.push(`a.${field}=?`);
+          params.push(value);
+        }
+      }
     }
   }
   return {
@@ -230,6 +250,14 @@ function preferenceType(actor, input = {}) {
     ? "manager"
     : "user";
 }
+const KANBAN_GROUPINGS = new Set([
+  "date_applied_day",
+  "date_applied_week",
+  "date_applied_month",
+  "last_updated_day",
+  "next_action_day",
+  "none",
+]);
 function getPreference(db, actor, input = {}) {
   const type = preferenceType(actor, input);
   const stored = db
@@ -242,6 +270,7 @@ function getPreference(db, actor, input = {}) {
         ...stored,
         visible_columns: parseJson(stored.visible_columns_json, []),
         collapsed_columns: parseJson(stored.collapsed_columns_json, []),
+        collapsed_groups: parseJson(stored.collapsed_groups_json, {}),
         filters: parseJson(stored.filters_json, {}),
       }
     : {
@@ -249,7 +278,11 @@ function getPreference(db, actor, input = {}) {
         preferred_view: "table",
         visible_columns: [],
         collapsed_columns: [...CLOSED_STAGES],
+        collapsed_groups: {},
         board_sort: "updated_desc",
+        kanban_grouping: "date_applied_day",
+        table_density: "compact",
+        cards_per_group: 15,
         filters: {},
       };
 }
@@ -260,6 +293,27 @@ function savePreference(db, actor, input) {
   if (!VIEWS.has(view)) fail("Invalid applications view");
   const sort = input.board_sort || current.board_sort;
   if (!BOARD_SORTS.has(sort)) fail("Invalid board sorting mode");
+  const grouping = input.kanban_grouping || current.kanban_grouping;
+  if (!KANBAN_GROUPINGS.has(grouping)) fail("Invalid Kanban grouping mode");
+  const density = input.table_density || current.table_density;
+  if (!["compact", "comfortable"].includes(density))
+    fail("Invalid table density");
+  const cardsPerGroup = Number(
+    input.cards_per_group ?? current.cards_per_group ?? 15,
+  );
+  if (
+    !Number.isInteger(cardsPerGroup) ||
+    cardsPerGroup < 10 ||
+    cardsPerGroup > 20
+  )
+    fail("Cards per group must be between 10 and 20");
+  const collapsedGroups = input.collapsed_groups ?? current.collapsed_groups;
+  if (
+    !collapsedGroups ||
+    Array.isArray(collapsedGroups) ||
+    typeof collapsedGroups !== "object"
+  )
+    fail("Invalid collapsed groups");
   const collapsed = input.collapsed_columns ?? current.collapsed_columns;
   if (
     !Array.isArray(collapsed) ||
@@ -267,7 +321,7 @@ function savePreference(db, actor, input) {
   )
     fail("Invalid collapsed columns");
   db.prepare(
-    "INSERT INTO application_view_preferences(user_id,dashboard_type,preferred_view,visible_columns_json,collapsed_columns_json,board_sort,filters_json) VALUES (?,?,?,?,?,?,?) ON CONFLICT(user_id,dashboard_type) DO UPDATE SET preferred_view=excluded.preferred_view,visible_columns_json=excluded.visible_columns_json,collapsed_columns_json=excluded.collapsed_columns_json,board_sort=excluded.board_sort,filters_json=excluded.filters_json,updated_at=CURRENT_TIMESTAMP",
+    "INSERT INTO application_view_preferences(user_id,dashboard_type,preferred_view,visible_columns_json,collapsed_columns_json,board_sort,filters_json,kanban_grouping,collapsed_groups_json,table_density,cards_per_group) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id,dashboard_type) DO UPDATE SET preferred_view=excluded.preferred_view,visible_columns_json=excluded.visible_columns_json,collapsed_columns_json=excluded.collapsed_columns_json,board_sort=excluded.board_sort,filters_json=excluded.filters_json,kanban_grouping=excluded.kanban_grouping,collapsed_groups_json=excluded.collapsed_groups_json,table_density=excluded.table_density,cards_per_group=excluded.cards_per_group,updated_at=CURRENT_TIMESTAMP",
   ).run(
     actor.id,
     type,
@@ -276,6 +330,10 @@ function savePreference(db, actor, input) {
     JSON.stringify(collapsed),
     sort,
     JSON.stringify(input.filters ?? current.filters),
+    grouping,
+    JSON.stringify(collapsedGroups),
+    density,
+    cardsPerGroup,
   );
   db.prepare(
     "UPDATE users SET preferred_applications_view=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
