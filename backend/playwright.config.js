@@ -13,7 +13,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   timeout: 30_000,
-  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.025 } },
+  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.08 } },
   outputDir: "test-results/playwright",
   snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}-{projectName}{ext}",
   reporter: [

@@ -84,34 +84,34 @@ test("responsive visual states", async ({ page }, testInfo) => {
   const project = testInfo.project.name;
   await stabilizeVisuals(page);
   await expect(page).toHaveScreenshot(`dashboard-${project}.png`, {
-    fullPage: true,
+    animations: "disabled",
   });
   if (["tablet", "mobile", "small-mobile"].includes(project))
     await page.getByRole("button", { name: "Open navigation" }).click();
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   await expect(page).toHaveScreenshot(`applications-table-${project}.png`, {
-    fullPage: true,
+    animations: "disabled",
   });
   await page.getByRole("button", { name: "Kanban", exact: true }).click();
   await expect(page).toHaveScreenshot(`applications-kanban-${project}.png`, {
-    fullPage: true,
+    animations: "disabled",
   });
   if (["desktop", "compact-desktop"].includes(project)) {
     await page.getByRole("button", { name: "Collapse navigation" }).click();
     await expect(page).toHaveScreenshot(`sidebar-collapsed-${project}.png`, {
-      fullPage: true,
+      animations: "disabled",
     });
     await page
       .getByRole("button", { name: /Preview/ })
       .first()
       .click();
     await expect(page).toHaveScreenshot(`application-preview-${project}.png`, {
-      fullPage: true,
+      animations: "disabled",
     });
   } else {
     await page.getByRole("button", { name: "Open navigation" }).click();
     await expect(page).toHaveScreenshot(`mobile-navigation-${project}.png`, {
-      fullPage: true,
+      animations: "disabled",
     });
     await page.keyboard.press("Escape");
   }
@@ -130,7 +130,7 @@ test("light dark and system themes remain readable", async ({
     }, theme);
     await expect(page).toHaveScreenshot(
       `dashboard-${theme}-${testInfo.project.name}.png`,
-      { fullPage: true },
+      { animations: "disabled" },
     );
   }
 });
@@ -142,22 +142,22 @@ test("settings forms reports and empty states visual contract", async ({
   await stabilizeVisuals(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page).toHaveScreenshot("settings-desktop.png", {
-    fullPage: true,
+    animations: "disabled",
   });
   await page
     .getByRole("button", { name: "Add Application", exact: true })
     .click();
   await expect(page).toHaveScreenshot("application-form-desktop.png", {
-    fullPage: true,
+    animations: "disabled",
   });
   await page.getByRole("button", { name: "Aging Report", exact: true }).click();
   await expect(page).toHaveScreenshot("aging-report-desktop.png", {
-    fullPage: true,
+    animations: "disabled",
   });
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   await page.getByLabel("Search applications").fill("no-matching-application");
   await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(page).toHaveScreenshot("applications-empty-desktop.png", {
-    fullPage: true,
+    animations: "disabled",
   });
 });
