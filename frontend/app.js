@@ -23,6 +23,8 @@ const state = {
   managerUserId: "",
   relatedAppId: "",
   dashboardDays: 30,
+  applicationView: "table",
+  navigationCounts: {},
 };
 const app = document.querySelector("#app");
 const esc = (value = "") =>
@@ -96,7 +98,6 @@ const nav = [
   ["dashboard", "Dashboard"],
   ["applications", "Applications"],
   ["add", "Add Application"],
-  ["quick-add", "Quick Add"],
   ["bulk", "Bulk Import"],
   ["calendar", "Calendar"],
   ["reminders", "Reminder Center"],
@@ -105,12 +106,10 @@ const nav = [
   ["follow_ups", "Follow-Ups"],
   ["networking_contacts", "Networking"],
   ["resumes", "Resumes"],
-  ["goals", "Goal Settings"],
   ["goal-history", "Goal History"],
   ["aging", "Aging Report"],
   ["stage-analytics", "Stage Analytics"],
   ["exports", "Exports"],
-  ["profile", "Profile"],
   ["settings", "Settings"],
 ];
 function shell(content) {
@@ -129,11 +128,81 @@ function shell(content) {
           .join("")}`
       : "";
   app.innerHTML = `<div class="shell"><aside><div class="logo">JobQuest</div><nav>${nav.map(([id, label]) => `<button data-page="${id}" class="${state.page === id ? "active" : ""}">${label}</button>`).join("")}${manager}</nav><div class="user-card"><strong>${esc(state.user.full_name)}</strong><br>${esc(state.user.username)} · ${state.user.role}<div class="actions"><button class="btn small secondary" id="theme-cycle" aria-label="Change color theme">Theme: ${esc(state.user.theme || "system")}</button><button class="btn small secondary" id="logout">Sign out</button></div></div></aside><main id="content">${content}</main></div>`;
+  const sidebar = qs(".shell aside");
+  sidebar.id = "sidebar";
+  sidebar.setAttribute("aria-label", "Primary navigation");
+  app.insertAdjacentHTML(
+    "afterbegin",
+    '<button class="mobile-menu btn secondary" id="mobile-menu" aria-expanded="false" aria-controls="sidebar">Menu</button>',
+  );
+  qs(".shell main").insertAdjacentHTML(
+    "beforebegin",
+    '<div class="sidebar-backdrop" id="sidebar-backdrop"></div>',
+  );
   qsa("[data-page]").forEach(
     (button) => (button.onclick = () => go(button.dataset.page)),
   );
+  const navRoot = qs("aside nav");
+  const groupedNavigation = [
+    ["Main", ["dashboard", "applications", "add", "bulk", "calendar"]],
+    [
+      "Activity",
+      ["interviews", "follow_ups", "reminders", "networking_contacts"],
+    ],
+    ["Career Assets", ["resumes"]],
+    [
+      "Insights & Reports",
+      ["goal-history", "aging", "stage-analytics", "rejections", "exports"],
+    ],
+  ];
+  groupedNavigation.forEach(([label, ids], index) => {
+    const details = document.createElement("details");
+    details.className = "nav-section";
+    details.open =
+      index === 0 || localStorage.getItem(`nav-${label}`) !== "closed";
+    details.innerHTML = `<summary>${label}</summary>`;
+    ids.forEach((id) => {
+      const button = navRoot.querySelector(`[data-page="${id}"]`);
+      if (button) details.append(button);
+    });
+    details.ontoggle = () =>
+      localStorage.setItem(`nav-${label}`, details.open ? "open" : "closed");
+    navRoot.insertBefore(details, navRoot.querySelector(".nav-group"));
+  });
   qs("#logout").onclick = logout;
   qs("#theme-cycle").onclick = cycleTheme;
+  const toggleNavigation = (open) => {
+    sidebar.classList.toggle("open", open);
+    qs("#sidebar-backdrop").classList.toggle("open", open);
+    qs("#mobile-menu").setAttribute("aria-expanded", String(open));
+    document.body.classList.toggle("nav-open", open);
+  };
+  qs("#mobile-menu").onclick = () =>
+    toggleNavigation(!sidebar.classList.contains("open"));
+  qs("#sidebar-backdrop").onclick = () => toggleNavigation(false);
+  document.onkeydown = (event) => {
+    if (event.key === "Escape") toggleNavigation(false);
+  };
+  api("/api/navigation/counts")
+    .then((counts) => {
+      state.navigationCounts = counts;
+      const mapping = {
+        interviews: counts.upcoming_interviews,
+        follow_ups: counts.overdue_follow_ups,
+        reminders: counts.due_reminders,
+      };
+      Object.entries(mapping).forEach(([id, count]) => {
+        const button = qs(`[data-page="${id}"]`),
+          old = button?.querySelector(".nav-badge");
+        old?.remove();
+        if (button && Number(count))
+          button.insertAdjacentHTML(
+            "beforeend",
+            `<span class="nav-badge" aria-label="${Number(count)} pending">${Number(count)}</span>`,
+          );
+      });
+    })
+    .catch(() => {});
 }
 async function cycleTheme() {
   const themes = ["light", "dark", "system"],
@@ -156,19 +225,30 @@ async function saveTheme(theme) {
 }
 
 function authView(register = false, error = "", transition = false) {
-  const pinField = field("pin", "Four-digit PIN", "password", "", "required inputmode='numeric' pattern='[0-9]{4}' minlength='4' maxlength='4' autocomplete='current-password'");
+  const pinField = field(
+    "pin",
+    "Four-digit PIN",
+    "password",
+    "",
+    "required inputmode='numeric' pattern='[0-9]{4}' minlength='4' maxlength='4' autocomplete='current-password'",
+  );
   app.innerHTML = `<div class="auth-shell"><section class="auth-brand"><div class="eyebrow">Own your search</div><h1>JobQuest</h1><p>Applications, momentum, reminders, and evidence—organized in one private workspace.</p></section><section class="auth-panel"><form id="auth-form"><h2>${transition ? "Set up your PIN" : register ? "Create your account" : "Welcome back"}</h2>${error ? errorBox(error) : ""}${register ? field("full_name", "Full name", "text", "", "required autocomplete='name'") + field("email", "Email", "email", "", "autocomplete='email'") + field("phone", "Phone", "tel") : ""}${field("username", "Username", "text", "", "required autocomplete='username'")}${transition ? field("current_password", "Current password", "password", "", "required autocomplete='current-password'") : ""}${pinField}${register || transition ? field("confirm_pin", "Confirm PIN", "password", "", "required inputmode='numeric' pattern='[0-9]{4}' minlength='4' maxlength='4' autocomplete='new-password'") : ""}<div class="actions"><button class="btn">${transition ? "Set PIN and sign in" : register ? "Register" : "Sign in"}</button><button class="btn secondary" id="toggle-auth" type="button">${register || transition ? "Back to sign in" : "Create account"}</button>${!register && !transition ? '<button class="btn secondary" id="legacy-auth" type="button">Existing password account</button>' : ""}</div></form></section></div>`;
-  qs("#toggle-auth").onclick = () => authView(register || transition ? false : true);
-  if (!register && !transition) qs("#legacy-auth").onclick = () => authView(false, "", true);
+  qs("#toggle-auth").onclick = () =>
+    authView(register || transition ? false : true);
+  if (!register && !transition)
+    qs("#legacy-auth").onclick = () => authView(false, "", true);
   qs("#auth-form").onsubmit = async (event) => {
     event.preventDefault();
     try {
-      const result = await api(`/api/auth/${transition ? "transition-pin" : register ? "register" : "login"}`, {
-        method: "POST",
-        body: JSON.stringify(
-          Object.fromEntries(new FormData(event.currentTarget)),
-        ),
-      });
+      const result = await api(
+        `/api/auth/${transition ? "transition-pin" : register ? "register" : "login"}`,
+        {
+          method: "POST",
+          body: JSON.stringify(
+            Object.fromEntries(new FormData(event.currentTarget)),
+          ),
+        },
+      );
       state.user = result.user;
       state.csrf = result.csrf_token;
       applyTheme(state.user.theme || "system");
@@ -248,6 +328,7 @@ const WIDGET_NAMES = {
   offers: "Offers",
   acceptances: "Acceptances",
   "daily-goals": "Daily Goal Progress",
+  "daily-goal-chart": "Daily Target vs Actual",
   "weekly-goals": "Weekly Goal Progress",
   "goal-comparison": "Goal Achievement Comparison",
   "activity-chart": "Application Activity Chart",
@@ -286,6 +367,7 @@ async function dashboardData(manager = false) {
     calendar,
     goals,
     activity,
+    goalSeries,
   ] = await Promise.all([
     api(manager ? `/api/manager/dashboard${suffix}` : "/api/dashboard"),
     api(`/api/analytics/aging${suffix}`),
@@ -300,6 +382,7 @@ async function dashboardData(manager = false) {
     api(
       `/api/analytics/activity?${range}&group=${activitySettings.group || "day"}`,
     ),
+    api(`/api/goals/progress-series?${range}&metric=applications`),
   ]);
   return {
     base,
@@ -312,6 +395,7 @@ async function dashboardData(manager = false) {
     calendar,
     goals,
     activity,
+    goalSeries,
   };
 }
 function widgetContent(id, data, manager) {
@@ -366,6 +450,9 @@ function widgetContent(id, data, manager) {
         )
         .join("") || empty("Add a resume to compare performance")
     );
+  if (id.includes("goal"))
+    if (id === "daily-goal-chart")
+      return `<div class="goal-chart" role="img" aria-label="Daily application goal target versus actual">${data.goalSeries.items.map((item) => `<div class="goal-day ${item.achieved ? "achieved" : "missed"}" title="${esc(item.period_start)}: ${item.actual} of ${item.target}"><i style="height:${Math.min(100, item.target ? (item.actual / item.target) * 100 : 0)}%"></i><span>${esc(item.period_start.slice(5))}</span><strong>${item.actual}/${item.target}</strong></div>`).join("") || empty("Configure a daily applications goal to see progress")}</div><p>${data.goalSeries.summary.actual} today Â· ${data.goalSeries.summary.remaining} remaining Â· ${data.goalSeries.summary.achieved_days} achieved days</p>`;
   if (id.includes("goal"))
     return `<div class="metric">${data.goals.summary.achievement_percentage}%</div><p>${data.goals.summary.achieved} achieved · ${data.goals.summary.missed} missed</p>`;
   if (id === "reminder-center")
@@ -572,7 +659,8 @@ function renderDashboardSettings(layout, manager) {
     qsa("[data-enable]").forEach(
       (input) =>
         (input.onchange = () => {
-          state.layoutDraft[Number(input.dataset.enable)].enabled = input.checked;
+          state.layoutDraft[Number(input.dataset.enable)].enabled =
+            input.checked;
           draw();
         }),
     );
@@ -722,7 +810,224 @@ function bindApplicationForm(item) {
   };
 }
 
+const VIEWS_UI = ["table", "kanban"];
+const CONSEQUENTIAL_STAGES = [
+  "Accepted",
+  "Rejected",
+  "Withdrawn",
+  "Ghosted",
+  "Position Closed",
+];
 async function renderApplications(params = new URLSearchParams()) {
+  const requested = params.get("view"),
+    preference = await api("/api/application-view-preferences"),
+    view = VIEWS_UI.includes(requested) ? requested : preference.preferred_view;
+  params.set("view", view);
+  state.applicationView = view;
+  const [data, savedViews] = await Promise.all([
+    api(
+      view === "kanban"
+        ? `/api/applications/kanban?${params}`
+        : `/api/applications/query?${params}`,
+    ),
+    api("/api/saved-views"),
+  ]);
+  const items =
+    view === "kanban"
+      ? data.columns.flatMap((column) => column.items)
+      : data.items;
+  state.applications = items;
+  const move = async (id, stage) => {
+    const item = items.find((value) => value.id === Number(id));
+    if (
+      CONSEQUENTIAL_STAGES.includes(stage) &&
+      !confirm(`Move ${item.company} to ${stage}?`)
+    )
+      return;
+    try {
+      await api(`/api/applications/${id}/stage`, {
+        method: "PATCH",
+        body: JSON.stringify({ stage }),
+      });
+      toast(`Moved to ${stage}`);
+      renderApplications(params);
+    } catch (error) {
+      toast(error.message);
+      renderApplications(params);
+    }
+  };
+  const card = (item) =>
+    `<article class="kanban-card" draggable="true" tabindex="0" data-card="${item.id}"><strong>${esc(item.company)}</strong><h3>${esc(item.job_title)}</h3><p>${esc(item.linked_resume_version || "No resume linked")}</p><p>${badge(item.priority)} ${esc(item.date_applied)}</p><p>${esc(item.next_action || "No next action")} ${esc(item.next_action_date || "")}</p><div class="actions"><button class="btn small secondary" data-open-card="${item.id}">Open</button><button class="btn small secondary" data-move="${item.id}">Move to stage</button></div></article>`;
+  const board =
+    view === "kanban"
+      ? `<div class="kanban" aria-label="Application Kanban board">${data.columns.map((column) => `<section class="kanban-column ${preference.collapsed_columns.includes(column.stage) ? "collapsed" : ""}"><header><button class="column-toggle" data-collapse="${esc(column.stage)}" aria-expanded="${!preference.collapsed_columns.includes(column.stage)}">${badge(column.stage)} <strong>${column.total}</strong></button></header><div class="kanban-cards" data-drop-stage="${esc(column.stage)}">${column.items.map(card).join("") || empty("No applications")}</div></section>`).join("")}</div>`
+      : "";
+  const bodyRows = items
+    .map(
+      (item) =>
+        `<tr class="clickable-row" data-open="${item.id}" tabindex="0"><td>${esc(item.date_applied)}</td><td><strong>${esc(item.company)}</strong></td><td>${esc(item.job_title)}</td><td>${esc(item.location || "â€”")}</td><td>${esc(item.work_arrangement || "â€”")}</td><td>${badge(item.stage)}</td><td>${esc(item.priority)}</td><td>${esc(item.source || "â€”")}</td><td>${item.resume_id ? `<button class="link-button" data-page="resumes">${esc(item.linked_resume_version || "Linked resume")}</button>` : "No resume linked"}</td><td>${esc(item.next_action || "â€”")}</td><td>${esc(item.next_action_date || "â€”")}</td><td>${esc(item.updated_at)}</td><td><button class="btn small secondary" data-move="${item.id}">Move</button></td></tr>`,
+    )
+    .join("");
+  const filterButton = (field, label) =>
+    `<button class="column-filter" type="button" data-column-filter="${field}" aria-label="Filter ${label}">âŒ•</button>`;
+  shell(
+    pageHead(
+      "Applications",
+      `${data.total} applications`,
+      `<div class="actions"><div class="view-switcher" role="group" aria-label="Applications view"><button class="btn small ${view === "table" ? "" : "secondary"}" data-view="table" aria-pressed="${view === "table"}">Table</button><button class="btn small ${view === "kanban" ? "" : "secondary"}" data-view="kanban" aria-pressed="${view === "kanban"}">Kanban</button></div><button class="btn" data-page="quick-add">Quick Add</button><button class="btn secondary" id="open-export">Export</button></div>`,
+    ) +
+      `<section class="card full application-workspace"><div class="toolbar"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select></div><form id="app-filters" class="toolbar advanced-filter-bar"><input name="search" placeholder="Search company, title, location" value="${esc(params.get("search") || "")}"><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">More Filters</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">Save View</button></form><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? table([`Applied ${filterButton("date_applied", "Date Applied")}`, `Company ${filterButton("company", "Company")}`, `Job Title ${filterButton("job_title", "Job Title")}`, "Location", "Arrangement", "Stage", "Priority", "Source", `Resume Version ${filterButton("resume_version", "Resume Version")}`, "Next Action", "Due", "Updated", "Actions"], bodyRows, "No applications match these filters") : board}</section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
+        "format",
+        "Format",
+        [
+          { value: "xlsx", label: "Excel (.xlsx)" },
+          { value: "csv", label: "CSV" },
+          { value: "json", label: "JSON" },
+        ],
+        "xlsx",
+      )}${select(
+        "date_field",
+        "Date field",
+        [
+          { value: "date_applied", label: "Date Applied" },
+          { value: "created_at", label: "Created Date" },
+          { value: "updated_at", label: "Last Updated" },
+        ],
+        "date_applied",
+      )}${field("date_from", "Start date", "date", params.get("date_from") || "")}${field("date_to", "End date", "date", params.get("date_to") || "")}<div class="actions full"><button class="btn" value="export">Export</button><button class="btn secondary" value="cancel">Cancel</button></div></form></dialog>`,
+  );
+  qs("#app-filters").onsubmit = (event) => {
+    event.preventDefault();
+    const next = new URLSearchParams(new FormData(event.currentTarget));
+    next.set("view", view);
+    renderApplications(next);
+  };
+  qsa("[data-view]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        params.set("view", button.dataset.view);
+        await api("/api/application-view-preferences", {
+          method: "PUT",
+          body: JSON.stringify({ preferred_view: button.dataset.view }),
+        });
+        renderApplications(params);
+      }),
+  );
+  qs("#more-filters").onclick = () =>
+    (qs("#advanced-filters").hidden = !qs("#advanced-filters").hidden);
+  qs("#clear-filters").onclick = () =>
+    renderApplications(new URLSearchParams({ view }));
+  qs("#save-view").onclick = async () => {
+    const name = prompt("Saved view name");
+    if (name) {
+      await api("/api/saved-views", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          filters: Object.fromEntries(params),
+          view_type: view,
+        }),
+      });
+      toast("View saved");
+    }
+  };
+  qs("#saved-view").onchange = (event) => {
+    const saved = savedViews.find(
+      (item) => item.id === Number(event.target.value),
+    );
+    if (saved)
+      renderApplications(new URLSearchParams(JSON.parse(saved.filters_json)));
+  };
+  qsa("[data-open]").forEach((row) => {
+    row.onclick = (event) => {
+      if (!event.target.closest("button,a")) go(`detail:${row.dataset.open}`);
+    };
+    row.onkeydown = (event) => {
+      if (event.key === "Enter") go(`detail:${row.dataset.open}`);
+    };
+  });
+  qsa("[data-open-card]").forEach(
+    (button) =>
+      (button.onclick = () => go(`detail:${button.dataset.openCard}`)),
+  );
+  qsa("[data-move]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        const stage = prompt(`Move to stage:\n${STAGES.join(", ")}`);
+        if (stage && STAGES.includes(stage))
+          await move(button.dataset.move, stage);
+      }),
+  );
+  qsa("[data-card]").forEach(
+    (element) =>
+      (element.ondragstart = (event) =>
+        event.dataTransfer.setData("text/plain", element.dataset.card)),
+  );
+  qsa("[data-drop-stage]").forEach((column) => {
+    column.ondragover = (event) => event.preventDefault();
+    column.ondrop = (event) =>
+      move(event.dataTransfer.getData("text/plain"), column.dataset.dropStage);
+  });
+  qsa("[data-collapse]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        const collapsed = new Set(preference.collapsed_columns);
+        collapsed.has(button.dataset.collapse)
+          ? collapsed.delete(button.dataset.collapse)
+          : collapsed.add(button.dataset.collapse);
+        await api("/api/application-view-preferences", {
+          method: "PUT",
+          body: JSON.stringify({ collapsed_columns: [...collapsed] }),
+        });
+        renderApplications(params);
+      }),
+  );
+  qsa("[data-column-filter]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        const value = prompt(`Filter ${button.dataset.columnFilter} contains:`);
+        if (value !== null) {
+          params.set(
+            "column_filters",
+            JSON.stringify([
+              {
+                field: button.dataset.columnFilter,
+                operator: "contains",
+                value,
+              },
+            ]),
+          );
+          renderApplications(params);
+        }
+      }),
+  );
+  const dialog = qs("#export-dialog");
+  qs("#open-export").onclick = () => dialog.showModal();
+  dialog.onclose = () => {
+    if (dialog.returnValue !== "export") return;
+    const values = Object.fromEntries(
+        new FormData(dialog.querySelector("form")),
+      ),
+      next = new URLSearchParams(params);
+    if (
+      values.date_from &&
+      values.date_to &&
+      values.date_from > values.date_to
+    ) {
+      toast("Start date cannot be after end date");
+      return;
+    }
+    if (values.date_from) next.set("date_from", values.date_from);
+    if (values.date_to) next.set("date_to", values.date_to);
+    if (values.date_field) next.set("date_field", values.date_field);
+    location.href =
+      values.format === "xlsx"
+        ? `/api/exports/applications.xlsx?${next}`
+        : `/api/exports/${values.format === "json" ? "json" : "applications"}?${next}`;
+  };
+}
+
+async function legacyRenderApplications(params = new URLSearchParams()) {
   const [data, savedViews] = await Promise.all([
     api(`/api/applications?${params}`),
     api("/api/saved-views"),
@@ -1236,6 +1541,23 @@ async function renderResumes() {
     ) +
       `<div class="grid"><section class="card wide"><h2>Resume versions</h2>${table(["Version", "Target role", "Category", "File", "Status", "Actions"], items.map((item) => `<tr><td>${esc(item.version_name)}</td><td>${esc(item.target_role || "—")}</td><td>${esc(item.job_category || "—")}</td><td>${esc(item.file_name || "Metadata only")}</td><td>${item.is_archived ? "Archived" : "Active"}</td><td><button class="btn small secondary" data-resume-archive="${item.id}" data-value="${item.is_archived ? 0 : 1}">${item.is_archived ? "Restore" : "Archive"}</button></td></tr>`).join(""))}<h2>Resume analytics</h2>${table(["Version", "Sample", "Responses", "Interviews", "Offers", "Response rate", "Interview conversion"], analytics.map((item) => `<tr><td>${esc(item.version_name)}</td><td>${item.sample_size}</td><td>${item.responses}</td><td>${item.interviews}</td><td>${item.offers}</td><td>${item.response_rate}%</td><td>${item.interview_conversion}%</td></tr>`).join(""))}</section><section class="card"><h2>Add resume metadata</h2><form id="resume-form" class="form-grid">${await managerOwner()}${field("version_name", "Version name", "text", "", "required")}${field("target_role", "Target role")}${field("job_category", "Job category")}${field("file_name", "File name")}${field("resume_date", "Resume date", "date", date())}<label class="full">Notes<textarea name="notes"></textarea></label><button class="btn full">Save</button></form><p class="muted">Files are not uploaded; only secure metadata is stored.</p></section></div>`,
   );
+  qs("#resume-form label.full")?.insertAdjacentHTML(
+    "beforebegin",
+    `${field("revision_label", "Revision label")}${field("change_summary", "Change summary")}`,
+  );
+  const resumeHeading = qsa("h2").find(
+    (heading) => heading.textContent === "Resume versions",
+  );
+  resumeHeading?.insertAdjacentHTML(
+    "afterend",
+    `<div class="toolbar"><select id="compare-left" aria-label="First resume version"><option value="">Compare versionâ€¦</option>${items.map((item) => `<option value="${item.id}">${esc(item.version_name)}</option>`).join("")}</select><select id="compare-right" aria-label="Second resume version"><option value="">Withâ€¦</option>${items.map((item) => `<option value="${item.id}">${esc(item.version_name)}</option>`).join("")}</select><button class="btn small secondary" id="compare-resumes">Compare</button></div><div id="resume-comparison" aria-live="polite"></div>`,
+  );
+  qsa("[data-resume-archive]").forEach((button) =>
+    button.insertAdjacentHTML(
+      "beforebegin",
+      `<button class="btn small secondary" data-resume-clone="${button.dataset.resumeArchive}">New revision</button>`,
+    ),
+  );
   qs("#resume-form").onsubmit = async (event) => {
     event.preventDefault();
     await api("/api/resumes", {
@@ -1256,6 +1578,30 @@ async function renderResumes() {
         renderResumes();
       }),
   );
+  qsa("[data-resume-clone]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        const version_name = prompt("New version name");
+        if (version_name) {
+          await api(`/api/resumes/${button.dataset.resumeClone}/clone`, {
+            method: "POST",
+            body: JSON.stringify({
+              version_name,
+              change_summary: "Created as a new revision",
+            }),
+          });
+          renderResumes();
+        }
+      }),
+  );
+  qs("#compare-resumes").onclick = async () => {
+    const left = qs("#compare-left").value,
+      right = qs("#compare-right").value;
+    if (!left || !right) return toast("Choose two resume versions");
+    const data = await api(`/api/resumes/compare?left=${left}&right=${right}`);
+    qs("#resume-comparison").innerHTML =
+      `<div class="comparison-grid"><article><h3>${esc(data.left.version_name)}</h3><p>${data.left.applications} applications Â· ${data.left.interviews || 0} interviews Â· ${data.left.offers || 0} offers</p></article><article><h3>${esc(data.right.version_name)}</h3><p>${data.right.applications} applications Â· ${data.right.interviews || 0} interviews Â· ${data.right.offers || 0} offers</p></article></div><p class="muted">Metadata and performance comparison; document wording is not stored.</p>`;
+  };
 }
 
 async function renderReminders() {
@@ -1599,9 +1945,9 @@ async function renderSettings() {
   shell(
     pageHead(
       "Settings",
-      "Theme, follow-up calculations, reminders, and week preferences",
+      "Profile, security, appearance, dashboard, goals, reminders, follow-ups, and application defaults",
     ) +
-      `<section class="card wide"><form id="settings-form" class="form-grid">${select("theme", "Theme", ["light", "dark", "system"], settings.theme)}${select(
+      `<nav class="settings-tabs" aria-label="Settings sections"><button class="btn small secondary" data-page="profile">Profile</button><button class="btn small secondary" id="security-settings">PIN & Security</button><button class="btn small secondary" id="dashboard-settings-link">Dashboard Settings</button><button class="btn small secondary" data-page="goals">Goal Settings</button><button class="btn small secondary" data-page="reminders">Reminder Settings</button></nav><section class="card wide"><h2>Appearance and workflow defaults</h2><form id="settings-form" class="form-grid">${select("theme", "Theme", ["light", "dark", "system"], settings.theme)}${select(
         "week_start",
         "Week starts",
         [
@@ -1633,6 +1979,13 @@ async function renderSettings() {
     applyTheme(input.theme);
     localStorage.setItem("jobquest-theme", input.theme);
     toast("Settings saved");
+  };
+  qs("#security-settings").onclick = () =>
+    toast("PIN changes require current credential verification");
+  qs("#dashboard-settings-link").onclick = () => {
+    state.page = "dashboard";
+    renderDashboard();
+    setTimeout(() => qs("#dashboard-settings")?.click(), 0);
   };
   qs("#tag-form").onsubmit = async (event) => {
     event.preventDefault();
