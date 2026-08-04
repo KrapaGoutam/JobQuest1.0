@@ -102,10 +102,6 @@ function buildApplicationWhere(actor, query = {}) {
       params.push(...values);
     }
   }
-  if (filters.resume_id) {
-    where.push("a.resume_id=?");
-    params.push(Number(filters.resume_id));
-  }
   for (const field of BOOL_FIELDS) {
     if (!(field in filters)) continue;
     if (field === "archived") {
@@ -147,10 +143,7 @@ function buildApplicationWhere(actor, query = {}) {
   for (const filter of columnFilters) {
     const field = filter.field;
     if (TEXT_FIELDS.has(field)) {
-      const expr =
-        field === "resume_version"
-          ? "coalesce(r.version_name,a.resume_version,'')"
-          : `coalesce(a.${field},'')`;
+      const expr = `coalesce(a.${field},'')`;
       const value = String(filter.value || "");
       const ops = {
         contains: [`lower(${expr}) LIKE lower(?)`, `%${value}%`],
@@ -210,10 +203,7 @@ function buildApplicationWhere(actor, query = {}) {
 function queryApplications(db, actor, query = {}, { bounded = true } = {}) {
   const { clause, params } = buildApplicationWhere(actor, query);
   const sort = SORT_FIELDS.has(query.sort) ? query.sort : "updated_at";
-  const sortExpr =
-    sort === "resume_version"
-      ? "coalesce(r.version_name,a.resume_version,'')"
-      : `a.${sort}`;
+  const sortExpr = `a.${sort}`;
   const direction = query.direction === "asc" ? "ASC" : "DESC";
   const page = Math.max(1, Number(query.page) || 1);
   const pageSize = bounded
@@ -223,7 +213,7 @@ function queryApplications(db, actor, query = {}, { bounded = true } = {}) {
     db.dialect === "postgres"
       ? "string_agg(t.name,', ')"
       : "group_concat(t.name,', ')";
-  const select = `SELECT a.*,u.username owner_username,coalesce(r.version_name,a.resume_version) linked_resume_version,(SELECT ${tagAggregate} FROM application_tags atg JOIN tags t ON t.id=atg.tag_id WHERE atg.application_id=a.id) tags FROM applications a JOIN users u ON u.id=a.user_id LEFT JOIN resumes r ON r.id=a.resume_id ${clause}`;
+  const select = `SELECT a.*,u.username owner_username,(SELECT ${tagAggregate} FROM application_tags atg JOIN tags t ON t.id=atg.tag_id WHERE atg.application_id=a.id) tags FROM applications a JOIN users u ON u.id=a.user_id ${clause}`;
   const items = rows(
     db.prepare(
       `${select} ORDER BY a.pinned DESC,${sortExpr} ${direction},a.id DESC LIMIT ? OFFSET ?`,
@@ -233,7 +223,7 @@ function queryApplications(db, actor, query = {}, { bounded = true } = {}) {
   const total = Number(
     db
       .prepare(
-        `SELECT count(*) count FROM applications a LEFT JOIN resumes r ON r.id=a.resume_id ${clause}`,
+        `SELECT count(*) count FROM applications a ${clause}`,
       )
       .get(...params).count,
   );
@@ -380,7 +370,7 @@ async function workbook(items, query) {
     ["Stage", "stage", 18],
     ["Priority", "priority", 12],
     ["Source", "source", 18],
-    ["Resume Version", "linked_resume_version", 20],
+    ["Resume Version", "resume_version", 20],
     ["Salary Min", "salary_min", 14],
     ["Salary Max", "salary_max", 14],
     ["Recruiter", "recruiter_name", 20],
@@ -457,7 +447,7 @@ async function workbook(items, query) {
       ...counts("source"),
       [],
       ["Resume Version", "Count"],
-      ...counts("linked_resume_version"),
+      ...counts("resume_version"),
     ]);
     summary.getColumn(1).width = 28;
     summary.getColumn(2).width = 42;

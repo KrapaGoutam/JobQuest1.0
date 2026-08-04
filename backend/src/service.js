@@ -54,7 +54,6 @@ export const APPLICATION_FIELDS = [
   "next_action_date",
   "last_response_date",
   "external_job_id",
-  "resume_id",
   "pinned",
   "important",
   "favorite",
@@ -72,6 +71,8 @@ const aliases = {
   job_link: "job_url",
   work_type: "work_arrangement",
   resume: "resume_version",
+  resume_name: "resume_version",
+  resume_used: "resume_version",
   cover_letter: "cover_letter_version",
 };
 const forbidden = new Set([
@@ -162,8 +163,18 @@ export function validateApplication(input, { partial = false } = {}) {
   for (const field of ["pinned", "important", "favorite"])
     if (field in data)
       data[field] = [true, 1, "1", "true", "yes"].includes(data[field]) ? 1 : 0;
-  if (data.resume_id !== undefined && data.resume_id !== "")
-    data.resume_id = Number(data.resume_id);
+  if (data.resume_version !== undefined) {
+    data.resume_version = String(data.resume_version).trim();
+    if (data.resume_version.length > 100)
+      errors.push("Resume Version must be 100 characters or fewer");
+    if (
+      data.resume_version &&
+      !/^[\p{L}\p{N} ._()\-]+$/u.test(data.resume_version)
+    )
+      errors.push(
+        "Resume Version may contain letters, numbers, spaces, hyphens, underscores, periods, and parentheses",
+      );
+  }
   data.stage ??= "Applied";
   data.priority ??= "Medium";
   return { data, errors };
@@ -242,16 +253,6 @@ export function previewImport(db, userId, format, text) {
 }
 
 function insertApplication(db, userId, actorId, data) {
-  if (
-    data.resume_id &&
-    !db
-      .prepare("SELECT 1 FROM resumes WHERE id=? AND user_id=?")
-      .get(data.resume_id, userId)
-  )
-    throw Object.assign(
-      new Error("Selected resume does not belong to the application owner"),
-      { status: 400 },
-    );
   const fields = APPLICATION_FIELDS.filter(
     (field) => data[field] !== undefined,
   );
@@ -351,15 +352,6 @@ export function createApplication(db, userId, actorId, input) {
 export function updateApplication(db, application, actorId, input) {
   const checked = validateApplication(input, { partial: true });
   if (checked.errors.length) return { errors: checked.errors };
-  if (
-    checked.data.resume_id &&
-    !db
-      .prepare("SELECT 1 FROM resumes WHERE id=? AND user_id=?")
-      .get(checked.data.resume_id, application.user_id)
-  )
-    return {
-      errors: ["Selected resume does not belong to the application owner"],
-    };
   const fields = Object.keys(checked.data).filter(
     (field) => APPLICATION_FIELDS.includes(field) && field !== "stage",
   );
@@ -386,9 +378,8 @@ export function updateApplication(db, application, actorId, input) {
       "Application details updated",
     );
     const resumeChanged =
-      checked.data.resume_id !== undefined &&
-      Number(checked.data.resume_id || 0) !==
-        Number(application.resume_id || 0);
+      checked.data.resume_version !== undefined &&
+      checked.data.resume_version !== (application.resume_version || "");
     db.prepare(
       "INSERT INTO timeline_events(application_id,user_id,actor_user_id,event_date,event_time,category,event_type,stage,title,description,source) VALUES (?,?,?,date('now'),time('now'),?,?,?,?,?,'automatic')",
     ).run(

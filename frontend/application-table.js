@@ -62,18 +62,7 @@ function appendCell(document, row, item, column, callbacks) {
     stage.dataset.stage = item.stage || "";
     cell.append(stage);
   } else if (column.key === "resume_version") {
-    if (item.resume_id) {
-      const resume = button(
-        document,
-        item.linked_resume_version || "Linked resume",
-        "link-button",
-      );
-      resume.addEventListener("click", (event) => {
-        event.stopPropagation();
-        callbacks.onResume?.(item);
-      });
-      cell.append(resume);
-    } else cell.textContent = "No resume linked";
+    cell.textContent = item.resume_version || "No resume specified";
   } else if (column.key === "actions") {
     const preview = button(document, "Preview", "btn small secondary");
     preview.setAttribute(
@@ -106,7 +95,6 @@ export function createApplicationTable(document, options = {}) {
     onFilter,
     onOpen,
     onMove,
-    onResume,
     onPreview,
     selected = new Set(),
     onSelect,
@@ -196,7 +184,6 @@ export function createApplicationTable(document, options = {}) {
       for (const column of APPLICATION_COLUMNS)
         appendCell(document, row, item, column, {
           onMove,
-          onResume,
           onPreview,
           selected,
           onSelect,
