@@ -207,8 +207,12 @@ function shell(content) {
       body: JSON.stringify({ collapsed, groups: {} }),
     });
   };
+  let shortcutPrefix = "";
   document.onkeydown = (event) => {
-    if (event.key === "Escape") toggleNavigation(false);
+    if (event.key === "Escape") {
+      toggleNavigation(false);
+      document.querySelector("dialog[open]")?.close();
+    }
     if (
       event.key === "Tab" &&
       sidebar.classList.contains("open") &&
@@ -226,6 +230,21 @@ function shell(content) {
         event.preventDefault();
         first.focus();
       }
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target.matches("input,select,textarea,[contenteditable=true]")) return;
+    if (event.key === "/" && state.page === "applications") {
+      event.preventDefault();
+      qs('#app-filters input[name="search"]')?.focus();
+    } else if (event.key.toLowerCase() === "q") {
+      go("quick-add");
+    } else if (shortcutPrefix === "g") {
+      const routes = { d: "dashboard", a: "applications", c: "calendar" };
+      if (routes[event.key.toLowerCase()]) go(routes[event.key.toLowerCase()]);
+      shortcutPrefix = "";
+    } else if (event.key.toLowerCase() === "g") {
+      shortcutPrefix = "g";
+      setTimeout(() => (shortcutPrefix = ""), 1200);
     }
   };
   api("/api/navigation/preferences")
