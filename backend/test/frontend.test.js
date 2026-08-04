@@ -10,6 +10,8 @@ import {
   selectAllWidgets,
   deselectAllWidgets,
   widgetSelectionState,
+  kanbanGroupKey,
+  groupKanbanItems,
 } from "../../frontend/ui-utils.js";
 import { parseHTML } from "linkedom";
 import { createApplicationTable } from "../../frontend/application-table.js";
@@ -45,6 +47,29 @@ test("application headers use safe interactive DOM without escaped markup", () =
     ["filter", "company"],
     ["sort", "company", "asc"],
   ]);
+});
+
+test("Kanban grouping uses local calendar dates and stable day week month buckets", () => {
+  const items = [
+    { id: 1, date_applied: "2026-08-03", updated_at: "2026-08-04T23:10:00" },
+    { id: 2, date_applied: "2026-08-09", updated_at: "2026-08-05T01:10:00" },
+    { id: 3, date_applied: null, next_action_date: null },
+  ];
+  assert.equal(kanbanGroupKey(items[0], "date_applied_day"), "2026-08-03");
+  assert.equal(kanbanGroupKey(items[0], "date_applied_week"), "2026-08-03");
+  assert.equal(kanbanGroupKey(items[1], "date_applied_week"), "2026-08-03");
+  assert.equal(kanbanGroupKey(items[0], "date_applied_month"), "2026-08");
+  assert.equal(kanbanGroupKey(items[2], "next_action_day"), "no-date");
+  assert.deepEqual(
+    groupKanbanItems(items, "date_applied_week").map((group) => [
+      group.key,
+      group.items.length,
+    ]),
+    [
+      ["2026-08-03", 2],
+      ["no-date", 1],
+    ],
+  );
 });
 
 test("widget reordering supports keyboard and mobile move directions", () => {

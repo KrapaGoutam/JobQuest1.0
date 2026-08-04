@@ -60,6 +60,75 @@ export function widgetSelectionState(items) {
   };
 }
 
+function validDate(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match
+    ? { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) }
+    : null;
+}
+
+function dateFromParts(parts) {
+  return new Date(parts.year, parts.month - 1, parts.day, 12);
+}
+
+export function kanbanGroupKey(item, mode) {
+  if (mode === "none") return "all";
+  const field = mode.startsWith("date_applied")
+    ? "date_applied"
+    : mode === "last_updated_day"
+      ? "updated_at"
+      : "next_action_date";
+  const parts = validDate(item[field]);
+  if (!parts) return "no-date";
+  if (mode === "date_applied_month")
+    return `${parts.year}-${String(parts.month).padStart(2, "0")}`;
+  if (mode === "date_applied_week") {
+    const value = dateFromParts(parts);
+    const offset = (value.getDay() + 6) % 7;
+    value.setDate(value.getDate() - offset);
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  }
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+export function kanbanGroupLabel(key, mode, locale = "en-US") {
+  if (key === "all") return "All applications";
+  if (key === "no-date") return "No date";
+  const parts = validDate(`${key}-01`);
+  const value = dateFromParts(parts);
+  if (mode === "date_applied_month")
+    return value.toLocaleDateString(locale, { month: "long", year: "numeric" });
+  if (mode === "date_applied_week") {
+    const end = new Date(value);
+    end.setDate(end.getDate() + 6);
+    return `Week of ${value.toLocaleDateString(locale, { month: "short", day: "numeric" })}–${end.toLocaleDateString(locale, { month: "short", day: "numeric" })}`;
+  }
+  return value.toLocaleDateString(locale, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export function groupKanbanItems(items, mode) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = kanbanGroupKey(item, mode);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) =>
+      a === "no-date" ? 1 : b === "no-date" ? -1 : b.localeCompare(a),
+    )
+    .map(([key, groupedItems]) => ({
+      key,
+      label: kanbanGroupLabel(key, mode),
+      items: groupedItems,
+    }));
+}
+
 export function applyTheme(
   preference,
   root = document.documentElement,
