@@ -40,25 +40,25 @@ The seed is idempotent by username. Replace the example PIN. Existing password a
 
 Run from `backend`:
 
-| Command | Purpose |
-| --- | --- |
-| `npm run migrate` | Apply pending migrations to the configured database |
-| `npm run migrate:check` | Apply every migration to a clean in-memory database and check foreign keys |
-| `npm run migrate:postgres` | Apply controlled PostgreSQL migrations through `DIRECT_URL` or a guarded test URL |
-| `npm run sqlite:inspect -- --source <path> --output <path>` | Validate and create raw/structured SQLite backups |
-| `npm run migrate:sqlite-to-postgres -- --source <path> --dry-run` | Dry-run the SQLite mapping |
-| `npm run migrate:sqlite-to-postgres -- --source <path>` | Transactionally import and validate SQLite data |
-| `npm run seed` | Create/promote the environment-selected manager |
-| `npm run dev` | Start with Node watch mode |
-| `npm start` | Start normally |
-| `npm test` | Run the complete automated suite serially |
-| `npm run test:backend` | Run backend API and authorization tests |
-| `npm run test:frontend` | Run frontend utility/component logic tests |
-| `npm run test:integration` | Run cross-resource integration tests |
-| `npm run test:e2e` | Run the authenticated end-to-end workflow test |
-| `npm run lint` | Parse-check backend and frontend sources |
-| `npm run typecheck` | Run the supported static syntax checks (the project is JavaScript, not TypeScript) |
-| `npm run build` | Validate frontend source and clean-database migrations; no compilation is needed |
+| Command                                                           | Purpose                                                                            |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `npm run migrate`                                                 | Apply pending migrations to the configured database                                |
+| `npm run migrate:check`                                           | Apply every migration to a clean in-memory database and check foreign keys         |
+| `npm run migrate:postgres`                                        | Apply controlled PostgreSQL migrations through `DIRECT_URL` or a guarded test URL  |
+| `npm run sqlite:inspect -- --source <path> --output <path>`       | Validate and create raw/structured SQLite backups                                  |
+| `npm run migrate:sqlite-to-postgres -- --source <path> --dry-run` | Dry-run the SQLite mapping                                                         |
+| `npm run migrate:sqlite-to-postgres -- --source <path>`           | Transactionally import and validate SQLite data                                    |
+| `npm run seed`                                                    | Create/promote the environment-selected manager                                    |
+| `npm run dev`                                                     | Start with Node watch mode                                                         |
+| `npm start`                                                       | Start normally                                                                     |
+| `npm test`                                                        | Run the complete automated suite serially                                          |
+| `npm run test:backend`                                            | Run backend API and authorization tests                                            |
+| `npm run test:frontend`                                           | Run frontend utility/component logic tests                                         |
+| `npm run test:integration`                                        | Run cross-resource integration tests                                               |
+| `npm run test:e2e`                                                | Run the authenticated end-to-end workflow test                                     |
+| `npm run lint`                                                    | Parse-check backend and frontend sources                                           |
+| `npm run typecheck`                                               | Run the supported static syntax checks (the project is JavaScript, not TypeScript) |
+| `npm run build`                                                   | Validate frontend source and clean-database migrations; no compilation is needed   |
 
 Use `npm ci` for repeatable installation. CI exercises PostgreSQL plus the SQLite migration fixture. End-to-end coverage exercises the browser-facing API workflow; focused frontend tests cover themes, dashboard bulk selection, calendar, aging, and accessible widget movement.
 
@@ -75,6 +75,8 @@ Use `npm ci` for repeatable installation. CI exercises PostgreSQL plus the SQLit
 - The only active manager cannot be deactivated or demoted.
 
 ## Applications and trackers
+
+Feature Upgrade 1 adds persisted Table/Kanban application views, accessible stage movement, shared advanced filters, resume revision history and comparison, a daily target-versus-actual dashboard chart, consolidated Settings navigation, and genuine filtered Excel `.xlsx` exports. See [docs/FEATURE_UPGRADE_1.md](docs/FEATURE_UPGRADE_1.md).
 
 Applications support complete job metadata, validation, duplicate detection, stage history, visual timelines, tags, pinning, archive/restore, saved views, search/filter/sort/pagination, and manual, Quick Add, JSON, or structured-text entry. Related screens cover resumes and effectiveness analytics, interviews, rejections, calculated follow-ups, networking, reminders and custom categories, month/week/agenda calendars, goal snapshots/history/trends/streaks, application aging, stage duration, and versioned exports. Users and managers have persistent configurable dashboard layouts with accessible drag, keyboard, and mobile reordering.
 

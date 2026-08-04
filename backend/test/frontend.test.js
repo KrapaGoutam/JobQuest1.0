@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { safeCell } from "../src/feature-upgrade.js";
 import {
   moveWidget,
   applyTheme,
@@ -42,7 +44,10 @@ test("dashboard bulk selection preserves order, sizes, and mixed state", () => {
     { ...defaults[2], position: 2, width: 0, enabled: 0 },
   ];
   const all = selectAllWidgets(draft, defaults);
-  assert.deepEqual(all.map((item) => item.widget_id), ["b", "a", "c"]);
+  assert.deepEqual(
+    all.map((item) => item.widget_id),
+    ["b", "a", "c"],
+  );
   assert.equal(all[0].width, 3);
   assert.equal(all[2].width, 3);
   assert.deepEqual(widgetSelectionState(all), {
@@ -77,4 +82,39 @@ test("calendar month has stable six-week grid and aging bands", () => {
     "Stale",
     "Long Waiting",
   ]);
+});
+
+test("feature upgrade UI includes accessible Table, Kanban, filters, settings, goal chart, and export controls", () => {
+  const source = readFileSync(
+    new URL("../../frontend/app.js", import.meta.url),
+    "utf8",
+  );
+  const css = readFileSync(
+    new URL("../../frontend/styles.css", import.meta.url),
+    "utf8",
+  );
+  for (const marker of [
+    'aria-label="Applications view"',
+    'aria-label="Application Kanban board"',
+    "Move to stage",
+    "Resume Version",
+    "More Filters",
+    "Excel (.xlsx)",
+    "Goal Settings",
+    "daily-goal-chart",
+  ])
+    assert.ok(source.includes(marker), `missing ${marker}`);
+  for (const marker of [
+    "prefers-reduced-motion",
+    ".kanban-card:focus-visible",
+    ".mobile-menu",
+    "dialog::backdrop",
+  ])
+    assert.ok(css.includes(marker), `missing ${marker}`);
+});
+
+test("Excel text escaping prevents formula injection", () => {
+  for (const value of ["=1+1", "+cmd", "-2+3", "@SUM(A1:A2)"])
+    assert.equal(safeCell(value), `'${value}`);
+  assert.equal(safeCell("Normal company"), "Normal company");
 });

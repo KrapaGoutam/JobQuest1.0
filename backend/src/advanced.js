@@ -15,6 +15,7 @@ const BUILTIN_WIDGETS = [
   "offers",
   "acceptances",
   "daily-goals",
+  "daily-goal-chart",
   "weekly-goals",
   "goal-comparison",
   "activity-chart",
@@ -641,17 +642,37 @@ export async function handleAdvanced(context, helpers) {
         if (!input.version_name) fail("Version name is required");
         const result = db
           .prepare(
-            "INSERT INTO resumes(user_id,version_name,target_role,job_category,file_name,resume_date,notes) VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO resumes(user_id,version_name,revision_label,parent_resume_id,target_role,job_category,file_name,resume_date,is_active,is_default,notes,change_summary) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
           )
           .run(
             userId,
             input.version_name,
+            input.revision_label || null,
+            input.parent_resume_id || null,
             input.target_role || null,
             input.job_category || null,
             input.file_name || null,
             input.resume_date || isoDate(),
+            Number(input.is_active !== false),
+            Number(Boolean(input.is_default)),
             input.notes || null,
+            input.change_summary || null,
           );
+        if (input.is_default)
+          db.prepare(
+            "UPDATE resumes SET is_default=0 WHERE user_id=? AND id<>?",
+          ).run(userId, result.lastInsertRowid);
+        db.prepare(
+          "INSERT INTO resume_history(resume_id,user_id,actor_user_id,action,version_name,parent_resume_id,change_summary) VALUES (?,?,?,?,?,?,?)",
+        ).run(
+          result.lastInsertRowid,
+          userId,
+          actor.id,
+          "created",
+          input.version_name,
+          input.parent_resume_id || null,
+          input.change_summary || null,
+        );
         return (
           json(response, 201, { id: Number(result.lastInsertRowid) }),
           true
@@ -740,10 +761,31 @@ export async function handleAdvanced(context, helpers) {
       );
       if (table === "reminders" && input.category_id)
         activeCategory(db, record.user_id, input.category_id);
+      if (table === "resumes" && input.is_default)
+        db.prepare(
+          "UPDATE resumes SET is_default=0 WHERE user_id=? AND id<>?",
+        ).run(record.user_id, id);
       if (fields.length)
         db.prepare(
           `UPDATE ${table} SET ${fields.map((key) => `${key}=?`).join(",")},updated_at=CURRENT_TIMESTAMP WHERE id=?`,
         ).run(...fields.map((key) => input[key]), id);
+      if (table === "resumes")
+        db.prepare(
+          "INSERT INTO resume_history(resume_id,user_id,actor_user_id,action,version_name,parent_resume_id,change_summary,details_json) VALUES (?,?,?,?,?,?,?,?)",
+        ).run(
+          id,
+          record.user_id,
+          actor.id,
+          input.is_archived == null
+            ? "updated"
+            : input.is_archived
+              ? "archived"
+              : "restored",
+          input.version_name || record.version_name,
+          input.parent_resume_id || record.parent_resume_id,
+          input.change_summary || record.change_summary,
+          JSON.stringify(input),
+        );
       return (json(response, 200, { message: "Updated" }), true);
     }
   }

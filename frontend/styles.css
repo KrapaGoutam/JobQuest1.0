@@ -384,10 +384,22 @@ th {
   border-radius: 0.58rem;
   background: var(--surface-primary);
 }
-.select-all-control input { width: auto; }
-::placeholder { color: var(--text-muted); opacity: 1; }
-:disabled { color: var(--text-disabled); cursor: not-allowed; }
-a { color: var(--text-link); text-decoration-thickness: 0.1em; text-underline-offset: 0.15em; }
+.select-all-control input {
+  width: auto;
+}
+::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+a {
+  color: var(--text-link);
+  text-decoration-thickness: 0.1em;
+  text-underline-offset: 0.15em;
+}
 .empty {
   padding: 3rem 1rem;
   text-align: center;
@@ -943,4 +955,259 @@ progress {
   .agenda-event {
     grid-template-columns: 1fr;
   }
+}
+/* Feature Upgrade 1: application workspace and responsive navigation */
+.view-switcher {
+  display: inline-flex;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 2px;
+  background: var(--surface-secondary);
+}
+.application-workspace {
+  overflow: hidden;
+}
+.advanced-filter-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface-primary);
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-default);
+}
+.filter-panel {
+  padding: 1rem;
+  margin: 0.5rem 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  background: var(--surface-secondary);
+}
+.column-filter,
+.link-button,
+.column-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--text-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font: inherit;
+}
+.column-filter {
+  padding: 0.25rem;
+  min-width: 2rem;
+  min-height: 2rem;
+}
+.kanban {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(270px, 320px);
+  gap: 1rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: 1rem 0 1.5rem;
+  scroll-snap-type: x proximity;
+}
+.kanban-column {
+  scroll-snap-align: start;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  min-height: 20rem;
+}
+.kanban-column > header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0.75rem;
+  background: var(--surface-secondary);
+  border-bottom: 1px solid var(--border-default);
+}
+.kanban-column.collapsed {
+  min-height: auto;
+  max-height: 4rem;
+  overflow: hidden;
+}
+.kanban-cards {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  min-height: 10rem;
+}
+.kanban-card {
+  padding: 1rem;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  cursor: grab;
+}
+.kanban-card:focus-visible,
+.kanban-card.saving {
+  outline: 3px solid var(--text-link);
+  outline-offset: 2px;
+}
+.kanban-card h3 {
+  margin: 0.25rem 0;
+}
+.kanban-card p {
+  color: var(--text-secondary);
+  margin: 0.45rem 0;
+}
+dialog {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  max-width: min(42rem, calc(100vw - 2rem));
+  box-shadow: 0 20px 60px #0008;
+}
+dialog::backdrop {
+  background: #0f172acc;
+}
+.mobile-menu,
+.sidebar-backdrop {
+  display: none;
+}
+.nav-badge {
+  margin-left: auto;
+  min-width: 1.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  text-align: center;
+}
+.nav-section summary {
+  padding: 0.65rem 0.8rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+.nav-section button {
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+@media (max-width: 780px) {
+  .mobile-menu {
+    display: block;
+    position: fixed;
+    z-index: 30;
+    left: 0.75rem;
+    top: 0.75rem;
+  }
+  .shell aside {
+    position: fixed !important;
+    inset: 0 auto 0 0;
+    z-index: 29;
+    width: min(19rem, 86vw);
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+    overflow: auto;
+  }
+  .shell aside.open {
+    transform: translateX(0);
+  }
+  .sidebar-backdrop.open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 28;
+    background: #0008;
+  }
+  .nav-open {
+    overflow: hidden;
+  }
+  .shell main {
+    width: 100%;
+    padding-top: 4rem;
+  }
+  .page-head {
+    align-items: flex-start;
+  }
+  .kanban {
+    grid-auto-columns: minmax(82vw, 82vw);
+  }
+  .table-wrap {
+    position: relative;
+    overflow-x: auto;
+  }
+  .table-wrap::after {
+    content: "Scroll for more columns â†’";
+    position: sticky;
+    left: 0.5rem;
+    bottom: 0.25rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+  }
+  .advanced-filter-bar > * {
+    flex: 1 1 11rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+.settings-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.goal-chart {
+  height: 14rem;
+  display: flex;
+  align-items: end;
+  gap: 0.4rem;
+  padding: 1rem;
+  border-left: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+}
+.goal-day {
+  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: end;
+  align-items: center;
+  min-width: 1.5rem;
+}
+.goal-day i {
+  display: block;
+  width: 80%;
+  min-height: 2px;
+  background: var(--text-link);
+  border-radius: 0.25rem 0.25rem 0 0;
+}
+.goal-day.achieved i {
+  background: var(--success);
+}
+.goal-day.missed i {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--text-link),
+    var(--text-link) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+.goal-day span,
+.goal-day strong {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
 }
