@@ -6,4 +6,3 @@ ALTER TABLE application_view_preferences ADD COLUMN table_density TEXT NOT NULL 
 ALTER TABLE application_view_preferences ADD COLUMN cards_per_group INTEGER NOT NULL DEFAULT 15
   CHECK (cards_per_group BETWEEN 10 AND 20);
 ALTER TABLE users ADD COLUMN dashboard_visualization_json TEXT NOT NULL DEFAULT '{}';
-
