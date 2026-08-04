@@ -852,12 +852,15 @@ async function managerOwner() {
   );
 }
 async function applicationForm(item = {}, quick = false) {
-  const [owner, resumes, tags] = await Promise.all([
-    !item.id ? managerOwner() : "",
-    api("/api/resumes"),
-    api("/api/tags"),
-  ]);
-  const basics = `${field("company", "Company", "text", item.company, "required")}${field("job_title", "Job title", "text", item.job_title, "required")}${field("date_applied", "Date applied", "date", item.date_applied || date(), "required")}${field("job_url", "Job URL", "url", item.job_url)}${field("source", "Source", "text", item.source)}${select("stage", "Stage", STAGES, item.stage || "Applied")}${select("priority", "Priority", ["Low", "Medium", "High"], item.priority || "Medium")}${select("resume_id", "Resume", [{ value: "", label: "None" }, ...resumes.filter((r) => !r.is_archived).map((r) => ({ value: r.id, label: r.version_name }))], item.resume_id || "")}`;
+  const owner = !item.id ? await managerOwner() : "";
+  const resumeVersion = field(
+    "resume_version",
+    "Resume Version",
+    "text",
+    item.resume_version,
+    'maxlength="100" pattern="[A-Za-z0-9 ._()\\-]*" placeholder="Example: QA36, Test 35, Manual QA v7"',
+  );
+  const basics = `${field("company", "Company", "text", item.company, "required")}${field("job_title", "Job title", "text", item.job_title, "required")}${field("date_applied", "Date applied", "date", item.date_applied || date(), "required")}${field("job_url", "Job URL", "url", item.job_url)}${field("source", "Source", "text", item.source)}${select("stage", "Stage", STAGES, item.stage || "Applied")}${select("priority", "Priority", ["Low", "Medium", "High"], item.priority || "Medium")}${resumeVersion}`;
   if (quick) return `${owner}${basics}`;
   return `${owner}<fieldset><legend>Job Information</legend><div class="form-grid">${basics}${field("location", "Location", "text", item.location)}${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], item.work_arrangement)}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], item.employment_type)}${field("salary_min", "Salary minimum", "number", item.salary_min, "min='0'")}${field("salary_max", "Salary maximum", "number", item.salary_max, "min='0'")}${field("salary_currency", "Currency", "text", item.salary_currency || "USD")}</div></fieldset><fieldset><legend>Application Information</legend><div class="form-grid">${field("cover_letter_version", "Cover letter version", "text", item.cover_letter_version)}${field("tags", "Tags, comma separated", "text", item.tags?.map?.((tag) => tag.name).join(", ") || item.tags || "")}${field("external_job_id", "External job ID", "text", item.external_job_id)}</div></fieldset><fieldset><legend>Recruiter Information</legend><div class="form-grid">${field("recruiter_name", "Recruiter name", "text", item.recruiter_name)}${field("recruiter_email", "Recruiter email", "email", item.recruiter_email)}${field("recruiter_phone", "Recruiter phone", "tel", item.recruiter_phone)}</div></fieldset><fieldset><legend>Action and Follow-Up</legend><div class="form-grid">${field("next_action", "Next action", "text", item.next_action)}${field("next_action_date", "Next-action date", "date", item.next_action_date)}${field("last_response_date", "Last-response date", "date", item.last_response_date)}</div></fieldset><fieldset><legend>Description and Notes</legend><div class="form-grid"><label class="full">Job description<textarea name="job_description">${esc(item.job_description)}</textarea></label><label class="full">Notes<textarea name="notes">${esc(item.notes)}</textarea></label><label class="check"><input type="checkbox" name="pinned" value="true" ${item.pinned ? "checked" : ""}> Pinned</label><label class="check"><input type="checkbox" name="important" value="true" ${item.important ? "checked" : ""}> Important</label><label class="check"><input type="checkbox" name="favorite" value="true" ${item.favorite ? "checked" : ""}> Favorite</label></div></fieldset>`;
 }
@@ -1138,7 +1141,7 @@ async function renderApplications(params = new URLSearchParams()) {
     select.focus();
   };
   const card = (item) =>
-    `<article class="kanban-card" draggable="true" tabindex="0" data-card="${item.id}"><strong>${esc(item.company)}</strong><h3>${esc(item.job_title)}</h3><p>${esc(item.linked_resume_version || "No resume linked")}</p><p>${badge(item.priority)} ${esc(item.date_applied)}</p><p>${esc(item.next_action || "No next action")} ${esc(item.next_action_date || "")}</p><div class="actions"><button class="btn small secondary" data-preview-card="${item.id}">Preview</button><button class="btn small secondary" data-open-card="${item.id}">Open</button><button class="btn small secondary" data-move="${item.id}">Move to stage</button></div></article>`;
+    `<article class="kanban-card" draggable="true" tabindex="0" data-card="${item.id}"><strong>${esc(item.company)}</strong><h3>${esc(item.job_title)}</h3>${item.resume_version ? `<p><strong>Resume Version:</strong> ${esc(item.resume_version)}</p>` : ""}<p>${badge(item.priority)} ${esc(item.date_applied)}</p><p>${esc(item.next_action || "No next action")} ${esc(item.next_action_date || "")}</p><div class="actions"><button class="btn small secondary" data-preview-card="${item.id}">Preview</button><button class="btn small secondary" data-open-card="${item.id}">Open</button><button class="btn small secondary" data-move="${item.id}">Move to stage</button></div></article>`;
   const grouping = preference.kanban_grouping || "date_applied_day";
   const collapsedGroups = new Set(
     preference.collapsed_groups?.[grouping] || [],
@@ -1198,7 +1201,6 @@ async function renderApplications(params = new URLSearchParams()) {
         onFilter: requestFilter,
         onOpen: (item) => go(`detail:${item.id}`),
         onMove: requestMove,
-        onResume: () => go("resumes"),
         onPreview: preview,
         selected: state.selectedApplications,
         onSelect: (item, selected) => {
@@ -1502,7 +1504,7 @@ async function renderDetail(id) {
       "Application details, decisions, and complete history",
       `<div class="actions"><button class="btn secondary" id="pin-detail">${item.pinned ? "Unpin" : "Pin"}</button><button class="btn secondary" id="archive-detail">${item.archived_at ? "Restore" : "Archive"}</button><button class="btn danger" id="delete-detail">Delete</button></div>`,
     ) +
-      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume</strong><br>${esc(item.resume_version || "Linked resume")}</p><p><strong>Job URL</strong><br>${item.job_url ? `<a href="${esc(item.job_url)}" target="_blank" rel="noopener">Open posting</a>` : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
+      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${item.job_url ? `<a href="${esc(item.job_url)}" target="_blank" rel="noopener">Open posting</a>` : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
   );
   bindApplicationForm(item);
   qsa("[data-detail]").forEach(
@@ -1627,6 +1629,7 @@ const jsonExample = JSON.stringify(
       source: "LinkedIn",
       stage: "Applied",
       priority: "High",
+      resume_version: "QA36",
       tags: ["QA", "Remote"],
       pinned: true,
     },
@@ -1634,7 +1637,7 @@ const jsonExample = JSON.stringify(
   null,
   2,
 );
-const textExample = `company: ABC Technologies\njob_title: QA Engineer\ndate_applied: ${date()}\nsource: LinkedIn\nstage: Applied\npriority: High\ntags: QA, Remote\npinned: true`;
+const textExample = `company: ABC Technologies\njob_title: QA Engineer\ndate_applied: ${date()}\nsource: LinkedIn\nstage: Applied\npriority: High\nresume_used: Test 35\ntags: QA, Remote\npinned: true`;
 async function renderBulk() {
   const owner = await managerOwner();
   shell(
@@ -1679,11 +1682,20 @@ async function renderBulk() {
           (row) => row.valid,
         );
         qs("#preview").innerHTML = table(
-          ["Row", "Company", "Title", "Date", "Stage", "Result", "Messages"],
+          [
+            "Row",
+            "Company",
+            "Title",
+            "Date",
+            "Stage",
+            "Resume Version",
+            "Result",
+            "Messages",
+          ],
           result.rows
             .map(
               (row) =>
-                `<tr><td>${row.row_number}</td><td>${esc(row.data.company)}</td><td>${esc(row.data.job_title)}</td><td>${esc(row.data.date_applied)}</td><td>${badge(row.data.stage)}</td><td>${esc(row.result)}</td><td>${esc(row.errors.join("; ") || (row.duplicate ? `Matches #${row.duplicate_id}` : "Ready"))}</td></tr>`,
+                `<tr><td>${row.row_number}</td><td>${esc(row.data.company)}</td><td>${esc(row.data.job_title)}</td><td>${esc(row.data.date_applied)}</td><td>${badge(row.data.stage)}</td><td>${esc(row.data.resume_version || "No resume specified")}</td><td>${esc(row.result)}</td><td>${esc(row.errors.join("; ") || (row.duplicate ? `Matches #${row.duplicate_id}` : "Ready"))}</td></tr>`,
             )
             .join(""),
         );

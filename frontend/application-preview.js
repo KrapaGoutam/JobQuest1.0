@@ -33,7 +33,7 @@ export function createApplicationPreview(document, data, callbacks = {}) {
     ["Date applied", item.date_applied],
     ["Next action", item.next_action],
     ["Next action date", item.next_action_date],
-    ["Resume version", item.linked_resume_version || item.resume_version],
+    ["Resume Version", item.resume_version],
     ["Location", item.location],
   ])
     summary.append(detail(document, label, value));
