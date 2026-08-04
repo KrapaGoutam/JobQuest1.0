@@ -16,13 +16,14 @@ function button(document, text, className, attributes = {}) {
 }
 
 export const APPLICATION_COLUMNS = [
+  { key: "selection", label: "Select" },
   { key: "date_applied", label: "Applied", sortable: true, filterable: true },
   { key: "company", label: "Company", sortable: true, filterable: true },
   { key: "job_title", label: "Job Title", sortable: true, filterable: true },
   { key: "location", label: "Location" },
-  { key: "work_arrangement", label: "Arrangement" },
-  { key: "stage", label: "Stage" },
-  { key: "priority", label: "Priority" },
+  { key: "work_arrangement", label: "Arrangement", filterable: true },
+  { key: "stage", label: "Stage", sortable: true, filterable: true },
+  { key: "priority", label: "Priority", sortable: true, filterable: true },
   { key: "source", label: "Source" },
   {
     key: "resume_version",
@@ -31,14 +32,27 @@ export const APPLICATION_COLUMNS = [
     filterable: true,
   },
   { key: "next_action", label: "Next Action" },
-  { key: "next_action_date", label: "Due" },
-  { key: "updated_at", label: "Updated", sortable: true },
+  { key: "next_action_date", label: "Due", sortable: true, filterable: true },
+  { key: "updated_at", label: "Updated", sortable: true, filterable: true },
   { key: "actions", label: "Actions" },
 ];
 
 function appendCell(document, row, item, column, callbacks) {
   const cell = element(document, "td");
-  if (column.key === "company") {
+  if (column.key === "selection") {
+    const input = element(document, "input");
+    input.type = "checkbox";
+    input.checked = callbacks.selected?.has(item.id) || false;
+    input.setAttribute(
+      "aria-label",
+      `Select ${item.company} ${item.job_title}`,
+    );
+    input.addEventListener("click", (event) => event.stopPropagation());
+    input.addEventListener("change", () =>
+      callbacks.onSelect?.(item, input.checked),
+    );
+    cell.append(input);
+  } else if (column.key === "company") {
     cell.append(element(document, "strong", { text: item.company }));
   } else if (column.key === "stage") {
     const stage = element(document, "span", {
@@ -61,13 +75,24 @@ function appendCell(document, row, item, column, callbacks) {
       cell.append(resume);
     } else cell.textContent = "No resume linked";
   } else if (column.key === "actions") {
+    const preview = button(document, "Preview", "btn small secondary");
+    preview.setAttribute(
+      "aria-label",
+      `Quick preview ${item.company} ${item.job_title}`,
+    );
+    preview.addEventListener("click", (event) => {
+      event.stopPropagation();
+      callbacks.onPreview?.(item);
+    });
     const move = button(document, "Move", "btn small secondary");
     move.dataset.move = String(item.id);
     move.addEventListener("click", (event) => {
       event.stopPropagation();
       callbacks.onMove?.(item);
     });
-    cell.append(move);
+    const actions = element(document, "div", { className: "actions" });
+    actions.append(preview, move);
+    cell.append(actions);
   } else cell.textContent = String(item[column.key] || dash);
   row.append(cell);
 }
@@ -82,6 +107,10 @@ export function createApplicationTable(document, options = {}) {
     onOpen,
     onMove,
     onResume,
+    onPreview,
+    selected = new Set(),
+    onSelect,
+    onSelectAll,
   } = options;
   const wrapper = element(document, "div", { className: "table-wrap" });
   const table = element(document, "table", { className: "applications-table" });
@@ -91,8 +120,24 @@ export function createApplicationTable(document, options = {}) {
     const cell = element(document, "th");
     cell.scope = "col";
     const group = element(document, "div", { className: "column-heading" });
-    if (column.sortable) {
+    if (column.key === "selection") {
+      const selectAll = element(document, "input");
+      selectAll.type = "checkbox";
+      selectAll.checked =
+        items.length > 0 && items.every((item) => selected.has(item.id));
+      selectAll.indeterminate =
+        items.some((item) => selected.has(item.id)) && !selectAll.checked;
+      selectAll.setAttribute("aria-label", "Select all visible applications");
+      selectAll.addEventListener("change", () =>
+        onSelectAll?.(items, selectAll.checked),
+      );
+      group.append(selectAll);
+    } else if (column.sortable) {
       const active = sort === column.key;
+      cell.setAttribute(
+        "aria-sort",
+        active ? (direction === "asc" ? "ascending" : "descending") : "none",
+      );
       const sortButton = button(document, column.label, "column-sort", {
         "aria-label": `Sort by ${column.label}`,
         "aria-pressed": active,
@@ -149,7 +194,13 @@ export function createApplicationTable(document, options = {}) {
         }
       });
       for (const column of APPLICATION_COLUMNS)
-        appendCell(document, row, item, column, { onMove, onResume });
+        appendCell(document, row, item, column, {
+          onMove,
+          onResume,
+          onPreview,
+          selected,
+          onSelect,
+        });
       body.append(row);
     }
   }
