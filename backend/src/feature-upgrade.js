@@ -98,6 +98,7 @@ function buildApplicationWhere(actor, query = {}) {
   const searchable = [
     "CAST(a.id AS TEXT)", "a.company", "a.job_title", "a.location", "a.stage", "a.recruiter_name",
     "a.recruiter_email", "a.date_applied", "a.notes", "a.resume_version",
+    "r.version_name",
     "a.source", "a.external_job_id", "a.job_description", "a.employment_type",
     "a.work_arrangement",
   ];
@@ -227,7 +228,7 @@ function queryApplications(db, actor, query = {}, { bounded = true } = {}) {
     db.dialect === "postgres"
       ? "string_agg(t.name,', ')"
       : "group_concat(t.name,', ')";
-  const select = `SELECT a.*,u.username owner_username,(SELECT ${tagAggregate} FROM application_tags atg JOIN tags t ON t.id=atg.tag_id WHERE atg.application_id=a.id) tags FROM applications a JOIN users u ON u.id=a.user_id ${clause}`;
+  const select = `SELECT a.*,u.username owner_username,r.version_name linked_resume_version,(SELECT ${tagAggregate} FROM application_tags atg JOIN tags t ON t.id=atg.tag_id WHERE atg.application_id=a.id) tags FROM applications a JOIN users u ON u.id=a.user_id LEFT JOIN resumes r ON r.id=a.resume_id ${clause}`;
   const items = rows(
     db.prepare(
       `${select} ORDER BY a.pinned DESC,CASE WHEN ${sortExpr} IS NULL OR CAST(${sortExpr} AS TEXT)='' THEN 1 ELSE 0 END,${sortExpr} ${direction},a.id DESC LIMIT ? OFFSET ?`,
@@ -237,7 +238,7 @@ function queryApplications(db, actor, query = {}, { bounded = true } = {}) {
   const total = Number(
     db
       .prepare(
-        `SELECT count(*) count FROM applications a ${clause}`,
+        `SELECT count(*) count FROM applications a LEFT JOIN resumes r ON r.id=a.resume_id ${clause}`,
       )
       .get(...params).count,
   );

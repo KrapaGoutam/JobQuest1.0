@@ -44,6 +44,7 @@ export const APPLICATION_FIELDS = [
   "salary_currency",
   "salary_range",
   "resume_version",
+  "resume_id",
   "cover_letter_version",
   "recruiter_name",
   "recruiter_email",
@@ -174,6 +175,11 @@ export function validateApplication(input, { partial = false } = {}) {
       errors.push(
         "Resume Version may contain letters, numbers, spaces, hyphens, underscores, periods, and parentheses",
       );
+  }
+  if (data.resume_id !== undefined && data.resume_id !== "") {
+    data.resume_id = Number(data.resume_id);
+    if (!Number.isSafeInteger(data.resume_id) || data.resume_id < 1)
+      errors.push("resume_id must be a positive integer");
   }
   data.stage ??= "Applied";
   data.priority ??= "Medium";
@@ -340,6 +346,13 @@ function setApplicationTags(db, applicationId, userId, names) {
 export function createApplication(db, userId, actorId, input) {
   const checked = validateApplication(input);
   if (checked.errors.length) return { errors: checked.errors };
+  if (
+    checked.data.resume_id &&
+    !db
+      .prepare("SELECT 1 FROM resumes WHERE id=? AND user_id=?")
+      .get(checked.data.resume_id, userId)
+  )
+    return { errors: ["Resume does not belong to the application owner"] };
   const match = duplicate(db, userId, checked.data);
   if (match)
     return {
@@ -352,6 +365,13 @@ export function createApplication(db, userId, actorId, input) {
 export function updateApplication(db, application, actorId, input) {
   const checked = validateApplication(input, { partial: true });
   if (checked.errors.length) return { errors: checked.errors };
+  if (
+    checked.data.resume_id &&
+    !db
+      .prepare("SELECT 1 FROM resumes WHERE id=? AND user_id=?")
+      .get(checked.data.resume_id, application.user_id)
+  )
+    return { errors: ["Resume does not belong to the application owner"] };
   const fields = Object.keys(checked.data).filter(
     (field) => APPLICATION_FIELDS.includes(field) && field !== "stage",
   );

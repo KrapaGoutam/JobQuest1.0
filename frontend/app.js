@@ -630,6 +630,12 @@ async function renderDashboard(manager = false) {
     `<section class="dashboard-hero"><div><p class="eyebrow">JobQuest workspace</p><h1>${manager ? "Team search overview" : `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${esc(state.user.full_name.split(" ")[0])}`}</h1><p class="muted">${manager ? "See team momentum, pipeline health, and where support is needed." : "Here’s what’s moving in your job search and what needs attention next."}</p></div><div class="dashboard-controls"><div class="view-switcher" role="group" aria-label="Dashboard type"><button class="btn small ${manager ? "secondary" : ""}" data-dashboard-mode="user" aria-pressed="${!manager}">My Dashboard</button>${state.user.role === "MANAGER" ? `<button class="btn small ${manager ? "" : "secondary"}" data-dashboard-mode="manager" aria-pressed="${manager}">Manager</button>` : ""}</div>${scopeSelect}<select id="dashboard-range" aria-label="Dashboard date range"><option value="7" ${state.dashboardDays === 7 ? "selected" : ""}>Last 7 days</option><option value="30" ${state.dashboardDays === 30 ? "selected" : ""}>Last 30 days</option><option value="90" ${state.dashboardDays === 90 ? "selected" : ""}>Last 90 days</option></select><button class="btn secondary" id="dashboard-settings">Customize Dashboard</button></div></section>` +
       `<div class="widget-grid">${widgets.map((item) => `<section class="widget size-${item.width} widget-${widgetDefinition(item.widget_id)?.kind || "insight"}" data-widget="${item.widget_id}"><header class="widget-header"><div><span class="widget-kicker">${esc(widgetDefinition(item.widget_id)?.kind || "overview")}</span><h2>${esc(WIDGET_NAMES[item.widget_id])}</h2></div>${DASHBOARD_DRILL[item.widget_id] ? `<button class="widget-drill" data-widget-drill="${item.widget_id}" aria-label="Open details for ${esc(WIDGET_NAMES[item.widget_id])}">View</button>` : ""}</header>${widgetContent(item.widget_id, data, manager)}</section>`).join("")}</div>`,
   );
+  qs(".dashboard-controls")?.insertAdjacentHTML(
+    "beforeend",
+    '<button class="btn" data-page="quick-add">Quick Add</button>',
+  );
+  qs('.dashboard-controls [data-page="quick-add"]').onclick = () =>
+    go("quick-add");
   qsa("[data-dashboard-mode]").forEach((button) => {
     button.onclick = () => {
       const nextManager = button.dataset.dashboardMode === "manager";
@@ -907,13 +913,14 @@ async function renderApplications(params = new URLSearchParams()) {
     view = VIEWS_UI.includes(requested) ? requested : preference.preferred_view;
   params.set("view", view);
   state.applicationView = view;
-  const [data, savedViews] = await Promise.all([
+  const [data, savedViews, overview] = await Promise.all([
     api(
       view === "kanban"
         ? `/api/applications/kanban?${params}`
         : `/api/applications/query?${params}`,
     ),
     api("/api/saved-views"),
+    api("/api/dashboard"),
   ]);
   const items =
     view === "kanban"
@@ -1153,6 +1160,17 @@ async function renderApplications(params = new URLSearchParams()) {
         `<button class="filter-chip" type="button" data-remove-filter="${esc(key)}" aria-label="Remove ${esc(pretty(key))} filter">${esc(pretty(key))}: ${esc(value)} <span aria-hidden="true">×</span></button>`,
     )
     .join("");
+  const performance = overview.performance || {};
+  const applicationSummary = [
+    ["Total Applications", data.total],
+    ["Active Pipeline", performance.active || 0],
+    [
+      "Interviews",
+      Number(overview.pipeline?.Interview || 0) +
+        Number(overview.pipeline?.["Final Interview"] || 0),
+    ],
+    ["Response Rate", `${performance.response_rate || 0}%`],
+  ];
   shell(
     pageHead(
       "Applications",
@@ -1178,6 +1196,22 @@ async function renderApplications(params = new URLSearchParams()) {
         ],
         "date_applied",
       )}${field("date_from", "Start date", "date", params.get("date_from") || "")}${field("date_to", "End date", "date", params.get("date_to") || "")}<div class="actions full"><button class="btn" value="export">Export</button><button class="btn secondary" value="cancel">Cancel</button></div></form></dialog>`,
+  );
+  qs(".application-workspace").insertAdjacentHTML(
+    "beforebegin",
+    `<section class="application-summary" aria-label="Application pipeline summary">${applicationSummary.map(([label, value]) => `<article><span>${esc(label)}</span><strong>${esc(value)}</strong></article>`).join("")}</section>`,
+  );
+  qs('#app-filters input[name="search"]').setAttribute(
+    "aria-label",
+    "Search applications",
+  );
+  qs('#app-filters select[name="stage"]').setAttribute(
+    "aria-label",
+    "Filter by stage",
+  );
+  qs('#app-filters select[name="priority"]').setAttribute(
+    "aria-label",
+    "Filter by priority",
   );
   if (view === "table") {
     qs("#applications-table-root").append(
