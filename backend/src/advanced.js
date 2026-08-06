@@ -33,14 +33,29 @@ const BUILTIN_WIDGETS = [
   "health-summary",
   "calendar-preview",
 ];
-const DEFAULT_WIDGETS = BUILTIN_WIDGETS.map((widget_id, position) => ({
-  widget_id,
-  enabled: position < 12 ? 1 : 0,
-  position,
-  width: position < 4 ? 1 : 2,
-  height: 1,
-  settings: {},
-}));
+const USER_DEFAULT_IDS = new Set([
+  "applications-month", "active-applications", "upcoming-interviews", "responses",
+  "activity-chart", "weekly-goals", "reminder-center", "job-funnel",
+  "recent-activity", "health-summary",
+]);
+const MANAGER_DEFAULT_IDS = new Set([
+  "applications-month", "active-applications", "upcoming-interviews", "offers",
+  "activity-chart", "goal-comparison", "overdue-follow-ups", "job-funnel",
+  "aging-applications", "stage-duration", "recent-activity",
+]);
+function defaultWidgets(type = "user") {
+  const enabled = type === "manager" ? MANAGER_DEFAULT_IDS : USER_DEFAULT_IDS;
+  return BUILTIN_WIDGETS.map((widget_id, position) => ({
+    widget_id,
+    enabled: enabled.has(widget_id) ? 1 : 0,
+    position,
+    width: ["activity-chart", "job-funnel"].includes(widget_id) ? 3 :
+      ["weekly-goals", "goal-comparison", "recent-activity"].includes(widget_id) ? 2 : 1,
+    height: 1,
+    settings: {},
+  }));
+}
+const DEFAULT_WIDGETS = defaultWidgets();
 const REMINDER_PRIORITIES = ["Low", "Medium", "High"];
 const GOAL_CATEGORIES = [
   "applications",
@@ -1146,6 +1161,7 @@ export async function handleAdvanced(context, helpers) {
           ? "manager"
           : "user";
     if (request.method === "GET") {
+      const defaults = defaultWidgets(type);
       const stored = rows(
         db.prepare(
           "SELECT * FROM dashboard_preferences WHERE user_id=? AND dashboard_type=? ORDER BY position",
@@ -1155,8 +1171,8 @@ export async function handleAdvanced(context, helpers) {
       return (
         json(response, 200, {
           dashboard_type: type,
-          widgets: stored.length ? stored : DEFAULT_WIDGETS,
-          defaults: DEFAULT_WIDGETS,
+          widgets: stored.length ? stored : defaults,
+          defaults,
         }),
         true
       );
@@ -1201,7 +1217,7 @@ export async function handleAdvanced(context, helpers) {
       db.prepare(
         "DELETE FROM dashboard_preferences WHERE user_id=? AND dashboard_type=?",
       ).run(actor.id, type);
-      return (json(response, 200, { widgets: DEFAULT_WIDGETS }), true);
+      return (json(response, 200, { widgets: defaultWidgets(type) }), true);
     }
   }
 

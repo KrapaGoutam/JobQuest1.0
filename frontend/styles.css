@@ -785,6 +785,111 @@ pre.example {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
 }
+
+.dashboard-hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+}
+.dashboard-hero h1 {
+  margin: 0.35rem 0;
+  font-size: clamp(1.85rem, 4vw, 2.65rem);
+  letter-spacing: -0.04em;
+}
+.eyebrow,
+.widget-kicker {
+  color: var(--brand);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.dashboard-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+.widget {
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+.widget:hover {
+  border-color: color-mix(in srgb, var(--brand) 38%, var(--line));
+  transform: translateY(-1px);
+}
+.widget-kicker {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--muted);
+}
+.widget-kpi .metric {
+  font-size: clamp(2rem, 4vw, 2.8rem);
+}
+.customize-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.customize-toolbar label {
+  min-width: min(28rem, 100%);
+}
+.layout-row code {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.applications-meta {
+  justify-content: space-between;
+}
+.result-count {
+  color: var(--muted);
+  font-weight: 700;
+}
+.active-filters {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.25rem 0 0.75rem;
+}
+.filter-chip {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--brand) 45%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 12%, var(--paper));
+  color: var(--ink);
+  padding: 0.4rem 0.65rem;
+  cursor: pointer;
+}
+.pagination {
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+@media (max-width: 800px) {
+  .dashboard-hero {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .dashboard-controls {
+    justify-content: flex-start;
+  }
+  .dashboard-controls > * {
+    flex: 1 1 10rem;
+  }
+  .applications-meta,
+  .customize-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
 .widget {
   min-height: 180px;
   padding: 1.1rem;
