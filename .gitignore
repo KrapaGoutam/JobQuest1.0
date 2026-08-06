@@ -41,3 +41,7 @@ playwright-report/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Headroom (local context-compression layer) — project-local state, never shared
+.headroom/
+CLAUDE.local.md
