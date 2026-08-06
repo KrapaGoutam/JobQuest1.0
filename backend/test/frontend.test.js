@@ -176,6 +176,9 @@ test("feature upgrade UI includes accessible Table, Kanban, filters, settings, g
     "Excel (.xlsx)",
     "Goal Settings",
     "daily-goal-chart",
+    "application-summary",
+    "Application pipeline summary",
+    "Search applications",
   ])
     assert.ok(source.includes(marker), `missing ${marker}`);
   for (const marker of [

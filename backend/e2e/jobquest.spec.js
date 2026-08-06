@@ -34,9 +34,9 @@ async function authenticatedPage(page, testInfo) {
   });
   expect(application.ok()).toBeTruthy();
   await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "Dashboard", exact: true }),
-  ).toBeVisible();
+  await expect(page.locator(".dashboard-hero h1")).toContainText(
+    /Good (morning|afternoon|evening), Visual/,
+  );
 }
 
 async function stabilizeVisuals(page) {
@@ -72,7 +72,11 @@ test("applications table controls, filter dialog, preview drawer, and accessibil
   await expect(
     page.getByRole("dialog", { name: /Northstar Labs/ }),
   ).toBeVisible();
-  await expect(page.getByText("Product v3")).toBeVisible();
+  await expect(
+    page
+      .getByRole("dialog", { name: /Northstar Labs/ })
+      .getByText("Product v3"),
+  ).toBeVisible();
   await page.keyboard.press("Escape");
   const results = await new AxeBuilder({ page })
     .exclude(".goal-chart")
