@@ -15,6 +15,19 @@ import {
 } from "../../frontend/ui-utils.js";
 import { parseHTML } from "linkedom";
 import { createApplicationTable } from "../../frontend/application-table.js";
+import {
+  DASHBOARD_WIDGETS,
+  WIDGET_NAMES,
+} from "../../frontend/dashboard-config.js";
+
+test("dashboard registry preserves the complete unique widget contract", () => {
+  assert.equal(DASHBOARD_WIDGETS.length, 30);
+  assert.equal(new Set(DASHBOARD_WIDGETS.map((widget) => widget.id)).size, 30);
+  assert.equal(WIDGET_NAMES["applications-today"], "Applications Today");
+  assert.equal(WIDGET_NAMES["daily-goal-chart"], "Daily Target vs Actual");
+  assert.equal(WIDGET_NAMES["calendar-preview"], "Calendar Preview");
+  assert.ok(DASHBOARD_WIDGETS.every((widget) => widget.id && widget.name && widget.kind));
+});
 
 test("application headers use safe interactive DOM without escaped markup", () => {
   const { document } = parseHTML("<html><body></body></html>");

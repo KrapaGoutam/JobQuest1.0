@@ -48,7 +48,17 @@ const SORT_FIELDS = new Set([
   "next_action_date",
   "updated_at",
   "resume_version",
+  "salary_min",
 ]);
+
+function searchWords(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 10);
+}
 
 function fail(message, status = 400) {
   throw Object.assign(new Error(message), { status });
@@ -85,11 +95,15 @@ function buildApplicationWhere(actor, query = {}) {
     params.push(Number(query.user_id));
   }
   const filters = { ...query, ...parseJson(query.filters, {}) };
-  if (filters.search) {
-    where.push(
-      "(lower(a.company) LIKE lower(?) OR lower(a.job_title) LIKE lower(?) OR lower(coalesce(a.location,'')) LIKE lower(?) OR lower(coalesce(a.notes,'')) LIKE lower(?))",
-    );
-    params.push(...Array(4).fill(`%${filters.search}%`));
+  const searchable = [
+    "CAST(a.id AS TEXT)", "a.company", "a.job_title", "a.location", "a.stage", "a.recruiter_name",
+    "a.recruiter_email", "a.date_applied", "a.notes", "a.resume_version",
+    "a.source", "a.external_job_id", "a.job_description", "a.employment_type",
+    "a.work_arrangement",
+  ];
+  for (const word of searchWords(filters.search)) {
+    where.push(`(${searchable.map((field) => `lower(coalesce(${field},'')) LIKE lower(?)`).join(" OR ")} OR EXISTS(SELECT 1 FROM application_tags sx JOIN tags st ON st.id=sx.tag_id WHERE sx.application_id=a.id AND lower(st.name) LIKE lower(?)))`);
+    params.push(...searchable.map(() => `%${word}%`), `%${word}%`);
   }
   for (const field of ENUM_FIELDS) {
     const values = Array.isArray(filters[field])
@@ -216,7 +230,7 @@ function queryApplications(db, actor, query = {}, { bounded = true } = {}) {
   const select = `SELECT a.*,u.username owner_username,(SELECT ${tagAggregate} FROM application_tags atg JOIN tags t ON t.id=atg.tag_id WHERE atg.application_id=a.id) tags FROM applications a JOIN users u ON u.id=a.user_id ${clause}`;
   const items = rows(
     db.prepare(
-      `${select} ORDER BY a.pinned DESC,${sortExpr} ${direction},a.id DESC LIMIT ? OFFSET ?`,
+      `${select} ORDER BY a.pinned DESC,CASE WHEN ${sortExpr} IS NULL OR CAST(${sortExpr} AS TEXT)='' THEN 1 ELSE 0 END,${sortExpr} ${direction},a.id DESC LIMIT ? OFFSET ?`,
     ),
     [...params, pageSize, (page - 1) * pageSize],
   );

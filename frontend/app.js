@@ -12,6 +12,11 @@ import {
 } from "./ui-utils.js";
 import { createApplicationTable } from "./application-table.js";
 import { createApplicationPreview } from "./application-preview.js";
+import {
+  DASHBOARD_WIDGETS,
+  WIDGET_NAMES,
+  widgetDefinition,
+} from "./dashboard-config.js";
 
 const state = {
   user: null,
@@ -390,38 +395,6 @@ async function go(page) {
   }
 }
 
-const WIDGET_NAMES = {
-  "applications-today": "Applications Today",
-  "applications-week": "Applications This Week",
-  "applications-month": "Applications This Month",
-  "active-applications": "Active Applications",
-  "follow-ups-due": "Follow-Ups Due",
-  "overdue-follow-ups": "Overdue Follow-Ups",
-  "upcoming-interviews": "Upcoming Interviews",
-  responses: "Responses",
-  rejections: "Rejections",
-  ghosted: "Ghosted",
-  offers: "Offers",
-  acceptances: "Acceptances",
-  "daily-goals": "Daily Goal Progress",
-  "daily-goal-chart": "Daily Target vs Actual",
-  "weekly-goals": "Weekly Goal Progress",
-  "goal-comparison": "Goal Achievement Comparison",
-  "activity-chart": "Application Activity Chart",
-  "job-funnel": "Job Funnel",
-  "applications-stage": "Applications by Stage",
-  "applications-source": "Applications by Source",
-  "applications-work-arrangement": "Applications by Work Arrangement",
-  "resume-performance": "Resume Performance",
-  "goal-trends": "Goal Trends",
-  "reminder-center": "Reminder Center",
-  "aging-applications": "Aging Applications",
-  "stage-duration": "Stage-Duration Summary",
-  "recent-activity": "Recent Activity",
-  "pinned-applications": "Pinned Applications",
-  "health-summary": "Application Health Summary",
-  "calendar-preview": "Calendar Preview",
-};
 const DASHBOARD_DRILL = {
   "applications-today": { date_from: date(), date_to: date() },
   "active-applications": { archived: "false" },
@@ -654,13 +627,16 @@ async function renderDashboard(manager = false) {
       )
     : "";
   shell(
-    pageHead(
-      manager ? "Manager dashboard" : "Dashboard",
-      "A configurable view of momentum, health, goals, and next actions",
-      `<div class="actions">${scopeSelect}<select id="dashboard-range" aria-label="Dashboard date range"><option value="1">Today</option><option value="7">Last 7 days</option><option value="30" ${state.dashboardDays === 30 ? "selected" : ""}>Last 30 days</option><option value="90">Last 90 days</option><option value="365">This year</option><option value="3650">All time</option></select><button class="btn secondary" id="dashboard-settings">Dashboard Settings</button></div>`,
-    ) +
-      `<div class="widget-grid">${widgets.map((item) => `<section class="widget size-${item.width}" data-widget="${item.widget_id}"><header class="widget-header"><h2>${esc(WIDGET_NAMES[item.widget_id])}</h2>${DASHBOARD_DRILL[item.widget_id] ? `<button class="widget-drill" data-widget-drill="${item.widget_id}" aria-label="Open details for ${esc(WIDGET_NAMES[item.widget_id])}">View</button>` : ""}</header>${widgetContent(item.widget_id, data, manager)}</section>`).join("")}</div>`,
+    `<section class="dashboard-hero"><div><p class="eyebrow">JobQuest workspace</p><h1>${manager ? "Team search overview" : `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${esc(state.user.full_name.split(" ")[0])}`}</h1><p class="muted">${manager ? "See team momentum, pipeline health, and where support is needed." : "Here’s what’s moving in your job search and what needs attention next."}</p></div><div class="dashboard-controls"><div class="view-switcher" role="group" aria-label="Dashboard type"><button class="btn small ${manager ? "secondary" : ""}" data-dashboard-mode="user" aria-pressed="${!manager}">My Dashboard</button>${state.user.role === "MANAGER" ? `<button class="btn small ${manager ? "" : "secondary"}" data-dashboard-mode="manager" aria-pressed="${manager}">Manager</button>` : ""}</div>${scopeSelect}<select id="dashboard-range" aria-label="Dashboard date range"><option value="7" ${state.dashboardDays === 7 ? "selected" : ""}>Last 7 days</option><option value="30" ${state.dashboardDays === 30 ? "selected" : ""}>Last 30 days</option><option value="90" ${state.dashboardDays === 90 ? "selected" : ""}>Last 90 days</option></select><button class="btn secondary" id="dashboard-settings">Customize Dashboard</button></div></section>` +
+      `<div class="widget-grid">${widgets.map((item) => `<section class="widget size-${item.width} widget-${widgetDefinition(item.widget_id)?.kind || "insight"}" data-widget="${item.widget_id}"><header class="widget-header"><div><span class="widget-kicker">${esc(widgetDefinition(item.widget_id)?.kind || "overview")}</span><h2>${esc(WIDGET_NAMES[item.widget_id])}</h2></div>${DASHBOARD_DRILL[item.widget_id] ? `<button class="widget-drill" data-widget-drill="${item.widget_id}" aria-label="Open details for ${esc(WIDGET_NAMES[item.widget_id])}">View</button>` : ""}</header>${widgetContent(item.widget_id, data, manager)}</section>`).join("")}</div>`,
   );
+  qsa("[data-dashboard-mode]").forEach((button) => {
+    button.onclick = () => {
+      const nextManager = button.dataset.dashboardMode === "manager";
+      state.page = nextManager ? "manager" : "dashboard";
+      renderDashboard(nextManager);
+    };
+  });
   if (manager)
     qs("select[name=manager-user-scope]").onchange = (event) => {
       state.managerUserId = event.target.value;
@@ -721,10 +697,10 @@ function renderDashboardSettings(layout, manager) {
         "Enable, size, and reorder widgets with drag, keyboard, or mobile controls",
         `<div class="actions"><label class="select-all-control"><input type="checkbox" id="layout-select-all"> Select All</label><button class="btn secondary" id="layout-deselect-all">Deselect All</button><button class="btn secondary" id="layout-reset">Restore Defaults</button><button class="btn" id="layout-save">Save Layout</button><button class="btn secondary" id="layout-cancel">Cancel</button></div>`,
       ) +
-        `<div id="layout-list" class="layout-editor">${state.layoutDraft
+        `<section class="card full customize-toolbar"><label>Search widgets<input id="widget-search" type="search" placeholder="Search name or type ID"></label><p aria-live="polite"><strong>${state.layoutDraft.filter((item) => item.enabled).length}</strong> of ${DASHBOARD_WIDGETS.length} widgets enabled</p></section><div id="layout-list" class="layout-editor">${state.layoutDraft
           .map(
             (item, index) =>
-              `<article draggable="true" tabindex="0" data-index="${index}" class="layout-row"><span class="drag-handle" aria-hidden="true">☰</span><label><input type="checkbox" data-enable="${index}" ${item.enabled ? "checked" : ""}> ${esc(WIDGET_NAMES[item.widget_id])}</label>${select(
+              `<article draggable="true" tabindex="0" data-index="${index}" class="layout-row"><span class="drag-handle" aria-hidden="true">☰</span><label><input type="checkbox" data-enable="${index}" ${item.enabled ? "checked" : ""}> <span><strong>${esc(WIDGET_NAMES[item.widget_id])}</strong><code>${esc(item.widget_id)}</code></span></label>${select(
                 `size-${index}`,
                 "Size",
                 [
@@ -740,6 +716,12 @@ function renderDashboardSettings(layout, manager) {
     bind();
   };
   const bind = () => {
+    qs("#widget-search").oninput = (event) => {
+      const value = event.target.value.trim().toLowerCase();
+      qsa(".layout-row").forEach((row) => {
+        row.hidden = !row.textContent.toLowerCase().includes(value);
+      });
+    };
     const selectAll = qs("#layout-select-all"),
       selection = widgetSelectionState(state.layoutDraft);
     selectAll.checked = selection.checked;
@@ -1161,13 +1143,23 @@ async function renderApplications(params = new URLSearchParams()) {
     view === "kanban"
       ? `<div class="kanban-toolbar"><label>Group cards<select id="kanban-grouping"><option value="date_applied_day">Date Applied · Day</option><option value="date_applied_week">Date Applied · Week</option><option value="date_applied_month">Date Applied · Month</option><option value="last_updated_day">Last Updated · Day</option><option value="next_action_day">Next Action Date · Day</option><option value="none">No grouping</option></select></label></div><div class="kanban" aria-label="Application Kanban board">${data.columns.map((column) => `<section class="kanban-column ${preference.collapsed_columns.includes(column.stage) ? "collapsed" : ""}"><header><button class="column-toggle" data-collapse="${esc(column.stage)}" aria-expanded="${!preference.collapsed_columns.includes(column.stage)}">${badge(column.stage)} <strong>${column.total}</strong></button></header><div class="kanban-column-groups">${groupMarkup(column) || empty("No applications")}</div></section>`).join("")}</div>`
       : "";
+  const activeFilters = [...params.entries()].filter(
+    ([key, value]) =>
+      value && !["view", "page", "page_size", "sort", "direction"].includes(key),
+  );
+  const filterChips = activeFilters
+    .map(
+      ([key, value]) =>
+        `<button class="filter-chip" type="button" data-remove-filter="${esc(key)}" aria-label="Remove ${esc(pretty(key))} filter">${esc(pretty(key))}: ${esc(value)} <span aria-hidden="true">×</span></button>`,
+    )
+    .join("");
   shell(
     pageHead(
       "Applications",
       `${data.total} applications`,
       `<div class="actions"><div class="view-switcher" role="group" aria-label="Applications view"><button class="btn small ${view === "table" ? "" : "secondary"}" data-view="table" aria-pressed="${view === "table"}">Table</button><button class="btn small ${view === "kanban" ? "" : "secondary"}" data-view="kanban" aria-pressed="${view === "kanban"}">Kanban</button></div><button class="btn" data-page="quick-add">Quick Add</button><button class="btn secondary" id="open-export">Export</button></div>`,
     ) +
-      `<section class="card full application-workspace"><div class="toolbar"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select></div><form id="app-filters" class="toolbar advanced-filter-bar"><input name="search" placeholder="Search company, title, location" value="${esc(params.get("search") || "")}"><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">More Filters</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">Save View</button></form><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? '<div id="applications-table-root"></div>' : board}</section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
+      `<section class="card full application-workspace"><div class="toolbar applications-meta"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select><span class="result-count" role="status">${data.total} result${data.total === 1 ? "" : "s"}</span><select id="application-sort" aria-label="Sort applications"><option value="updated_at:desc">Recently updated</option><option value="company:asc">Company A–Z</option><option value="company:desc">Company Z–A</option><option value="job_title:asc">Job title A–Z</option><option value="job_title:desc">Job title Z–A</option><option value="date_applied:desc">Application date: newest</option><option value="date_applied:asc">Application date: oldest</option><option value="salary_min:desc">Salary: highest</option><option value="salary_min:asc">Salary: lowest</option></select></div><form id="app-filters" class="toolbar advanced-filter-bar"><input name="search" type="search" placeholder="Search company, title, location, recruiter, notes, tags..." value="${esc(params.get("search") || "")}"><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option>${["High", "Medium", "Low"].map((priority) => `<option ${params.get("priority") === priority ? "selected" : ""}>${priority}</option>`).join("")}</select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">More Filters</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">Save View</button></form><div class="active-filters" aria-label="Active filters">${filterChips}${activeFilters.length ? `<button class="link-button" type="button" id="clear-filter-chips">Clear all filters</button>` : ""}</div><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? '<div id="applications-table-root"></div>' : board}<div class="pagination"><button class="btn secondary" id="prev-page" ${data.page <= 1 ? "disabled" : ""}>Previous</button><span>Page ${data.page} of ${Math.max(1, data.pages)}</span><button class="btn secondary" id="next-page" ${data.page >= data.pages ? "disabled" : ""}>Next</button></div></section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
         "format",
         "Format",
         [
@@ -1231,11 +1223,53 @@ async function renderApplications(params = new URLSearchParams()) {
     "aria-label",
     "Filter by priority",
   );
+  qs("#application-sort").value = `${params.get("sort") || "updated_at"}:${params.get("direction") || "desc"}`;
+  qs("#application-sort").onchange = (event) => {
+    const [sort, direction] = event.target.value.split(":");
+    params.set("sort", sort);
+    params.set("direction", direction);
+    params.set("page", "1");
+    renderApplications(params);
+  };
+  let searchTimer;
+  qs('#app-filters input[name="search"]').oninput = (event) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      const value = event.target.value.trim().replace(/\s+/g, " ");
+      value ? params.set("search", value) : params.delete("search");
+      params.set("page", "1");
+      renderApplications(params);
+    }, 300);
+  };
   qs("#app-filters").onsubmit = (event) => {
     event.preventDefault();
     const next = new URLSearchParams(new FormData(event.currentTarget));
+    qsa("#advanced-filters input, #advanced-filters select").forEach((control) => {
+      if (control.name && control.value) next.set(control.name, control.value);
+    });
     next.set("view", view);
+    next.set("sort", params.get("sort") || "updated_at");
+    next.set("direction", params.get("direction") || "desc");
+    next.set("page", "1");
     renderApplications(next);
+  };
+  qsa("[data-remove-filter]").forEach((button) => {
+    button.onclick = () => {
+      params.delete(button.dataset.removeFilter);
+      params.set("page", "1");
+      renderApplications(params);
+    };
+  });
+  if (qs("#clear-filter-chips"))
+    qs("#clear-filter-chips").onclick = () =>
+      renderApplications(new URLSearchParams({ view }));
+  qs("#prev-page").onclick = () => {
+    params.set("page", String(Math.max(1, data.page - 1)));
+    renderApplications(params);
+  };
+  qs("#next-page").onclick = () => {
+    params.set("page", String(Math.min(data.pages, data.page + 1)));
+    renderApplications(params);
   };
   qsa("[data-view]").forEach(
     (button) =>
