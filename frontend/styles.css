@@ -1,91 +1,267 @@
+/*
+ * JobQuest design system — navy/charcoal dark UI with soft indigo accents.
+ * Canonical tokens are defined once below as hex (universal fallback);
+ * an @supports block near the end of this section re-declares the same
+ * tokens as oklch for browsers that understand it — real per-property
+ * fallback, not just a redundant re-declaration. Every rule in this file
+ * should read colors through these custom properties — the handful of
+ * "legacy" aliases further down exist only so the rest of the stylesheet
+ * (written against older names such as --brand/--ink/--paper) keeps working
+ * unchanged while pointing at the new palette.
+ */
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+
 :root {
-  color-scheme: light;
-  --ink: #18212f;
-  --muted: #657084;
-  --text-primary: var(--ink);
-  --text-secondary: #3d4758;
-  --text-muted: var(--muted);
-  --text-disabled: #7b8493;
-  --text-link: #294fbf;
-  --line: #dce2ea;
-  --paper: #fff;
-  --wash: #f5f7fb;
-  --brand: #3157d5;
-  --brand2: #213c99;
-  --good: #13795b;
-  --bad: #b42318;
-  --warn: #b54708;
-  --sidebar: #17213c;
-  --field: #fff;
-  --surface-primary: var(--paper);
-  --surface-secondary: var(--wash);
-  --border-default: var(--line);
-  --control-secondary-bg: #edf1fb;
-  --control-secondary-text: #294294;
-  --status-soft: #edf1fb;
-  --error-surface: #fff0ef;
-  --shadow: 0 12px 35px rgba(24, 33, 47, 0.09);
-  --color-canvas: #f6f7f9;
-  --color-sidebar: #ffffff;
-  --color-surface-1: #ffffff;
-  --color-surface-2: #f1f3f6;
-  --color-surface-3: #e8ebf0;
-  --color-text: #172033;
-  --color-text-muted: #667085;
-  --color-border: #dfe3ea;
-  --color-border-strong: #c7ced9;
-  --color-accent: #3157d5;
-  --color-accent-soft: #e9edff;
-  --color-focus: #5076f2;
-  --radius: 8px;
-  --danger: var(--bad);
-  --success: var(--good);
-  font-family:
-    Inter,
+  color-scheme: dark;
+
+  /* ---- radius scale (base ~0.55rem, scaled for cards vs. buttons) ---- */
+  --radius: 0.55rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  /* ---- typography ---- */
+  --font-sans:
+    "Plus Jakarta Sans",
     ui-sans-serif,
     system-ui,
     -apple-system,
     sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* ---- canonical color tokens (dark navy / soft indigo — default theme) ---- */
+  --background: #171b26;
+  --foreground: #eef1f7;
+
+  --surface: #1c212f;
+  --surface-2: #212736;
+
+  --card: #1d2230;
+  --card-foreground: var(--foreground);
+  --popover: #1e2432;
+  --popover-foreground: var(--foreground);
+
+  --primary: #7d86f2;
+  --primary-foreground: #171b26;
+
+  --secondary: #232939;
+  --secondary-foreground: #e9ecf3;
+
+  --muted: #222836;
+  --muted-foreground: #a7aebd;
+
+  --accent: #262c3e;
+  --accent-foreground: #f0f2f8;
+
+  --destructive: #e2584a;
+  --destructive-foreground: #fafbfd;
+  --success: #4dc596;
+  --success-foreground: #181d29;
+  --warning: #dcae4c;
+  --warning-foreground: #181d29;
+  --info: #5fa6dc;
+  --info-foreground: #181d29;
+
+  --border: #262c3b;
+  --border-strong: #333b4f;
+  --input: #282f40;
+  --ring: #8f97f5;
+
+  --chart-1: #7d86f2;
+  --chart-2: #5fa6dc;
+  --chart-3: #4dc596;
+  --chart-4: #dcae4c;
+  --chart-5: #d4699f;
+
+  /* Sidebar stays a persistent dark navy in both the light and dark theme
+     (a common product pattern: the app frame stays constant while page
+     content follows the chosen theme), so it lives outside the per-theme
+     overrides below. */
+  --sidebar: #12162a;
+  --sidebar-foreground: #d7dae2;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: #212637;
+  --sidebar-accent-foreground: #f2f4f9;
+  --sidebar-border: #212736;
+  --sidebar-ring: var(--ring);
+
+  --shadow: 0 12px 35px rgba(0, 0, 0, 0.35);
+
+  /* ---- legacy aliases — keep the rest of this stylesheet unchanged ---- */
+  --ink: var(--foreground);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--foreground);
+  --text-muted: var(--muted-foreground);
+  --text-disabled: color-mix(in srgb, var(--foreground) 40%, transparent);
+  --text-link: var(--primary);
+  --line: var(--border);
+  --paper: var(--card);
+  --wash: var(--muted);
+  --brand: var(--primary);
+  --brand2: color-mix(in srgb, var(--primary) 82%, black);
+  --good: var(--success);
+  --bad: var(--destructive);
+  --warn: var(--warning);
+  --field: var(--secondary);
+  --surface-primary: var(--card);
+  --surface-secondary: var(--secondary);
+  --border-default: var(--border);
+  --control-secondary-bg: var(--secondary);
+  --control-secondary-text: var(--secondary-foreground);
+  --status-soft: var(--secondary);
+  --error-surface: color-mix(in srgb, var(--destructive) 16%, transparent);
+  --color-canvas: var(--background);
+  --color-sidebar: var(--sidebar);
+  --color-surface-1: var(--card);
+  --color-surface-2: var(--secondary);
+  --color-surface-3: var(--muted);
+  --color-text: var(--foreground);
+  --color-text-muted: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--primary);
+  --color-accent-soft: var(--sidebar-accent);
+  --color-focus: var(--ring);
+  --danger: var(--destructive);
+
+  font-family: var(--font-sans);
 }
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --ink: #edf2fa;
-  --muted: #aebbd0;
-  --text-primary: #f1f5f9;
-  --text-secondary: #cbd5e1;
-  --text-muted: #aebbd0;
-  --text-disabled: #8290a8;
-  --text-link: #a9baff;
-  --line: #354158;
-  --paper: #1d2637;
-  --wash: #111827;
-  --brand: #8aa4ff;
-  --brand2: #a9baff;
-  --good: #5ee0b4;
-  --bad: #ff8a82;
-  --warn: #ffb86b;
-  --sidebar: #0b1020;
-  --field: #151e2e;
-  --surface-primary: var(--paper);
-  --surface-secondary: #172033;
-  --border-default: var(--line);
-  --control-secondary-bg: #293650;
-  --control-secondary-text: #dce5ff;
-  --status-soft: #293650;
-  --error-surface: #44252b;
-  --shadow: 0 12px 35px rgba(0, 0, 0, 0.28);
-  --color-canvas: #090d16;
-  --color-sidebar: #0d1220;
-  --color-surface-1: #121827;
-  --color-surface-2: #171f30;
-  --color-surface-3: #202a3d;
-  --color-text: #edf1f7;
-  --color-text-muted: #b1bbca;
-  --color-border: #273247;
-  --color-border-strong: #35425a;
-  --color-accent: #8098ff;
-  --color-accent-soft: #202b58;
-  --color-focus: #9ab0ff;
+
+/* Explicit light theme — the reference design is dark-only, but JobQuest's
+   existing light/dark/system theme toggle is a feature we preserve, so the
+   light palette follows the same indigo-accent language at higher lightness.
+   Only the tokens that actually change are redeclared; every legacy alias
+   above cascades through automatically. Sidebar tokens intentionally are not
+   redeclared here — the sidebar stays dark in both themes. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --background: #f4f5fa;
+  --foreground: #1b2032;
+
+  --surface: #ffffff;
+  --surface-2: #eef0f6;
+
+  --card: #ffffff;
+  --card-foreground: var(--foreground);
+  --popover: #ffffff;
+  --popover-foreground: var(--foreground);
+
+  --primary: #5b63d3;
+  --primary-foreground: #ffffff;
+
+  --secondary: #eceefa;
+  --secondary-foreground: #262c42;
+
+  --muted: #eef0f6;
+  --muted-foreground: #676f85;
+
+  --accent: #e7e9fb;
+  --accent-foreground: #20263c;
+
+  --destructive: #d1453a;
+  --destructive-foreground: #ffffff;
+  --success: #12946f;
+  --success-foreground: #ffffff;
+  --warning: #a5730a;
+  --warning-foreground: #ffffff;
+  --info: #1f6fb2;
+  --info-foreground: #ffffff;
+
+  --border: #dde1ec;
+  --border-strong: #c3c9db;
+  --input: #dde1ec;
+  --ring: #5b63d3;
+
+  --chart-1: #5b63d3;
+  --chart-2: #1f6fb2;
+  --chart-3: #12946f;
+  --chart-4: #a5730a;
+  --chart-5: #b23e78;
+
+  --shadow: 0 12px 35px rgba(24, 33, 47, 0.09);
+}
+
+/* Real per-property fallback: browsers that don't understand oklch() never
+   parse the declarations in this block at all, so the hex values above are
+   what they use. Browsers that do understand it apply this block (it comes
+   later in source order) and get the oklch tokens instead. */
+@supports (color: oklch(0.6 0.15 250)) {
+  :root {
+    --background: oklch(0.19 0.019 264);
+    --foreground: oklch(0.955 0.008 260);
+    --surface: oklch(0.225 0.021 264);
+    --surface-2: oklch(0.26 0.023 264);
+    --card: oklch(0.228 0.021 264);
+    --popover: oklch(0.235 0.022 264);
+    --primary: oklch(0.66 0.14 273);
+    --primary-foreground: oklch(0.16 0.02 264);
+    --secondary: oklch(0.29 0.024 264);
+    --secondary-foreground: oklch(0.94 0.008 260);
+    --muted: oklch(0.275 0.022 264);
+    --muted-foreground: oklch(0.735 0.021 262);
+    --accent: oklch(0.31 0.03 268);
+    --accent-foreground: oklch(0.96 0.008 260);
+    --destructive: oklch(0.63 0.18 22);
+    --destructive-foreground: oklch(0.98 0.006 260);
+    --success: oklch(0.68 0.13 162);
+    --success-foreground: oklch(0.17 0.02 264);
+    --warning: oklch(0.78 0.13 78);
+    --warning-foreground: oklch(0.17 0.02 264);
+    --info: oklch(0.7 0.11 235);
+    --info-foreground: oklch(0.17 0.02 264);
+    --border: oklch(0.3 0.022 264);
+    --border-strong: oklch(0.38 0.026 264);
+    --input: oklch(0.32 0.024 264);
+    --ring: oklch(0.7 0.13 273);
+    --chart-1: oklch(0.66 0.14 273);
+    --chart-2: oklch(0.7 0.11 235);
+    --chart-3: oklch(0.68 0.13 162);
+    --chart-4: oklch(0.78 0.13 78);
+    --chart-5: oklch(0.65 0.15 340);
+    --sidebar: oklch(0.175 0.018 264);
+    --sidebar-foreground: oklch(0.88 0.012 260);
+    --sidebar-accent: oklch(0.26 0.026 268);
+    --sidebar-accent-foreground: oklch(0.97 0.008 260);
+    --sidebar-border: oklch(0.27 0.02 264);
+  }
+
+  :root[data-theme="light"] {
+    --background: oklch(0.965 0.004 264);
+    --foreground: oklch(0.22 0.024 264);
+    --surface: oklch(1 0 0);
+    --surface-2: oklch(0.95 0.006 264);
+    --card: oklch(1 0 0);
+    --popover: oklch(1 0 0);
+    --primary: oklch(0.52 0.16 273);
+    --primary-foreground: oklch(1 0 0);
+    --secondary: oklch(0.93 0.014 270);
+    --secondary-foreground: oklch(0.27 0.03 264);
+    --muted: oklch(0.95 0.006 264);
+    --muted-foreground: oklch(0.48 0.021 262);
+    --accent: oklch(0.91 0.02 270);
+    --accent-foreground: oklch(0.24 0.03 264);
+    --destructive: oklch(0.55 0.19 22);
+    --destructive-foreground: oklch(1 0 0);
+    --success: oklch(0.5 0.12 162);
+    --success-foreground: oklch(1 0 0);
+    --warning: oklch(0.55 0.13 78);
+    --warning-foreground: oklch(1 0 0);
+    --info: oklch(0.5 0.12 235);
+    --info-foreground: oklch(1 0 0);
+    --border: oklch(0.9 0.008 264);
+    --border-strong: oklch(0.82 0.014 264);
+    --input: oklch(0.9 0.008 264);
+    --ring: oklch(0.52 0.16 273);
+    --chart-1: oklch(0.52 0.16 273);
+    --chart-2: oklch(0.5 0.12 235);
+    --chart-3: oklch(0.5 0.12 162);
+    --chart-4: oklch(0.55 0.13 78);
+    --chart-5: oklch(0.5 0.16 340);
+  }
 }
 * {
   box-sizing: border-box;
@@ -94,6 +270,7 @@ body {
   margin: 0;
   color: var(--ink);
   background: var(--color-canvas);
+  -webkit-font-smoothing: antialiased;
 }
 button,
 input,
@@ -104,6 +281,16 @@ textarea {
 button {
   cursor: pointer;
 }
+/* Reusable design-system utilities (mirrors the reference's @utility rules) */
+.panel {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
 .skip-link {
   position: absolute;
   left: -9999px;
@@ -111,7 +298,8 @@ button {
 .skip-link:focus {
   left: 1rem;
   top: 1rem;
-  background: #fff;
+  background: var(--card);
+  color: var(--foreground);
   padding: 0.75rem;
   z-index: 99;
 }
@@ -119,23 +307,25 @@ button {
   min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(320px, 520px);
+  background: var(--background);
 }
 .auth-brand {
   padding: clamp(3rem, 8vw, 8rem);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  background: #253f9f;
-  color: #fff;
+  background: linear-gradient(160deg, var(--sidebar), color-mix(in srgb, var(--primary) 22%, var(--sidebar)));
+  color: var(--sidebar-foreground);
 }
 .auth-brand h1 {
   font-size: clamp(3rem, 7vw, 6rem);
   margin: 0;
   letter-spacing: -0.07em;
+  color: #fff;
 }
 .auth-brand p {
   max-width: 34rem;
-  color: #d8e0ff;
+  color: color-mix(in srgb, var(--sidebar-foreground) 85%, transparent);
   font-size: 1.2rem;
   line-height: 1.6;
 }
@@ -143,7 +333,7 @@ button {
   padding: clamp(2rem, 6vw, 5rem);
   display: flex;
   align-items: center;
-  background: #fff;
+  background: var(--card);
 }
 .auth-panel form {
   width: 100%;
@@ -552,8 +742,8 @@ a {
   max-width: 360px;
   padding: 0.8rem 1rem;
   border-radius: 0.6rem;
-  color: #fff;
-  background: #17213c;
+  color: var(--sidebar-foreground);
+  background: var(--sidebar);
   box-shadow: var(--shadow);
   opacity: 0;
   transform: translateY(1rem);
@@ -570,8 +760,9 @@ pre.example {
   max-height: 260px;
   overflow: auto;
   border-radius: 0.7rem;
-  background: #18212f;
-  color: #e7ecf8;
+  background: var(--sidebar);
+  color: var(--sidebar-foreground);
+  font-family: var(--font-mono);
   font-size: 0.8rem;
 }
 .mobile-nav {
@@ -1356,7 +1547,7 @@ dialog {
   box-shadow: 0 20px 60px #0008;
 }
 dialog::backdrop {
-  background: #0f172acc;
+  background: color-mix(in srgb, var(--sidebar) 80%, transparent);
 }
 .mobile-menu,
 .sidebar-backdrop {
