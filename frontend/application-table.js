@@ -1,4 +1,14 @@
+import { STAGE_CLASS, priorityBadgeHtml } from "./ui-utils.js";
+
 const dash = "\u2014";
+const escHtml = (value = "") =>
+  String(value ?? "").replace(
+    /[&<>'"]/g,
+    (char) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[
+        char
+      ],
+  );
 
 function element(document, tag, options = {}) {
   const node = document.createElement(tag);
@@ -48,21 +58,26 @@ function appendCell(document, row, item, column, callbacks) {
       `Select ${item.company} ${item.job_title}`,
     );
     input.addEventListener("click", (event) => event.stopPropagation());
-    input.addEventListener("change", () =>
-      callbacks.onSelect?.(item, input.checked),
-    );
+    input.addEventListener("change", () => {
+      callbacks.onSelect?.(item, input.checked);
+      row.classList.toggle("is-selected", input.checked);
+    });
     cell.append(input);
   } else if (column.key === "company") {
     cell.append(element(document, "strong", { text: item.company }));
   } else if (column.key === "stage") {
     const stage = element(document, "span", {
-      className: "badge stage-badge",
+      className: `badge stage-badge ${STAGE_CLASS[item.stage] || ""}`,
       text: item.stage,
     });
-    stage.dataset.stage = item.stage || "";
     cell.append(stage);
+  } else if (column.key === "priority") {
+    cell.innerHTML = priorityBadgeHtml(item.priority, escHtml);
   } else if (column.key === "resume_version") {
     cell.textContent = item.resume_version || "No resume specified";
+  } else if (column.key === "date_applied" || column.key === "next_action_date" || column.key === "updated_at") {
+    cell.className = "num";
+    cell.textContent = String(item[column.key] || dash);
   } else if (column.key === "actions") {
     const preview = button(document, "Preview", "btn small secondary");
     preview.setAttribute(
@@ -171,7 +186,9 @@ export function createApplicationTable(document, options = {}) {
     body.append(row);
   } else {
     for (const item of items) {
-      const row = element(document, "tr", { className: "clickable-row" });
+      const row = element(document, "tr", {
+        className: `clickable-row${selected.has(item.id) ? " is-selected" : ""}`,
+      });
       row.tabIndex = 0;
       row.dataset.open = String(item.id);
       row.addEventListener("click", () => onOpen?.(item));

@@ -751,20 +751,20 @@ legend {
 .table-wrap {
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 0.8rem;
+  border-radius: var(--radius-lg);
   background: var(--paper);
 }
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
 }
 th,
 td {
-  padding: 0.75rem;
+  padding: 0.65rem 0.75rem;
   border-bottom: 1px solid var(--line);
   text-align: left;
-  vertical-align: top;
+  vertical-align: middle;
   white-space: nowrap;
 }
 th {
@@ -973,64 +973,79 @@ pre.example {
 .timeline-event p {
   margin: 0.25rem 0;
 }
+/* Stage → tone. Mirrors the reference's semantic pill colors (Applied =
+   indigo, Screening = blue, Interview = green, Offer = amber, Rejected =
+   red, Ghosted = muted) extended to JobQuest's fuller 13-stage pipeline. */
 .stage-saved::before,
 .stage-saved {
-  --stage: #64748b;
+  --stage: var(--muted-foreground);
 }
 .stage-preparing::before,
 .stage-preparing {
-  --stage: #7c3aed;
+  --stage: var(--muted-foreground);
 }
 .stage-applied::before,
 .stage-applied {
-  --stage: #2563eb;
+  --stage: var(--primary);
 }
 .stage-assessment::before,
 .stage-assessment {
-  --stage: #0891b2;
+  --stage: var(--info);
 }
 .stage-recruiter-screen::before,
 .stage-recruiter-screen {
-  --stage: #4f46e5;
+  --stage: var(--info);
 }
 .stage-interview::before,
 .stage-interview {
-  --stage: #9333ea;
+  --stage: var(--success);
 }
 .stage-final-interview::before,
 .stage-final-interview {
-  --stage: #6d28d9;
+  --stage: var(--success);
 }
 .stage-offer::before,
 .stage-offer {
-  --stage: #d97706;
+  --stage: var(--warning);
 }
 .stage-accepted::before,
 .stage-accepted {
-  --stage: #16a34a;
+  --stage: var(--success);
 }
 .stage-rejected::before,
 .stage-rejected {
-  --stage: #dc2626;
+  --stage: var(--destructive);
 }
 .stage-ghosted::before,
 .stage-ghosted {
-  --stage: #ea580c;
+  --stage: var(--muted-foreground);
 }
 .stage-withdrawn::before,
 .stage-withdrawn {
-  --stage: #6b7280;
+  --stage: var(--muted-foreground);
 }
 .stage-position-closed::before,
 .stage-position-closed {
-  --stage: #9f1239;
+  --stage: var(--muted-foreground);
 }
 .timeline-event::before {
   background: var(--stage, var(--brand));
 }
 .stage-badge {
-  color: #fff !important;
-  background: var(--stage, var(--brand)) !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--stage, var(--brand)) 32%, transparent) !important;
+  color: var(--stage, var(--brand)) !important;
+  background: color-mix(in srgb, var(--stage, var(--brand)) 15%, transparent) !important;
+  font-weight: 700 !important;
+}
+.stage-badge::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
 }
 .summary-grid {
   display: grid;
@@ -1083,6 +1098,17 @@ pre.example {
 .clickable-row:focus {
   background: color-mix(in srgb, var(--brand) 8%, var(--paper));
   outline: none;
+}
+.clickable-row.is-selected {
+  background: color-mix(in srgb, var(--primary) 10%, var(--paper));
+}
+.clickable-row.is-selected:hover {
+  background: color-mix(in srgb, var(--primary) 15%, var(--paper));
+}
+tbody td:nth-child(2),
+tbody td.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 .widget-grid {
   display: grid;
@@ -1198,21 +1224,22 @@ pre.example {
   justify-content: space-between;
   gap: 0.75rem;
   min-width: 0;
-  padding: 0.75rem 0.9rem;
+  padding: 0.65rem 0.9rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--paper);
 }
 .application-summary span {
   overflow: hidden;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .application-summary strong {
   flex: 0 0 auto;
-  font-size: 1.2rem;
+  font-size: 1.15rem;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 .application-workspace .table-wrap table {
@@ -1222,25 +1249,68 @@ pre.example {
   color: var(--muted);
   font-weight: 700;
 }
+.search-field {
+  position: relative;
+  min-width: 0;
+  flex: 1 1 16rem;
+}
+.search-field .icon {
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+.search-field input {
+  padding-left: 2.1rem;
+}
+.filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
 .active-filters {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
   overflow-x: auto;
   padding: 0.25rem 0 0.75rem;
 }
 .filter-chip {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   border: 1px solid color-mix(in srgb, var(--brand) 45%, var(--line));
   border-radius: 999px;
   background: color-mix(in srgb, var(--brand) 12%, var(--paper));
   color: var(--ink);
-  padding: 0.4rem 0.65rem;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
   cursor: pointer;
 }
 .pagination {
   align-items: center;
   justify-content: flex-end;
   margin-top: 1rem;
+}
+.pagination.applications-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  padding: 0.75rem 0.9rem 0;
+  border-top: 1px solid var(--border);
 }
 
 @media (max-width: 800px) {
