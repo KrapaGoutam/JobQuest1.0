@@ -132,6 +132,27 @@ function areaLineChart(points, valueOf) {
     : "";
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="chart-svg" role="img" aria-label="Application activity trend"><defs><linearGradient id="activity-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--chart-1)" stop-opacity="0.4"/><stop offset="100%" stop-color="var(--chart-1)" stop-opacity="0.02"/></linearGradient></defs>${area ? `<path d="${area}" fill="url(#activity-fill)" stroke="none"></path>` : ""}<path d="${line}" fill="none" stroke="var(--chart-1)" stroke-width="2" vector-effect="non-scaling-stroke"></path></svg>`;
 }
+// The app's CSP (style-src 'self', no 'unsafe-inline') blocks HTML `style="..."`
+// attributes, so every value-driven bar/height uses SVG geometry attributes
+// (width/height/x/y) instead — those aren't governed by style-src.
+function hBar(pct, label = "") {
+  const value = Math.min(100, Math.max(0, pct || 0));
+  return `<svg viewBox="0 0 100 10" preserveAspectRatio="none" class="hbar-svg" role="img" aria-label="${esc(label)}"><rect x="0" y="0" width="100" height="10" rx="5" class="hbar-track"></rect><rect x="0" y="0" width="${value.toFixed(2)}" height="10" rx="5" class="hbar-fill"></rect></svg>`;
+}
+function vBars(values, { titles = [], max } = {}) {
+  const top = Math.max(1, max ?? Math.max(...values, 0)),
+    w = 100,
+    h = 40,
+    gap = values.length ? Math.min(2, w / values.length / 4) : 0,
+    barW = values.length ? w / values.length - gap : 0;
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="vbars-svg" role="img" aria-label="Bar chart">${values
+    .map((value, index) => {
+      const barH = Math.max(1, (Math.min(top, value) / top) * h),
+        x = index * (barW + gap);
+      return `<rect x="${x.toFixed(2)}" y="${(h - barH).toFixed(2)}" width="${barW.toFixed(2)}" height="${barH.toFixed(2)}" class="vbar-fill"><title>${esc(titles[index] || String(value))}</title></rect>`;
+    })
+    .join("")}</svg>`;
+}
 function pageHead(title, subtitle, action = "") {
   return `<header class="page-head"><div><div class="eyebrow">JobQuest Workspace</div><h1>${esc(title)}</h1><p class="muted">${esc(subtitle)}</p></div>${action}</header>`;
 }
@@ -533,17 +554,22 @@ function widgetContent(id, data, manager) {
           pct = Math.round((value / top) * 100),
           previous = values[index - 1],
           conversion = previous ? Math.round((value / previous) * 100) : 100;
-        return `<li><div class="funnel-row-head"><span>${esc(stage)}</span><span class="muted num">${value} · ${conversion}% from previous</span></div><div class="funnel-bar" role="img" aria-label="${esc(stage)}: ${value} applications, ${pct}% of top of funnel"><div style="width:${pct}%"></div></div></li>`;
+        return `<li><div class="funnel-row-head"><span>${esc(stage)}</span><span class="muted num">${value} · ${conversion}% from previous</span></div><div class="funnel-bar">${hBar(pct, `${stage}: ${value} applications, ${pct}% of top of funnel`)}</div></li>`;
       })
       .join("")}</ul>`;
   }
-  if (id === "applications-stage")
+  if (id === "applications-stage") {
+    const values = STAGES.slice(0, 13).map(
+      (stage) => data.base.pipeline?.[stage] || 0,
+    );
+    const top = Math.max(1, ...values);
     return `<div class="mini-bars">${STAGES.slice(0, 13)
       .map(
-        (stage) =>
-          `<div><span>${esc(stage)}</span><i style="--value:${data.base.pipeline?.[stage] || 0}"></i><strong class="num">${data.base.pipeline?.[stage] || 0}</strong></div>`,
+        (stage, index) =>
+          `<div><span>${esc(stage)}</span><div class="mini-bar">${hBar((values[index] / top) * 100, `${stage}: ${values[index]}`)}</div><strong class="num">${values[index]}</strong></div>`,
       )
       .join("")}</div>`;
+  }
   if (id === "applications-source")
     return (
       data.source
@@ -564,22 +590,43 @@ function widgetContent(id, data, manager) {
         )
         .join("") || empty("Add a resume to compare performance")
     );
-  if (id === "daily-goal-chart")
-    return `<div class="goal-chart" role="img" aria-label="Daily application goal target versus actual">${data.goalSeries.items.map((item) => `<div class="goal-day ${item.achieved ? "achieved" : "missed"}" title="${esc(item.period_start)}: ${item.actual} of ${item.target}"><i style="height:${Math.min(100, item.target ? (item.actual / item.target) * 100 : 0)}%"></i><span>${esc(item.period_start.slice(5))}</span><strong class="num">${item.actual}/${item.target}</strong></div>`).join("") || empty("Configure a daily applications goal to see progress")}</div><p class="muted num">${data.goalSeries.summary.actual} today · ${data.goalSeries.summary.remaining} remaining · ${data.goalSeries.summary.achieved_days} achieved days</p>`;
+  if (id === "daily-goal-chart") {
+    const items = data.goalSeries.items;
+    const bars = items.length
+      ? (() => {
+          const w = 100,
+            h = 32,
+            gap = Math.min(2, w / items.length / 4),
+            barW = w / items.length - gap;
+          return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="vbars-svg goal-chart-svg" role="img" aria-label="Daily application goal target versus actual">${items
+            .map((item, index) => {
+              const pct = Math.min(
+                  100,
+                  item.target ? (item.actual / item.target) * 100 : 0,
+                ),
+                barH = Math.max(1, (pct / 100) * h),
+                x = index * (barW + gap);
+              return `<rect x="${x.toFixed(2)}" y="${(h - barH).toFixed(2)}" width="${barW.toFixed(2)}" height="${barH.toFixed(2)}" class="vbar-fill ${item.achieved ? "achieved" : "missed"}"><title>${esc(item.period_start)}: ${item.actual} of ${item.target}</title></rect>`;
+            })
+            .join("")}</svg>`;
+        })()
+      : "";
+    return `<div class="goal-chart">${bars || empty("Configure a daily applications goal to see progress")}</div>${items.length ? `<div class="chart-labels muted num">${[items[0], items.at(-1)].map((item) => `<span>${esc(item.period_start.slice(5))}</span>`).join("")}</div>` : ""}<p class="muted num">${data.goalSeries.summary.actual} today · ${data.goalSeries.summary.remaining} remaining · ${data.goalSeries.summary.achieved_days} achieved days</p>`;
+  }
   if (id === "weekly-goals" || id === "daily-goals")
     return `<div class="goal-radial-wrap">${radialProgress(data.goals.summary.achievement_percentage, WIDGET_NAMES[id])}<div><p class="num goal-radial-count">${data.goals.summary.achieved} <span class="muted">achieved</span></p><p class="muted">${data.goals.summary.missed} missed this period</p></div></div>`;
   if (id.includes("goal"))
     return `<div class="metric num">${data.goals.summary.achievement_percentage}%</div><p class="muted">${data.goals.summary.achieved} achieved · ${data.goals.summary.missed} missed</p>`;
   if (id === "reminder-center")
-    return (
-      `<ul class="next-actions-list">${data.reminders
-        .slice(0, 4)
-        .map((item) => {
-          const tone = toneFor(item.calculated_status);
-          return `<li><span class="tone-chip tone-${tone}">${esc(pretty(item.calculated_status || ""))}</span><span class="next-action-label">${esc(item.title)}</span></li>`;
-        })
-        .join("")}</ul>` || empty("No reminders")
-    );
+    return data.reminders.length
+      ? `<ul class="next-actions-list">${data.reminders
+          .slice(0, 4)
+          .map((item) => {
+            const tone = toneFor(item.calculated_status);
+            return `<li><span class="tone-chip tone-${tone}">${esc(pretty(item.calculated_status || ""))}</span><span class="next-action-label">${esc(item.title)}</span></li>`;
+          })
+          .join("")}</ul>`
+      : empty("No reminders");
   if (id === "aging-applications")
     return `<ul class="kv-list">${Object.entries(data.aging.summary)
       .map(
@@ -587,43 +634,48 @@ function widgetContent(id, data, manager) {
           `<li><span class="tone-dot tone-${toneFor(band)}"></span><span class="muted">${esc(band)}</span><strong class="num">${count}</strong></li>`,
       )
       .join("")}</ul>`;
-  if (id === "stage-duration")
-    return (
-      `<ul class="kv-list">${data.stages.stages
-        .filter((item) => item.sample_size)
-        .slice(0, 5)
-        .map(
-          (item) =>
-            `<li><span class="muted">${esc(item.stage)}</span><strong class="num">${item.average}d</strong><span class="muted num">n=${item.sample_size}</span></li>`,
-        )
-        .join("")}</ul>` || empty("More stage history is needed")
-    );
-  if (id === "recent-activity")
-    return (
-      `<ol class="timeline-feed">${(data.base.recent_activity || [])
-        .slice(0, 5)
-        .map((item) => {
-          const time = item.created_at || item.event_date || "";
-          return `<li><span class="timeline-feed-marker tone-${toneFor(item.activity_type)}" aria-hidden="true"></span><div><p>${esc(item.note || pretty(item.activity_type || "Update"))}</p>${time ? `<p class="muted num">${esc(String(time).slice(0, 10))}</p>` : ""}</div></li>`;
-        })
-        .join("")}</ol>` || empty("No recent activity")
-    );
+  if (id === "stage-duration") {
+    const stages = data.stages.stages.filter((item) => item.sample_size);
+    return stages.length
+      ? `<ul class="kv-list">${stages
+          .slice(0, 5)
+          .map(
+            (item) =>
+              `<li><span class="muted">${esc(item.stage)}</span><strong class="num">${item.average}d</strong><span class="muted num">n=${item.sample_size}</span></li>`,
+          )
+          .join("")}</ul>`
+      : empty("More stage history is needed");
+  }
+  if (id === "recent-activity") {
+    const items = data.base.recent_activity || [];
+    return items.length
+      ? `<ol class="timeline-feed">${items
+          .slice(0, 5)
+          .map((item) => {
+            const time = item.created_at || item.event_date || "";
+            return `<li><span class="timeline-feed-marker tone-${toneFor(item.activity_type)}" aria-hidden="true"></span><div><p>${esc(item.note || pretty(item.activity_type || "Update"))}</p>${time ? `<p class="muted num">${esc(String(time).slice(0, 10))}</p>` : ""}</div></li>`;
+          })
+          .join("")}</ol>`
+      : empty("No recent activity");
+  }
   if (id === "pinned-applications")
     return `<button class="link-button" data-page="applications">Open pinned applications</button>`;
-  if (id === "health-summary")
-    return (
-      `<dl class="kv-list">${Object.entries(
-        data.aging.items.reduce((result, item) => {
-          result[item.health] = (result[item.health] || 0) + 1;
-          return result;
-        }, {}),
-      )
-        .map(
-          ([health, count]) =>
-            `<div class="kv-row"><span class="tone-dot tone-${toneFor(health)}"></span><dt class="muted">${esc(health)}</dt><dd class="num">${count}</dd></div>`,
-        )
-        .join("")}</dl>` || empty("No applications")
+  if (id === "health-summary") {
+    const entries = Object.entries(
+      data.aging.items.reduce((result, item) => {
+        result[item.health] = (result[item.health] || 0) + 1;
+        return result;
+      }, {}),
     );
+    return entries.length
+      ? `<dl class="kv-list">${entries
+          .map(
+            ([health, count]) =>
+              `<div class="kv-row"><span class="tone-dot tone-${toneFor(health)}"></span><dt class="muted">${esc(health)}</dt><dd class="num">${count}</dd></div>`,
+          )
+          .join("")}</dl>`
+      : empty("No applications");
+  }
   if (id === "calendar-preview")
     return (
       data.calendar.events
@@ -645,19 +697,20 @@ function widgetContent(id, data, manager) {
         "rejections",
       ];
     const isBar = settings.chart_type === "bar";
-    const chart = isBar
-      ? `<div class="activity-chart bar" aria-label="Application activity summary">${data.activity
-          .map((item) => {
-            const value = metrics.reduce(
-              (sum, metric) => sum + Number(item[metric] || 0),
-              0,
-            );
-            return `<i title="${esc(item.period)}: ${value} selected events" style="height:${Math.max(5, Math.min(100, value * 15))}%"></i>`;
-          })
-          .join("")}</div>`
-      : `<div class="chart-svg-wrap">${areaLineChart(data.activity, (item) =>
-          metrics.reduce((sum, metric) => sum + Number(item[metric] || 0), 0),
-        )}</div>`;
+    const eventValue = (item) =>
+      metrics.reduce((sum, metric) => sum + Number(item[metric] || 0), 0);
+    const chart = !data.activity.length
+      ? empty("No activity in the selected range")
+      : isBar
+        ? `<div class="chart-svg-wrap">${vBars(
+            data.activity.map(eventValue),
+            {
+              titles: data.activity.map(
+                (item) => `${item.period}: ${eventValue(item)} selected events`,
+              ),
+            },
+          )}</div>`
+        : `<div class="chart-svg-wrap">${areaLineChart(data.activity, eventValue)}</div>`;
     const labelSet = data.activity.length
       ? [
           data.activity[0]?.period,

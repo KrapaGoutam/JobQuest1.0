@@ -862,6 +862,7 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
           ".css": "text/css",
           ".js": "text/javascript",
           ".svg": "image/svg+xml",
+          ".woff2": "font/woff2",
         };
         response.writeHead(200, {
           "Content-Type": `${types[extname(requested)] || "application/octet-stream"}; charset=utf-8`,

@@ -9,7 +9,52 @@
  * (written against older names such as --brand/--ink/--paper) keeps working
  * unchanged while pointing at the new palette.
  */
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+/* Self-hosted (frontend/fonts/) — the app's CSP is default-src 'self' with
+   no exception for fonts.googleapis.com/fonts.gstatic.com, so an external
+   @import or <link> would be silently blocked. Latin subset only, static
+   weights actually used in this stylesheet. */
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-800.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-600.woff2") format("woff2");
+}
 
 :root {
   color-scheme: dark;
@@ -616,7 +661,7 @@ h1 {
   font-weight: 800;
 }
 .muted {
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .grid {
   display: grid;
@@ -768,7 +813,7 @@ td {
   white-space: nowrap;
 }
 th {
-  color: var(--muted);
+  color: var(--muted-foreground);
   background: var(--wash);
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -848,12 +893,12 @@ a {
 .empty {
   padding: 3rem 1rem;
   text-align: center;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .loading {
   padding: 4rem;
   text-align: center;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 #toast {
   position: fixed;
@@ -1206,7 +1251,7 @@ tbody td.num {
 .layout-row code {
   display: block;
   margin-top: 0.2rem;
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 0.75rem;
 }
 .applications-meta {
@@ -1231,7 +1276,7 @@ tbody td.num {
 }
 .application-summary span {
   overflow: hidden;
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1246,7 +1291,7 @@ tbody td.num {
   min-width: 1040px;
 }
 .result-count {
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-weight: 700;
 }
 .search-field {
@@ -1373,7 +1418,7 @@ tbody td.num {
 }
 .drag-handle {
   cursor: grab;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .layout-row label {
   display: flex;
@@ -1491,10 +1536,47 @@ tbody td.num {
   overflow: hidden;
   background: var(--secondary);
 }
-.funnel-bar > div {
+/* Shared by the funnel bar, the mini-bars widget, and any other single
+   0-100% indicator built by app.js's hBar() helper — a 2-rect SVG (track +
+   fill) rather than a width-styled div, since the CSP (style-src 'self',
+   no unsafe-inline) blocks inline style="" attributes. */
+.hbar-svg {
+  display: block;
+  width: 100%;
   height: 100%;
-  border-radius: 99px;
-  background: var(--primary);
+}
+.hbar-track {
+  fill: var(--secondary);
+}
+.hbar-fill {
+  fill: var(--primary);
+}
+.mini-bar {
+  height: 0.55rem;
+}
+/* Shared by the daily-goal-chart and activity-chart "bar" mode — built by
+   app.js's vBars() helper for the same CSP reason as hBar() above. */
+.vbars-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.vbar-fill {
+  fill: var(--primary);
+}
+.vbar-fill.achieved {
+  fill: var(--success);
+}
+.vbar-fill.missed {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.5;
+}
+.goal-chart {
+  height: 110px;
+}
+.goal-chart-svg {
+  height: 100%;
 }
 
 .next-actions-list {
@@ -1637,14 +1719,14 @@ tbody td.num {
 }
 .category-row span {
   flex: 1;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .calendar-weekdays {
   display: grid;
   grid-column: 1/-1;
   grid-template-columns: repeat(7, 1fr);
   text-align: center;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .calendar-grid {
   display: grid;
@@ -1715,7 +1797,7 @@ tbody td.num {
 }
 .week-grid .agenda-event span {
   display: block;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .export-card {
   color: var(--ink);
