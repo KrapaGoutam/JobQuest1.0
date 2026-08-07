@@ -95,8 +95,47 @@ function select(name, label, values, value = "", extra = "") {
 function badge(stage) {
   return `<span class="badge stage-badge ${STAGE_CLASS[stage] || ""}">${esc(stage)}</span>`;
 }
+const PRIORITY_TONE = { High: "destructive", Medium: "warning", Low: "muted" };
+function priorityBadge(priority) {
+  return `<span class="badge priority-badge tone-${PRIORITY_TONE[priority] || "muted"}">${esc(priority || "—")}</span>`;
+}
+function toneFor(text = "") {
+  const value = String(text).toLowerCase();
+  if (/(overdue|risk|action needed|stale|rejected|ghosted)/.test(value))
+    return "destructive";
+  if (/(waiting|follow.?up|due|pending)/.test(value)) return "warning";
+  if (/(interview|offer|accepted)/.test(value)) return "info";
+  if (/(on track|healthy|new|response)/.test(value)) return "success";
+  return "muted";
+}
+function radialProgress(pct, label = "") {
+  const value = Math.min(100, Math.max(0, Math.round(pct || 0))),
+    radius = 52,
+    circumference = 2 * Math.PI * radius,
+    offset = circumference - (value / 100) * circumference;
+  return `<svg viewBox="0 0 128 128" class="goal-radial" role="img" aria-label="${value}% ${esc(label)}"><circle cx="64" cy="64" r="${radius}" fill="none" stroke="var(--secondary)" stroke-width="12"/><circle cx="64" cy="64" r="${radius}" fill="none" stroke="var(--primary)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${circumference.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" transform="rotate(-90 64 64)"/></svg><span class="goal-radial-value num">${value}%</span>`;
+}
+function areaLineChart(points, valueOf) {
+  const values = points.map(valueOf),
+    max = Math.max(1, ...values),
+    w = 100,
+    h = 40,
+    pad = 2,
+    stepX = points.length > 1 ? (w - pad * 2) / (points.length - 1) : 0;
+  const coords = values.map((value, index) => [
+    pad + index * stepX,
+    h - pad - (value / max) * (h - pad * 2),
+  ]);
+  const line = coords
+    .map(([x, y], index) => `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`)
+    .join(" ");
+  const area = coords.length
+    ? `${line} L${coords.at(-1)[0].toFixed(2)},${(h - pad).toFixed(2)} L${coords[0][0].toFixed(2)},${(h - pad).toFixed(2)} Z`
+    : "";
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="chart-svg" role="img" aria-label="Application activity trend"><defs><linearGradient id="activity-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--chart-1)" stop-opacity="0.4"/><stop offset="100%" stop-color="var(--chart-1)" stop-opacity="0.02"/></linearGradient></defs>${area ? `<path d="${area}" fill="url(#activity-fill)" stroke="none"></path>` : ""}<path d="${line}" fill="none" stroke="var(--chart-1)" stroke-width="2" vector-effect="non-scaling-stroke"></path></svg>`;
+}
 function pageHead(title, subtitle, action = "") {
-  return `<header class="page-head"><div><div class="eyebrow">JobQuest workspace</div><h1>${esc(title)}</h1><p class="muted">${esc(subtitle)}</p></div>${action}</header>`;
+  return `<header class="page-head"><div><div class="eyebrow">JobQuest Workspace</div><h1>${esc(title)}</h1><p class="muted">${esc(subtitle)}</p></div>${action}</header>`;
 }
 function empty(message) {
   return `<div class="empty">${esc(message)}</div>`;
@@ -484,15 +523,27 @@ function widgetContent(id, data, manager) {
     acceptances: perf.accepted ?? apps.acceptances ?? 0,
   };
   if (id in metrics)
-    return `<div class="metric">${metrics[id]}</div><p class="muted">${WIDGET_NAMES[id]}</p>`;
-  if (id === "job-funnel" || id === "applications-stage")
-    return `<div class="mini-bars">${STAGES.slice(
-      0,
-      id === "job-funnel" ? 8 : 13,
-    )
+    return `<div class="metric num">${metrics[id]}</div><p class="muted">${WIDGET_NAMES[id]}</p>`;
+  if (id === "job-funnel") {
+    const values = STAGES.slice(0, 8).map(
+      (stage) => data.base.pipeline?.[stage] || 0,
+    );
+    const top = values[0] || 1;
+    return `<ul class="funnel-list">${STAGES.slice(0, 8)
+      .map((stage, index) => {
+        const value = values[index],
+          pct = Math.round((value / top) * 100),
+          previous = values[index - 1],
+          conversion = previous ? Math.round((value / previous) * 100) : 100;
+        return `<li><div class="funnel-row-head"><span>${esc(stage)}</span><span class="muted num">${value} · ${conversion}% from previous</span></div><div class="funnel-bar" role="img" aria-label="${esc(stage)}: ${value} applications, ${pct}% of top of funnel"><div style="width:${pct}%"></div></div></li>`;
+      })
+      .join("")}</ul>`;
+  }
+  if (id === "applications-stage")
+    return `<div class="mini-bars">${STAGES.slice(0, 13)
       .map(
         (stage) =>
-          `<div><span>${esc(stage)}</span><i style="--value:${data.base.pipeline?.[stage] || 0}"></i><strong>${data.base.pipeline?.[stage] || 0}</strong></div>`,
+          `<div><span>${esc(stage)}</span><i style="--value:${data.base.pipeline?.[stage] || 0}"></i><strong class="num">${data.base.pipeline?.[stage] || 0}</strong></div>`,
       )
       .join("")}</div>`;
   if (id === "applications-source")
@@ -515,48 +566,55 @@ function widgetContent(id, data, manager) {
         )
         .join("") || empty("Add a resume to compare performance")
     );
+  if (id === "daily-goal-chart")
+    return `<div class="goal-chart" role="img" aria-label="Daily application goal target versus actual">${data.goalSeries.items.map((item) => `<div class="goal-day ${item.achieved ? "achieved" : "missed"}" title="${esc(item.period_start)}: ${item.actual} of ${item.target}"><i style="height:${Math.min(100, item.target ? (item.actual / item.target) * 100 : 0)}%"></i><span>${esc(item.period_start.slice(5))}</span><strong class="num">${item.actual}/${item.target}</strong></div>`).join("") || empty("Configure a daily applications goal to see progress")}</div><p class="muted num">${data.goalSeries.summary.actual} today · ${data.goalSeries.summary.remaining} remaining · ${data.goalSeries.summary.achieved_days} achieved days</p>`;
+  if (id === "weekly-goals" || id === "daily-goals")
+    return `<div class="goal-radial-wrap">${radialProgress(data.goals.summary.achievement_percentage, WIDGET_NAMES[id])}<div><p class="num goal-radial-count">${data.goals.summary.achieved} <span class="muted">achieved</span></p><p class="muted">${data.goals.summary.missed} missed this period</p></div></div>`;
   if (id.includes("goal"))
-    if (id === "daily-goal-chart")
-      return `<div class="goal-chart" role="img" aria-label="Daily application goal target versus actual">${data.goalSeries.items.map((item) => `<div class="goal-day ${item.achieved ? "achieved" : "missed"}" title="${esc(item.period_start)}: ${item.actual} of ${item.target}"><i style="height:${Math.min(100, item.target ? (item.actual / item.target) * 100 : 0)}%"></i><span>${esc(item.period_start.slice(5))}</span><strong>${item.actual}/${item.target}</strong></div>`).join("") || empty("Configure a daily applications goal to see progress")}</div><p>${data.goalSeries.summary.actual} today Â· ${data.goalSeries.summary.remaining} remaining Â· ${data.goalSeries.summary.achieved_days} achieved days</p>`;
-  if (id.includes("goal"))
-    return `<div class="metric">${data.goals.summary.achievement_percentage}%</div><p>${data.goals.summary.achieved} achieved · ${data.goals.summary.missed} missed</p>`;
+    return `<div class="metric num">${data.goals.summary.achievement_percentage}%</div><p class="muted">${data.goals.summary.achieved} achieved · ${data.goals.summary.missed} missed</p>`;
   if (id === "reminder-center")
     return (
-      data.reminders
+      `<ul class="next-actions-list">${data.reminders
         .slice(0, 4)
-        .map(
-          (item) =>
-            `<p><span class="badge">${esc(item.calculated_status)}</span> ${esc(item.title)}</p>`,
-        )
-        .join("") || empty("No reminders")
+        .map((item) => {
+          const tone = toneFor(item.calculated_status);
+          return `<li><span class="tone-chip tone-${tone}">${esc(pretty(item.calculated_status || ""))}</span><span class="next-action-label">${esc(item.title)}</span></li>`;
+        })
+        .join("")}</ul>` || empty("No reminders")
     );
   if (id === "aging-applications")
-    return Object.entries(data.aging.summary)
-      .map(([band, count]) => `<p>${esc(band)} <strong>${count}</strong></p>`)
-      .join("");
+    return `<ul class="kv-list">${Object.entries(data.aging.summary)
+      .map(
+        ([band, count]) =>
+          `<li><span class="tone-dot tone-${toneFor(band)}"></span><span class="muted">${esc(band)}</span><strong class="num">${count}</strong></li>`,
+      )
+      .join("")}</ul>`;
   if (id === "stage-duration")
     return (
-      data.stages.stages
+      `<ul class="kv-list">${data.stages.stages
         .filter((item) => item.sample_size)
         .slice(0, 5)
         .map(
           (item) =>
-            `<p>${esc(item.stage)} <strong>${item.average} days</strong> (n=${item.sample_size})</p>`,
+            `<li><span class="muted">${esc(item.stage)}</span><strong class="num">${item.average}d</strong><span class="muted num">n=${item.sample_size}</span></li>`,
         )
-        .join("") || empty("More stage history is needed")
+        .join("")}</ul>` || empty("More stage history is needed")
     );
   if (id === "recent-activity")
     return (
-      (data.base.recent_activity || [])
+      `<ol class="timeline-feed">${(data.base.recent_activity || [])
         .slice(0, 5)
-        .map((item) => `<p>${esc(item.note || item.activity_type)}</p>`)
-        .join("") || empty("No recent activity")
+        .map((item) => {
+          const time = item.created_at || item.event_date || "";
+          return `<li><span class="timeline-feed-marker tone-${toneFor(item.activity_type)}" aria-hidden="true"></span><div><p>${esc(item.note || pretty(item.activity_type || "Update"))}</p>${time ? `<p class="muted num">${esc(String(time).slice(0, 10))}</p>` : ""}</div></li>`;
+        })
+        .join("")}</ol>` || empty("No recent activity")
     );
   if (id === "pinned-applications")
     return `<button class="link-button" data-page="applications">Open pinned applications</button>`;
   if (id === "health-summary")
     return (
-      Object.entries(
+      `<dl class="kv-list">${Object.entries(
         data.aging.items.reduce((result, item) => {
           result[item.health] = (result[item.health] || 0) + 1;
           return result;
@@ -564,9 +622,9 @@ function widgetContent(id, data, manager) {
       )
         .map(
           ([health, count]) =>
-            `<p>${esc(health)} <strong>${count}</strong></p>`,
+            `<div class="kv-row"><span class="tone-dot tone-${toneFor(health)}"></span><dt class="muted">${esc(health)}</dt><dd class="num">${count}</dd></div>`,
         )
-        .join("") || empty("No applications")
+        .join("")}</dl>` || empty("No applications")
     );
   if (id === "calendar-preview")
     return (
@@ -574,7 +632,7 @@ function widgetContent(id, data, manager) {
         .slice(0, 5)
         .map(
           (item) =>
-            `<p><strong>${esc(item.date.slice(0, 10))}</strong> ${esc(item.title)}</p>`,
+            `<p><strong class="num">${esc(item.date.slice(0, 10))}</strong> ${esc(item.title)}</p>`,
         )
         .join("") || empty("Nothing scheduled")
     );
@@ -588,20 +646,33 @@ function widgetContent(id, data, manager) {
         "follow_ups",
         "rejections",
       ];
-    return `<div class="toolbar"><select data-activity-setting="chart_type"><option ${settings.chart_type !== "bar" ? "selected" : ""}>line</option><option ${settings.chart_type === "bar" ? "selected" : ""}>bar</option></select><select data-activity-setting="group"><option>day</option><option ${settings.group === "week" ? "selected" : ""}>week</option><option ${settings.group === "month" ? "selected" : ""}>month</option></select><select multiple data-activity-setting="metrics" aria-label="Activity metrics">${["events", "interviews", "follow_ups", "rejections"].map((metric) => `<option ${metrics.includes(metric) ? "selected" : ""}>${metric}</option>`).join("")}</select></div><div class="activity-chart ${settings.chart_type || "line"}" aria-label="Application activity summary">${data.activity
-      .map((item) => {
-        const value = metrics.reduce(
-          (sum, metric) => sum + Number(item[metric] || 0),
-          0,
-        );
-        return `<i title="${esc(item.period)}: ${value} selected events" style="height:${Math.max(5, Math.min(100, value * 15))}%"></i>`;
-      })
-      .join("")}</div>`;
+    const isBar = settings.chart_type === "bar";
+    const chart = isBar
+      ? `<div class="activity-chart bar" aria-label="Application activity summary">${data.activity
+          .map((item) => {
+            const value = metrics.reduce(
+              (sum, metric) => sum + Number(item[metric] || 0),
+              0,
+            );
+            return `<i title="${esc(item.period)}: ${value} selected events" style="height:${Math.max(5, Math.min(100, value * 15))}%"></i>`;
+          })
+          .join("")}</div>`
+      : `<div class="chart-svg-wrap">${areaLineChart(data.activity, (item) =>
+          metrics.reduce((sum, metric) => sum + Number(item[metric] || 0), 0),
+        )}</div>`;
+    const labelSet = data.activity.length
+      ? [
+          data.activity[0]?.period,
+          data.activity[Math.floor((data.activity.length - 1) / 2)]?.period,
+          data.activity.at(-1)?.period,
+        ]
+      : [];
+    return `<div class="toolbar"><select data-activity-setting="chart_type"><option ${settings.chart_type !== "bar" ? "selected" : ""}>line</option><option ${settings.chart_type === "bar" ? "selected" : ""}>bar</option></select><select data-activity-setting="group"><option>day</option><option ${settings.group === "week" ? "selected" : ""}>week</option><option ${settings.group === "month" ? "selected" : ""}>month</option></select><select multiple data-activity-setting="metrics" aria-label="Activity metrics">${["events", "interviews", "follow_ups", "rejections"].map((metric) => `<option ${metrics.includes(metric) ? "selected" : ""}>${metric}</option>`).join("")}</select></div>${chart}${labelSet.length ? `<div class="chart-labels muted num">${labelSet.map((label) => `<span>${esc(label || "")}</span>`).join("")}</div>` : ""}`;
   }
   if (id === "applications-work-arrangement")
     return `<p>Review work arrangement distribution in Applications filters.</p>`;
   return manager
-    ? `<div class="metric">${users.total ?? 0}</div><p>Users in manager scope</p>`
+    ? `<div class="metric num">${users.total ?? 0}</div><p>Users in manager scope</p>`
     : empty("No data in the selected range");
 }
 async function renderDashboard(manager = false) {
@@ -630,12 +701,12 @@ async function renderDashboard(manager = false) {
       )
     : "";
   shell(
-    `<section class="dashboard-hero"><div><p class="eyebrow">JobQuest workspace</p><h1>${manager ? "Team search overview" : `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${esc(state.user.full_name.split(" ")[0])}`}</h1><p class="muted">${manager ? "See team momentum, pipeline health, and where support is needed." : "Here’s what’s moving in your job search and what needs attention next."}</p></div><div class="dashboard-controls"><div class="view-switcher" role="group" aria-label="Dashboard type"><button class="btn small ${manager ? "secondary" : ""}" data-dashboard-mode="user" aria-pressed="${!manager}">My Dashboard</button>${state.user.role === "MANAGER" ? `<button class="btn small ${manager ? "" : "secondary"}" data-dashboard-mode="manager" aria-pressed="${manager}">Manager</button>` : ""}</div>${scopeSelect}<select id="dashboard-range" aria-label="Dashboard date range"><option value="7" ${state.dashboardDays === 7 ? "selected" : ""}>Last 7 days</option><option value="30" ${state.dashboardDays === 30 ? "selected" : ""}>Last 30 days</option><option value="90" ${state.dashboardDays === 90 ? "selected" : ""}>Last 90 days</option></select><button class="btn secondary" id="dashboard-settings">Customize Dashboard</button></div></section>` +
+    `<section class="dashboard-hero"><div><p class="eyebrow">JobQuest Workspace</p><h1>${manager ? "Team search overview" : `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${esc(state.user.full_name.split(" ")[0])}`}</h1><p class="muted">${manager ? "See team momentum, pipeline health, and where support is needed." : "Here’s what’s moving in your job search and what needs attention next."}</p></div><div class="dashboard-controls"><div class="view-switcher" role="group" aria-label="Dashboard type"><button class="btn small ${manager ? "secondary" : ""}" data-dashboard-mode="user" aria-pressed="${!manager}">User</button>${state.user.role === "MANAGER" ? `<button class="btn small ${manager ? "" : "secondary"}" data-dashboard-mode="manager" aria-pressed="${manager}">Manager</button>` : ""}</div>${scopeSelect}<select id="dashboard-range" aria-label="Dashboard date range"><option value="7" ${state.dashboardDays === 7 ? "selected" : ""}>Last 7 days</option><option value="30" ${state.dashboardDays === 30 ? "selected" : ""}>Last 30 days</option><option value="90" ${state.dashboardDays === 90 ? "selected" : ""}>Last 90 days</option></select><button class="btn secondary" id="dashboard-settings">${icon("sliders-horizontal")}<span class="hide-narrow">Customize Dashboard</span><span class="show-narrow">Customize</span></button></div></section>` +
       `<div class="widget-grid">${widgets.map((item) => `<section class="widget size-${item.width} widget-${widgetDefinition(item.widget_id)?.kind || "insight"}" data-widget="${item.widget_id}"><header class="widget-header"><div><span class="widget-kicker">${esc(widgetDefinition(item.widget_id)?.kind || "overview")}</span><h2>${esc(WIDGET_NAMES[item.widget_id])}</h2></div>${DASHBOARD_DRILL[item.widget_id] ? `<button class="widget-drill" data-widget-drill="${item.widget_id}" aria-label="Open details for ${esc(WIDGET_NAMES[item.widget_id])}">View</button>` : ""}</header>${widgetContent(item.widget_id, data, manager)}</section>`).join("")}</div>`,
   );
   qs(".dashboard-controls")?.insertAdjacentHTML(
     "beforeend",
-    '<button class="btn" data-page="quick-add">Quick Add</button>',
+    `<button class="btn" data-page="quick-add">${icon("plus")}Quick Add</button>`,
   );
   qs('.dashboard-controls [data-page="quick-add"]').onclick = () =>
     go("quick-add");
