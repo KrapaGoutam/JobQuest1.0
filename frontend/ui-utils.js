@@ -20,6 +20,11 @@ export const STAGE_CLASS = Object.fromEntries(
   ]),
 );
 
+export const PRIORITY_TONE = { High: "destructive", Medium: "warning", Low: "muted" };
+export function priorityBadgeHtml(priority, esc = (value) => value) {
+  return `<span class="badge priority-badge tone-${PRIORITY_TONE[priority] || "muted"}">${esc(priority || "—")}</span>`;
+}
+
 export function moveWidget(items, index, direction) {
   const target = index + direction;
   if (index < 0 || target < 0 || target >= items.length) return [...items];

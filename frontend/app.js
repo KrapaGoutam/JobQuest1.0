@@ -1,6 +1,7 @@
 import {
   STAGES,
   STAGE_CLASS,
+  priorityBadgeHtml,
   moveWidget,
   applyTheme,
   monthCells,
@@ -17,6 +18,7 @@ import {
   WIDGET_NAMES,
   widgetDefinition,
 } from "./dashboard-config.js";
+import { icon } from "./icons.js";
 
 const state = {
   user: null,
@@ -94,8 +96,65 @@ function select(name, label, values, value = "", extra = "") {
 function badge(stage) {
   return `<span class="badge stage-badge ${STAGE_CLASS[stage] || ""}">${esc(stage)}</span>`;
 }
+const priorityBadge = (priority) => priorityBadgeHtml(priority, esc);
+function toneFor(text = "") {
+  const value = String(text).toLowerCase();
+  if (/(overdue|risk|action needed|stale|rejected|ghosted)/.test(value))
+    return "destructive";
+  if (/(waiting|follow.?up|due|pending)/.test(value)) return "warning";
+  if (/(interview|offer|accepted)/.test(value)) return "info";
+  if (/(on track|healthy|new|response)/.test(value)) return "success";
+  return "muted";
+}
+function radialProgress(pct, label = "") {
+  const value = Math.min(100, Math.max(0, Math.round(pct || 0))),
+    radius = 52,
+    circumference = 2 * Math.PI * radius,
+    offset = circumference - (value / 100) * circumference;
+  return `<svg viewBox="0 0 128 128" class="goal-radial" role="img" aria-label="${value}% ${esc(label)}"><circle cx="64" cy="64" r="${radius}" fill="none" stroke="var(--secondary)" stroke-width="12"/><circle cx="64" cy="64" r="${radius}" fill="none" stroke="var(--primary)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${circumference.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" transform="rotate(-90 64 64)"/></svg><span class="goal-radial-value num">${value}%</span>`;
+}
+function areaLineChart(points, valueOf) {
+  const values = points.map(valueOf),
+    max = Math.max(1, ...values),
+    w = 100,
+    h = 40,
+    pad = 2,
+    stepX = points.length > 1 ? (w - pad * 2) / (points.length - 1) : 0;
+  const coords = values.map((value, index) => [
+    pad + index * stepX,
+    h - pad - (value / max) * (h - pad * 2),
+  ]);
+  const line = coords
+    .map(([x, y], index) => `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`)
+    .join(" ");
+  const area = coords.length
+    ? `${line} L${coords.at(-1)[0].toFixed(2)},${(h - pad).toFixed(2)} L${coords[0][0].toFixed(2)},${(h - pad).toFixed(2)} Z`
+    : "";
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="chart-svg" role="img" aria-label="Application activity trend"><defs><linearGradient id="activity-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--chart-1)" stop-opacity="0.4"/><stop offset="100%" stop-color="var(--chart-1)" stop-opacity="0.02"/></linearGradient></defs>${area ? `<path d="${area}" fill="url(#activity-fill)" stroke="none"></path>` : ""}<path d="${line}" fill="none" stroke="var(--chart-1)" stroke-width="2" vector-effect="non-scaling-stroke"></path></svg>`;
+}
+// The app's CSP (style-src 'self', no 'unsafe-inline') blocks HTML `style="..."`
+// attributes, so every value-driven bar/height uses SVG geometry attributes
+// (width/height/x/y) instead — those aren't governed by style-src.
+function hBar(pct, label = "") {
+  const value = Math.min(100, Math.max(0, pct || 0));
+  return `<svg viewBox="0 0 100 10" preserveAspectRatio="none" class="hbar-svg" role="img" aria-label="${esc(label)}"><rect x="0" y="0" width="100" height="10" rx="5" class="hbar-track"></rect><rect x="0" y="0" width="${value.toFixed(2)}" height="10" rx="5" class="hbar-fill"></rect></svg>`;
+}
+function vBars(values, { titles = [], max } = {}) {
+  const top = Math.max(1, max ?? Math.max(...values, 0)),
+    w = 100,
+    h = 40,
+    gap = values.length ? Math.min(2, w / values.length / 4) : 0,
+    barW = values.length ? w / values.length - gap : 0;
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="vbars-svg" role="img" aria-label="Bar chart">${values
+    .map((value, index) => {
+      const barH = Math.max(1, (Math.min(top, value) / top) * h),
+        x = index * (barW + gap);
+      return `<rect x="${x.toFixed(2)}" y="${(h - barH).toFixed(2)}" width="${barW.toFixed(2)}" height="${barH.toFixed(2)}" class="vbar-fill"><title>${esc(titles[index] || String(value))}</title></rect>`;
+    })
+    .join("")}</svg>`;
+}
 function pageHead(title, subtitle, action = "") {
-  return `<header class="page-head"><div><div class="eyebrow">JobQuest workspace</div><h1>${esc(title)}</h1><p class="muted">${esc(subtitle)}</p></div>${action}</header>`;
+  return `<header class="page-head"><div><div class="eyebrow">JobQuest Workspace</div><h1>${esc(title)}</h1><p class="muted">${esc(subtitle)}</p></div>${action}</header>`;
 }
 function empty(message) {
   return `<div class="empty">${esc(message)}</div>`;
@@ -105,39 +164,38 @@ function table(headers, body, emptyMessage = "No records yet") {
 }
 
 const nav = [
-  ["dashboard", "Dashboard"],
-  ["applications", "Applications"],
-  ["add", "Add Application"],
-  ["bulk", "Bulk Import"],
-  ["calendar", "Calendar"],
-  ["reminders", "Reminder Center"],
-  ["interviews", "Interviews"],
-  ["rejections", "Rejections"],
-  ["follow_ups", "Follow-Ups"],
-  ["networking_contacts", "Networking"],
-  ["resumes", "Resumes"],
-  ["goal-history", "Goal History"],
-  ["aging", "Aging Report"],
-  ["stage-analytics", "Stage Analytics"],
-  ["exports", "Exports"],
-  ["settings", "Settings"],
+  ["dashboard", "Dashboard", "layout-dashboard"],
+  ["applications", "Applications", "briefcase"],
+  ["add", "Add Application", "plus-circle"],
+  ["bulk", "Bulk Import", "upload"],
+  ["calendar", "Calendar", "calendar-days"],
+  ["reminders", "Reminder Center", "bell-ring"],
+  ["interviews", "Interviews", "users"],
+  ["rejections", "Rejections", "x-circle"],
+  ["follow_ups", "Follow-Ups", "send"],
+  ["networking_contacts", "Networking", "network"],
+  ["resumes", "Resumes", "file-text"],
+  ["goal-history", "Goal History", "target"],
+  ["aging", "Aging Report", "timer"],
+  ["stage-analytics", "Stage Analytics", "bar-chart-3"],
+  ["exports", "Exports", "download"],
+  ["settings", "Settings", "settings"],
 ];
+const navButton = ([id, label, iconName]) =>
+  `<button data-page="${id}" class="${state.page === id ? "active" : ""}">${icon(iconName)}<span class="nav-label">${label}</span></button>`;
 function shell(content) {
   const manager =
     state.user.role === "MANAGER"
-      ? `<div class="nav-group">Manager</div>${[
-          ["manager", "Manager Dashboard"],
-          ["users", "User Management"],
-          ["imports", "Import History"],
-          ["audit", "Audit History"],
+      ? `<div class="nav-section-static"><p class="nav-group">Manager</p>${[
+          ["manager", "Manager Dashboard", "shield-check"],
+          ["users", "User Management", "user-cog"],
+          ["imports", "Import History", "history"],
+          ["audit", "Audit History", "scroll-text"],
         ]
-          .map(
-            ([id, label]) =>
-              `<button data-page="${id}" class="${state.page === id ? "active" : ""}">${label}</button>`,
-          )
-          .join("")}`
+          .map(navButton)
+          .join("")}</div>`
       : "";
-  app.innerHTML = `<div class="shell"><aside><header class="sidebar-head"><div class="logo"><span class="logo-mark" aria-hidden="true">JQ</span><span class="logo-word">JobQuest</span></div><button class="icon-button sidebar-close" id="sidebar-close" aria-label="Close navigation">×</button></header><nav>${nav.map(([id, label]) => `<button data-page="${id}" class="${state.page === id ? "active" : ""}"><span class="nav-label">${label}</span></button>`).join("")}${manager}</nav><div class="user-card"><strong>${esc(state.user.full_name)}</strong><span>${esc(state.user.username)} · ${state.user.role}</span><div class="actions"><button class="btn small secondary" id="theme-cycle" aria-label="Change color theme">Theme: ${esc(state.user.theme || "system")}</button><button class="btn small secondary" id="logout">Sign out</button></div></div></aside><div class="workspace"><header class="topbar"><div class="topbar-leading"><button class="icon-button mobile-menu" id="mobile-menu" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">☰</button><button class="icon-button desktop-collapse" id="desktop-collapse" aria-label="Collapse navigation" aria-pressed="false">⇤</button><span class="topbar-title">${esc(pretty(state.page.split(":")[0]))}</span></div><div class="topbar-actions"><button class="btn small" data-page="quick-add">Quick Add</button></div></header><main id="content" tabindex="-1">${content}</main></div></div>`;
+  app.innerHTML = `<div class="shell"><aside><header class="sidebar-head"><div class="logo"><span class="logo-mark" aria-hidden="true">JQ</span><span class="logo-word">JobQuest</span></div><button class="icon-button sidebar-close" id="sidebar-close" aria-label="Close navigation">${icon("x")}</button></header><nav>${nav.map(navButton).join("")}${manager}</nav><div class="user-card"><span class="user-avatar" aria-hidden="true">${esc((state.user.full_name || "?").slice(0, 1))}</span><div class="user-identity"><strong>${esc(state.user.full_name)}</strong><span>${esc(state.user.username)} · ${state.user.role}</span></div><div class="actions"><button class="btn small secondary" id="theme-cycle" aria-label="Change color theme">Theme: ${esc(state.user.theme || "system")}</button><button class="btn small secondary" id="logout">Sign out</button></div></div></aside><div class="workspace"><header class="topbar"><div class="topbar-leading"><button class="icon-button mobile-menu" id="mobile-menu" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">${icon("menu")}</button><button class="icon-button desktop-collapse" id="desktop-collapse" aria-label="Collapse navigation" aria-pressed="false">${icon("chevron-left")}</button><span class="topbar-title">${esc(pretty(state.page.split(":")[0]))}</span></div><div class="topbar-actions"><button class="btn small" data-page="quick-add">${icon("plus")}Quick Add</button></div></header><main id="content" tabindex="-1">${content}</main></div></div>`;
   const sidebar = qs(".shell aside");
   sidebar.id = "sidebar";
   sidebar.setAttribute("aria-label", "Primary navigation");
@@ -181,7 +239,10 @@ function shell(content) {
     });
     details.ontoggle = () =>
       localStorage.setItem(`nav-${label}`, details.open ? "open" : "closed");
-    navRoot.insertBefore(details, navRoot.querySelector(".nav-group"));
+    navRoot.insertBefore(
+      details,
+      navRoot.querySelector(".nav-section-static"),
+    );
   });
   qs("#logout").onclick = logout;
   qs("#theme-cycle").onclick = cycleTheme;
@@ -481,17 +542,34 @@ function widgetContent(id, data, manager) {
     acceptances: perf.accepted ?? apps.acceptances ?? 0,
   };
   if (id in metrics)
-    return `<div class="metric">${metrics[id]}</div><p class="muted">${WIDGET_NAMES[id]}</p>`;
-  if (id === "job-funnel" || id === "applications-stage")
-    return `<div class="mini-bars">${STAGES.slice(
-      0,
-      id === "job-funnel" ? 8 : 13,
-    )
+    return `<div class="metric num">${metrics[id]}</div><p class="muted">${WIDGET_NAMES[id]}</p>`;
+  if (id === "job-funnel") {
+    const values = STAGES.slice(0, 8).map(
+      (stage) => data.base.pipeline?.[stage] || 0,
+    );
+    const top = values[0] || 1;
+    return `<ul class="funnel-list">${STAGES.slice(0, 8)
+      .map((stage, index) => {
+        const value = values[index],
+          pct = Math.round((value / top) * 100),
+          previous = values[index - 1],
+          conversion = previous ? Math.round((value / previous) * 100) : 100;
+        return `<li><div class="funnel-row-head"><span>${esc(stage)}</span><span class="muted num">${value} · ${conversion}% from previous</span></div><div class="funnel-bar">${hBar(pct, `${stage}: ${value} applications, ${pct}% of top of funnel`)}</div></li>`;
+      })
+      .join("")}</ul>`;
+  }
+  if (id === "applications-stage") {
+    const values = STAGES.slice(0, 13).map(
+      (stage) => data.base.pipeline?.[stage] || 0,
+    );
+    const top = Math.max(1, ...values);
+    return `<div class="mini-bars">${STAGES.slice(0, 13)
       .map(
-        (stage) =>
-          `<div><span>${esc(stage)}</span><i style="--value:${data.base.pipeline?.[stage] || 0}"></i><strong>${data.base.pipeline?.[stage] || 0}</strong></div>`,
+        (stage, index) =>
+          `<div><span>${esc(stage)}</span><div class="mini-bar">${hBar((values[index] / top) * 100, `${stage}: ${values[index]}`)}</div><strong class="num">${values[index]}</strong></div>`,
       )
       .join("")}</div>`;
+  }
   if (id === "applications-source")
     return (
       data.source
@@ -512,66 +590,99 @@ function widgetContent(id, data, manager) {
         )
         .join("") || empty("Add a resume to compare performance")
     );
+  if (id === "daily-goal-chart") {
+    const items = data.goalSeries.items;
+    const bars = items.length
+      ? (() => {
+          const w = 100,
+            h = 32,
+            gap = Math.min(2, w / items.length / 4),
+            barW = w / items.length - gap;
+          return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="vbars-svg goal-chart-svg" role="img" aria-label="Daily application goal target versus actual">${items
+            .map((item, index) => {
+              const pct = Math.min(
+                  100,
+                  item.target ? (item.actual / item.target) * 100 : 0,
+                ),
+                barH = Math.max(1, (pct / 100) * h),
+                x = index * (barW + gap);
+              return `<rect x="${x.toFixed(2)}" y="${(h - barH).toFixed(2)}" width="${barW.toFixed(2)}" height="${barH.toFixed(2)}" class="vbar-fill ${item.achieved ? "achieved" : "missed"}"><title>${esc(item.period_start)}: ${item.actual} of ${item.target}</title></rect>`;
+            })
+            .join("")}</svg>`;
+        })()
+      : "";
+    return `<div class="goal-chart">${bars || empty("Configure a daily applications goal to see progress")}</div>${items.length ? `<div class="chart-labels muted num">${[items[0], items.at(-1)].map((item) => `<span>${esc(item.period_start.slice(5))}</span>`).join("")}</div>` : ""}<p class="muted num">${data.goalSeries.summary.actual} today · ${data.goalSeries.summary.remaining} remaining · ${data.goalSeries.summary.achieved_days} achieved days</p>`;
+  }
+  if (id === "weekly-goals" || id === "daily-goals")
+    return `<div class="goal-radial-wrap">${radialProgress(data.goals.summary.achievement_percentage, WIDGET_NAMES[id])}<div><p class="num goal-radial-count">${data.goals.summary.achieved} <span class="muted">achieved</span></p><p class="muted">${data.goals.summary.missed} missed this period</p></div></div>`;
   if (id.includes("goal"))
-    if (id === "daily-goal-chart")
-      return `<div class="goal-chart" role="img" aria-label="Daily application goal target versus actual">${data.goalSeries.items.map((item) => `<div class="goal-day ${item.achieved ? "achieved" : "missed"}" title="${esc(item.period_start)}: ${item.actual} of ${item.target}"><i style="height:${Math.min(100, item.target ? (item.actual / item.target) * 100 : 0)}%"></i><span>${esc(item.period_start.slice(5))}</span><strong>${item.actual}/${item.target}</strong></div>`).join("") || empty("Configure a daily applications goal to see progress")}</div><p>${data.goalSeries.summary.actual} today Â· ${data.goalSeries.summary.remaining} remaining Â· ${data.goalSeries.summary.achieved_days} achieved days</p>`;
-  if (id.includes("goal"))
-    return `<div class="metric">${data.goals.summary.achievement_percentage}%</div><p>${data.goals.summary.achieved} achieved · ${data.goals.summary.missed} missed</p>`;
+    return `<div class="metric num">${data.goals.summary.achievement_percentage}%</div><p class="muted">${data.goals.summary.achieved} achieved · ${data.goals.summary.missed} missed</p>`;
   if (id === "reminder-center")
-    return (
-      data.reminders
-        .slice(0, 4)
-        .map(
-          (item) =>
-            `<p><span class="badge">${esc(item.calculated_status)}</span> ${esc(item.title)}</p>`,
-        )
-        .join("") || empty("No reminders")
-    );
+    return data.reminders.length
+      ? `<ul class="next-actions-list">${data.reminders
+          .slice(0, 4)
+          .map((item) => {
+            const tone = toneFor(item.calculated_status);
+            return `<li><span class="tone-chip tone-${tone}">${esc(pretty(item.calculated_status || ""))}</span><span class="next-action-label">${esc(item.title)}</span></li>`;
+          })
+          .join("")}</ul>`
+      : empty("No reminders");
   if (id === "aging-applications")
-    return Object.entries(data.aging.summary)
-      .map(([band, count]) => `<p>${esc(band)} <strong>${count}</strong></p>`)
-      .join("");
-  if (id === "stage-duration")
-    return (
-      data.stages.stages
-        .filter((item) => item.sample_size)
-        .slice(0, 5)
-        .map(
-          (item) =>
-            `<p>${esc(item.stage)} <strong>${item.average} days</strong> (n=${item.sample_size})</p>`,
-        )
-        .join("") || empty("More stage history is needed")
-    );
-  if (id === "recent-activity")
-    return (
-      (data.base.recent_activity || [])
-        .slice(0, 5)
-        .map((item) => `<p>${esc(item.note || item.activity_type)}</p>`)
-        .join("") || empty("No recent activity")
-    );
+    return `<ul class="kv-list">${Object.entries(data.aging.summary)
+      .map(
+        ([band, count]) =>
+          `<li><span class="tone-dot tone-${toneFor(band)}"></span><span class="muted">${esc(band)}</span><strong class="num">${count}</strong></li>`,
+      )
+      .join("")}</ul>`;
+  if (id === "stage-duration") {
+    const stages = data.stages.stages.filter((item) => item.sample_size);
+    return stages.length
+      ? `<ul class="kv-list">${stages
+          .slice(0, 5)
+          .map(
+            (item) =>
+              `<li><span class="muted">${esc(item.stage)}</span><strong class="num">${item.average}d</strong><span class="muted num">n=${item.sample_size}</span></li>`,
+          )
+          .join("")}</ul>`
+      : empty("More stage history is needed");
+  }
+  if (id === "recent-activity") {
+    const items = data.base.recent_activity || [];
+    return items.length
+      ? `<ol class="timeline-feed">${items
+          .slice(0, 5)
+          .map((item) => {
+            const time = item.created_at || item.event_date || "";
+            return `<li><span class="timeline-feed-marker tone-${toneFor(item.activity_type)}" aria-hidden="true"></span><div><p>${esc(item.note || pretty(item.activity_type || "Update"))}</p>${time ? `<p class="muted num">${esc(String(time).slice(0, 10))}</p>` : ""}</div></li>`;
+          })
+          .join("")}</ol>`
+      : empty("No recent activity");
+  }
   if (id === "pinned-applications")
     return `<button class="link-button" data-page="applications">Open pinned applications</button>`;
-  if (id === "health-summary")
-    return (
-      Object.entries(
-        data.aging.items.reduce((result, item) => {
-          result[item.health] = (result[item.health] || 0) + 1;
-          return result;
-        }, {}),
-      )
-        .map(
-          ([health, count]) =>
-            `<p>${esc(health)} <strong>${count}</strong></p>`,
-        )
-        .join("") || empty("No applications")
+  if (id === "health-summary") {
+    const entries = Object.entries(
+      data.aging.items.reduce((result, item) => {
+        result[item.health] = (result[item.health] || 0) + 1;
+        return result;
+      }, {}),
     );
+    return entries.length
+      ? `<dl class="kv-list">${entries
+          .map(
+            ([health, count]) =>
+              `<div class="kv-row"><span class="tone-dot tone-${toneFor(health)}"></span><dt class="muted">${esc(health)}</dt><dd class="num">${count}</dd></div>`,
+          )
+          .join("")}</dl>`
+      : empty("No applications");
+  }
   if (id === "calendar-preview")
     return (
       data.calendar.events
         .slice(0, 5)
         .map(
           (item) =>
-            `<p><strong>${esc(item.date.slice(0, 10))}</strong> ${esc(item.title)}</p>`,
+            `<p><strong class="num">${esc(item.date.slice(0, 10))}</strong> ${esc(item.title)}</p>`,
         )
         .join("") || empty("Nothing scheduled")
     );
@@ -585,20 +696,34 @@ function widgetContent(id, data, manager) {
         "follow_ups",
         "rejections",
       ];
-    return `<div class="toolbar"><select data-activity-setting="chart_type"><option ${settings.chart_type !== "bar" ? "selected" : ""}>line</option><option ${settings.chart_type === "bar" ? "selected" : ""}>bar</option></select><select data-activity-setting="group"><option>day</option><option ${settings.group === "week" ? "selected" : ""}>week</option><option ${settings.group === "month" ? "selected" : ""}>month</option></select><select multiple data-activity-setting="metrics" aria-label="Activity metrics">${["events", "interviews", "follow_ups", "rejections"].map((metric) => `<option ${metrics.includes(metric) ? "selected" : ""}>${metric}</option>`).join("")}</select></div><div class="activity-chart ${settings.chart_type || "line"}" aria-label="Application activity summary">${data.activity
-      .map((item) => {
-        const value = metrics.reduce(
-          (sum, metric) => sum + Number(item[metric] || 0),
-          0,
-        );
-        return `<i title="${esc(item.period)}: ${value} selected events" style="height:${Math.max(5, Math.min(100, value * 15))}%"></i>`;
-      })
-      .join("")}</div>`;
+    const isBar = settings.chart_type === "bar";
+    const eventValue = (item) =>
+      metrics.reduce((sum, metric) => sum + Number(item[metric] || 0), 0);
+    const chart = !data.activity.length
+      ? empty("No activity in the selected range")
+      : isBar
+        ? `<div class="chart-svg-wrap">${vBars(
+            data.activity.map(eventValue),
+            {
+              titles: data.activity.map(
+                (item) => `${item.period}: ${eventValue(item)} selected events`,
+              ),
+            },
+          )}</div>`
+        : `<div class="chart-svg-wrap">${areaLineChart(data.activity, eventValue)}</div>`;
+    const labelSet = data.activity.length
+      ? [
+          data.activity[0]?.period,
+          data.activity[Math.floor((data.activity.length - 1) / 2)]?.period,
+          data.activity.at(-1)?.period,
+        ]
+      : [];
+    return `<div class="toolbar"><select data-activity-setting="chart_type"><option ${settings.chart_type !== "bar" ? "selected" : ""}>line</option><option ${settings.chart_type === "bar" ? "selected" : ""}>bar</option></select><select data-activity-setting="group"><option>day</option><option ${settings.group === "week" ? "selected" : ""}>week</option><option ${settings.group === "month" ? "selected" : ""}>month</option></select><select multiple data-activity-setting="metrics" aria-label="Activity metrics">${["events", "interviews", "follow_ups", "rejections"].map((metric) => `<option ${metrics.includes(metric) ? "selected" : ""}>${metric}</option>`).join("")}</select></div>${chart}${labelSet.length ? `<div class="chart-labels muted num">${labelSet.map((label) => `<span>${esc(label || "")}</span>`).join("")}</div>` : ""}`;
   }
   if (id === "applications-work-arrangement")
     return `<p>Review work arrangement distribution in Applications filters.</p>`;
   return manager
-    ? `<div class="metric">${users.total ?? 0}</div><p>Users in manager scope</p>`
+    ? `<div class="metric num">${users.total ?? 0}</div><p>Users in manager scope</p>`
     : empty("No data in the selected range");
 }
 async function renderDashboard(manager = false) {
@@ -627,12 +752,12 @@ async function renderDashboard(manager = false) {
       )
     : "";
   shell(
-    `<section class="dashboard-hero"><div><p class="eyebrow">JobQuest workspace</p><h1>${manager ? "Team search overview" : `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${esc(state.user.full_name.split(" ")[0])}`}</h1><p class="muted">${manager ? "See team momentum, pipeline health, and where support is needed." : "Here’s what’s moving in your job search and what needs attention next."}</p></div><div class="dashboard-controls"><div class="view-switcher" role="group" aria-label="Dashboard type"><button class="btn small ${manager ? "secondary" : ""}" data-dashboard-mode="user" aria-pressed="${!manager}">My Dashboard</button>${state.user.role === "MANAGER" ? `<button class="btn small ${manager ? "" : "secondary"}" data-dashboard-mode="manager" aria-pressed="${manager}">Manager</button>` : ""}</div>${scopeSelect}<select id="dashboard-range" aria-label="Dashboard date range"><option value="7" ${state.dashboardDays === 7 ? "selected" : ""}>Last 7 days</option><option value="30" ${state.dashboardDays === 30 ? "selected" : ""}>Last 30 days</option><option value="90" ${state.dashboardDays === 90 ? "selected" : ""}>Last 90 days</option></select><button class="btn secondary" id="dashboard-settings">Customize Dashboard</button></div></section>` +
+    `<section class="dashboard-hero"><div><p class="eyebrow">JobQuest Workspace</p><h1>${manager ? "Team search overview" : `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${esc(state.user.full_name.split(" ")[0])}`}</h1><p class="muted">${manager ? "See team momentum, pipeline health, and where support is needed." : "Here’s what’s moving in your job search and what needs attention next."}</p></div><div class="dashboard-controls"><div class="view-switcher" role="group" aria-label="Dashboard type"><button class="btn small ${manager ? "secondary" : ""}" data-dashboard-mode="user" aria-pressed="${!manager}">User</button>${state.user.role === "MANAGER" ? `<button class="btn small ${manager ? "" : "secondary"}" data-dashboard-mode="manager" aria-pressed="${manager}">Manager</button>` : ""}</div>${scopeSelect}<select id="dashboard-range" aria-label="Dashboard date range"><option value="7" ${state.dashboardDays === 7 ? "selected" : ""}>Last 7 days</option><option value="30" ${state.dashboardDays === 30 ? "selected" : ""}>Last 30 days</option><option value="90" ${state.dashboardDays === 90 ? "selected" : ""}>Last 90 days</option></select><button class="btn secondary" id="dashboard-settings">${icon("sliders-horizontal")}<span class="hide-narrow">Customize Dashboard</span><span class="show-narrow">Customize</span></button></div></section>` +
       `<div class="widget-grid">${widgets.map((item) => `<section class="widget size-${item.width} widget-${widgetDefinition(item.widget_id)?.kind || "insight"}" data-widget="${item.widget_id}"><header class="widget-header"><div><span class="widget-kicker">${esc(widgetDefinition(item.widget_id)?.kind || "overview")}</span><h2>${esc(WIDGET_NAMES[item.widget_id])}</h2></div>${DASHBOARD_DRILL[item.widget_id] ? `<button class="widget-drill" data-widget-drill="${item.widget_id}" aria-label="Open details for ${esc(WIDGET_NAMES[item.widget_id])}">View</button>` : ""}</header>${widgetContent(item.widget_id, data, manager)}</section>`).join("")}</div>`,
   );
   qs(".dashboard-controls")?.insertAdjacentHTML(
     "beforeend",
-    '<button class="btn" data-page="quick-add">Quick Add</button>',
+    `<button class="btn" data-page="quick-add">${icon("plus")}Quick Add</button>`,
   );
   qs('.dashboard-controls [data-page="quick-add"]').onclick = () =>
     go("quick-add");
@@ -1130,7 +1255,7 @@ async function renderApplications(params = new URLSearchParams()) {
     select.focus();
   };
   const card = (item) =>
-    `<article class="kanban-card" draggable="true" tabindex="0" data-card="${item.id}"><strong>${esc(item.company)}</strong><h3>${esc(item.job_title)}</h3>${item.resume_version ? `<p><strong>Resume Version:</strong> ${esc(item.resume_version)}</p>` : ""}<p>${badge(item.priority)} ${esc(item.date_applied)}</p><p>${esc(item.next_action || "No next action")} ${esc(item.next_action_date || "")}</p><div class="actions"><button class="btn small secondary" data-preview-card="${item.id}">Preview</button><button class="btn small secondary" data-open-card="${item.id}">Open</button><button class="btn small secondary" data-move="${item.id}">Move to stage</button></div></article>`;
+    `<article class="kanban-card" draggable="true" tabindex="0" data-card="${item.id}"><strong>${esc(item.company)}</strong><h3>${esc(item.job_title)}</h3>${item.resume_version ? `<p><strong>Resume Version:</strong> ${esc(item.resume_version)}</p>` : ""}<p>${priorityBadge(item.priority)} <span class="num muted">${esc(item.date_applied)}</span></p><p>${esc(item.next_action || "No next action")} ${esc(item.next_action_date || "")}</p><div class="actions"><button class="btn small secondary" data-preview-card="${item.id}">Preview</button><button class="btn small secondary" data-open-card="${item.id}">Open</button><button class="btn small secondary" data-move="${item.id}">Move to stage</button></div></article>`;
   const grouping = preference.kanban_grouping || "date_applied_day";
   const collapsedGroups = new Set(
     preference.collapsed_groups?.[grouping] || [],
@@ -1175,9 +1300,9 @@ async function renderApplications(params = new URLSearchParams()) {
     pageHead(
       "Applications",
       `${data.total} applications`,
-      `<div class="actions"><div class="view-switcher" role="group" aria-label="Applications view"><button class="btn small ${view === "table" ? "" : "secondary"}" data-view="table" aria-pressed="${view === "table"}">Table</button><button class="btn small ${view === "kanban" ? "" : "secondary"}" data-view="kanban" aria-pressed="${view === "kanban"}">Kanban</button></div><button class="btn" data-page="quick-add">Quick Add</button><button class="btn secondary" id="open-export">Export</button></div>`,
+      `<div class="actions"><div class="view-switcher" role="group" aria-label="Applications view"><button class="btn small ${view === "table" ? "" : "secondary"}" data-view="table" aria-pressed="${view === "table"}">${icon("table-2")}Table</button><button class="btn small ${view === "kanban" ? "" : "secondary"}" data-view="kanban" aria-pressed="${view === "kanban"}">${icon("kanban-square")}Kanban</button></div><button class="btn" data-page="quick-add">${icon("plus")}Quick Add</button><button class="btn secondary" id="open-export">${icon("download")}Export</button></div>`,
     ) +
-      `<section class="card full application-workspace"><div class="toolbar applications-meta"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select><span class="result-count" role="status">${data.total} result${data.total === 1 ? "" : "s"}</span><select id="application-sort" aria-label="Sort applications"><option value="updated_at:desc">Recently updated</option><option value="company:asc">Company A–Z</option><option value="company:desc">Company Z–A</option><option value="job_title:asc">Job title A–Z</option><option value="job_title:desc">Job title Z–A</option><option value="date_applied:desc">Application date: newest</option><option value="date_applied:asc">Application date: oldest</option><option value="salary_min:desc">Salary: highest</option><option value="salary_min:asc">Salary: lowest</option></select></div><form id="app-filters" class="toolbar advanced-filter-bar"><input name="search" type="search" placeholder="Search company, title, location, recruiter, notes, tags..." value="${esc(params.get("search") || "")}"><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option>${["High", "Medium", "Low"].map((priority) => `<option ${params.get("priority") === priority ? "selected" : ""}>${priority}</option>`).join("")}</select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">More Filters</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">Save View</button></form><div class="active-filters" aria-label="Active filters">${filterChips}${activeFilters.length ? `<button class="link-button" type="button" id="clear-filter-chips">Clear all filters</button>` : ""}</div><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? '<div id="applications-table-root"></div>' : board}<div class="pagination"><button class="btn secondary" id="prev-page" ${data.page <= 1 ? "disabled" : ""}>Previous</button><span>Page ${data.page} of ${Math.max(1, data.pages)}</span><button class="btn secondary" id="next-page" ${data.page >= data.pages ? "disabled" : ""}>Next</button></div></section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
+      `<section class="card full application-workspace"><div class="toolbar applications-meta"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select><span class="result-count num" role="status">${data.total} result${data.total === 1 ? "" : "s"}</span><select id="application-sort" aria-label="Sort applications"><option value="updated_at:desc">Recently updated</option><option value="company:asc">Company A–Z</option><option value="company:desc">Company Z–A</option><option value="job_title:asc">Job title A–Z</option><option value="job_title:desc">Job title Z–A</option><option value="date_applied:desc">Application date: newest</option><option value="date_applied:asc">Application date: oldest</option><option value="salary_min:desc">Salary: highest</option><option value="salary_min:asc">Salary: lowest</option></select></div><form id="app-filters" class="toolbar advanced-filter-bar"><div class="search-field">${icon("search")}<input name="search" type="search" placeholder="Search company, title, location, recruiter, notes, tags..." value="${esc(params.get("search") || "")}"></div><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option>${["High", "Medium", "Low"].map((priority) => `<option ${params.get("priority") === priority ? "selected" : ""}>${priority}</option>`).join("")}</select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">${icon("filter")}More Filters${activeFilters.length ? `<span class="num filter-count">${activeFilters.length}</span>` : ""}</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">${icon("save")}Save View</button></form><div class="active-filters" aria-label="Active filters">${filterChips}${activeFilters.length ? `<button class="link-button" type="button" id="clear-filter-chips">Clear all filters</button>` : ""}</div><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? '<div id="applications-table-root"></div>' : board}<div class="pagination applications-pagination"><button class="btn secondary small" id="prev-page" ${data.page <= 1 ? "disabled" : ""}>${icon("chevron-left")}Previous</button><span class="num muted">Page ${data.page} of ${Math.max(1, data.pages)}</span><button class="btn secondary small" id="next-page" ${data.page >= data.pages ? "disabled" : ""}>Next${icon("chevron-right")}</button></div></section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
         "format",
         "Format",
         [
@@ -1199,7 +1324,7 @@ async function renderApplications(params = new URLSearchParams()) {
   );
   qs(".application-workspace").insertAdjacentHTML(
     "beforebegin",
-    `<section class="application-summary" aria-label="Application pipeline summary">${applicationSummary.map(([label, value]) => `<article><span>${esc(label)}</span><strong>${esc(value)}</strong></article>`).join("")}</section>`,
+    `<section class="application-summary" aria-label="Application pipeline summary">${applicationSummary.map(([label, value]) => `<article><span>${esc(label)}</span><strong class="num">${esc(value)}</strong></article>`).join("")}</section>`,
   );
   qs('#app-filters input[name="search"]').setAttribute(
     "aria-label",

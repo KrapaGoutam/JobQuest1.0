@@ -1,91 +1,312 @@
+/*
+ * JobQuest design system — navy/charcoal dark UI with soft indigo accents.
+ * Canonical tokens are defined once below as hex (universal fallback);
+ * an @supports block near the end of this section re-declares the same
+ * tokens as oklch for browsers that understand it — real per-property
+ * fallback, not just a redundant re-declaration. Every rule in this file
+ * should read colors through these custom properties — the handful of
+ * "legacy" aliases further down exist only so the rest of the stylesheet
+ * (written against older names such as --brand/--ink/--paper) keeps working
+ * unchanged while pointing at the new palette.
+ */
+/* Self-hosted (frontend/fonts/) — the app's CSP is default-src 'self' with
+   no exception for fonts.googleapis.com/fonts.gstatic.com, so an external
+   @import or <link> would be silently blocked. Latin subset only, static
+   weights actually used in this stylesheet. */
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-800.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-600.woff2") format("woff2");
+}
+
 :root {
-  color-scheme: light;
-  --ink: #18212f;
-  --muted: #657084;
-  --text-primary: var(--ink);
-  --text-secondary: #3d4758;
-  --text-muted: var(--muted);
-  --text-disabled: #7b8493;
-  --text-link: #294fbf;
-  --line: #dce2ea;
-  --paper: #fff;
-  --wash: #f5f7fb;
-  --brand: #3157d5;
-  --brand2: #213c99;
-  --good: #13795b;
-  --bad: #b42318;
-  --warn: #b54708;
-  --sidebar: #17213c;
-  --field: #fff;
-  --surface-primary: var(--paper);
-  --surface-secondary: var(--wash);
-  --border-default: var(--line);
-  --control-secondary-bg: #edf1fb;
-  --control-secondary-text: #294294;
-  --status-soft: #edf1fb;
-  --error-surface: #fff0ef;
-  --shadow: 0 12px 35px rgba(24, 33, 47, 0.09);
-  --color-canvas: #f6f7f9;
-  --color-sidebar: #ffffff;
-  --color-surface-1: #ffffff;
-  --color-surface-2: #f1f3f6;
-  --color-surface-3: #e8ebf0;
-  --color-text: #172033;
-  --color-text-muted: #667085;
-  --color-border: #dfe3ea;
-  --color-border-strong: #c7ced9;
-  --color-accent: #3157d5;
-  --color-accent-soft: #e9edff;
-  --color-focus: #5076f2;
-  --radius: 8px;
-  --danger: var(--bad);
-  --success: var(--good);
-  font-family:
-    Inter,
+  color-scheme: dark;
+
+  /* ---- radius scale (base ~0.55rem, scaled for cards vs. buttons) ---- */
+  --radius: 0.55rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  /* ---- typography ---- */
+  --font-sans:
+    "Plus Jakarta Sans",
     ui-sans-serif,
     system-ui,
     -apple-system,
     sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* ---- canonical color tokens (dark navy / soft indigo — default theme) ---- */
+  --background: #171b26;
+  --foreground: #eef1f7;
+
+  --surface: #1c212f;
+  --surface-2: #212736;
+
+  --card: #1d2230;
+  --card-foreground: var(--foreground);
+  --popover: #1e2432;
+  --popover-foreground: var(--foreground);
+
+  --primary: #7d86f2;
+  --primary-foreground: #0d0f16;
+
+  --secondary: #232939;
+  --secondary-foreground: #e9ecf3;
+
+  --muted: #222836;
+  --muted-foreground: #a7aebd;
+
+  --accent: #262c3e;
+  --accent-foreground: #f0f2f8;
+
+  --destructive: #e2584a;
+  --destructive-foreground: #fafbfd;
+  --success: #4dc596;
+  --success-foreground: #181d29;
+  --warning: #dcae4c;
+  --warning-foreground: #181d29;
+  --info: #5fa6dc;
+  --info-foreground: #181d29;
+
+  --border: #262c3b;
+  --border-strong: #333b4f;
+  --input: #282f40;
+  --ring: #8f97f5;
+
+  --chart-1: #7d86f2;
+  --chart-2: #5fa6dc;
+  --chart-3: #4dc596;
+  --chart-4: #dcae4c;
+  --chart-5: #d4699f;
+
+  /* Sidebar stays a persistent dark navy in both the light and dark theme
+     (a common product pattern: the app frame stays constant while page
+     content follows the chosen theme), so it lives outside the per-theme
+     overrides below. */
+  --sidebar: #12162a;
+  --sidebar-foreground: #d7dae2;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: #212637;
+  --sidebar-accent-foreground: #f2f4f9;
+  --sidebar-border: #212736;
+  --sidebar-ring: var(--ring);
+
+  --shadow: 0 12px 35px rgba(0, 0, 0, 0.35);
+
+  /* ---- legacy aliases — keep the rest of this stylesheet unchanged ---- */
+  --ink: var(--foreground);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--foreground);
+  --text-muted: var(--muted-foreground);
+  --text-disabled: color-mix(in srgb, var(--foreground) 40%, transparent);
+  --text-link: var(--primary);
+  --line: var(--border);
+  --paper: var(--card);
+  --wash: var(--muted);
+  --brand: var(--primary);
+  --brand2: color-mix(in srgb, var(--primary) 82%, black);
+  --good: var(--success);
+  --bad: var(--destructive);
+  --warn: var(--warning);
+  --field: var(--secondary);
+  --surface-primary: var(--card);
+  --surface-secondary: var(--secondary);
+  --border-default: var(--border);
+  --control-secondary-bg: var(--secondary);
+  --control-secondary-text: var(--secondary-foreground);
+  --status-soft: var(--secondary);
+  --error-surface: color-mix(in srgb, var(--destructive) 16%, transparent);
+  --color-canvas: var(--background);
+  --color-sidebar: var(--sidebar);
+  --color-surface-1: var(--card);
+  --color-surface-2: var(--secondary);
+  --color-surface-3: var(--muted);
+  --color-text: var(--foreground);
+  --color-text-muted: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--primary);
+  --color-accent-soft: var(--sidebar-accent);
+  --color-focus: var(--ring);
+  --danger: var(--destructive);
+
+  font-family: var(--font-sans);
 }
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --ink: #edf2fa;
-  --muted: #aebbd0;
-  --text-primary: #f1f5f9;
-  --text-secondary: #cbd5e1;
-  --text-muted: #aebbd0;
-  --text-disabled: #8290a8;
-  --text-link: #a9baff;
-  --line: #354158;
-  --paper: #1d2637;
-  --wash: #111827;
-  --brand: #8aa4ff;
-  --brand2: #a9baff;
-  --good: #5ee0b4;
-  --bad: #ff8a82;
-  --warn: #ffb86b;
-  --sidebar: #0b1020;
-  --field: #151e2e;
-  --surface-primary: var(--paper);
-  --surface-secondary: #172033;
-  --border-default: var(--line);
-  --control-secondary-bg: #293650;
-  --control-secondary-text: #dce5ff;
-  --status-soft: #293650;
-  --error-surface: #44252b;
-  --shadow: 0 12px 35px rgba(0, 0, 0, 0.28);
-  --color-canvas: #090d16;
-  --color-sidebar: #0d1220;
-  --color-surface-1: #121827;
-  --color-surface-2: #171f30;
-  --color-surface-3: #202a3d;
-  --color-text: #edf1f7;
-  --color-text-muted: #b1bbca;
-  --color-border: #273247;
-  --color-border-strong: #35425a;
-  --color-accent: #8098ff;
-  --color-accent-soft: #202b58;
-  --color-focus: #9ab0ff;
+
+/* Explicit light theme — the reference design is dark-only, but JobQuest's
+   existing light/dark/system theme toggle is a feature we preserve, so the
+   light palette follows the same indigo-accent language at higher lightness.
+   Only the tokens that actually change are redeclared; every legacy alias
+   above cascades through automatically. Sidebar tokens intentionally are not
+   redeclared here — the sidebar stays dark in both themes. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --background: #f4f5fa;
+  --foreground: #1b2032;
+
+  --surface: #ffffff;
+  --surface-2: #eef0f6;
+
+  --card: #ffffff;
+  --card-foreground: var(--foreground);
+  --popover: #ffffff;
+  --popover-foreground: var(--foreground);
+
+  --primary: #5b63d3;
+  --primary-foreground: #ffffff;
+
+  --secondary: #eceefa;
+  --secondary-foreground: #262c42;
+
+  --muted: #eef0f6;
+  --muted-foreground: #676f85;
+
+  --accent: #e7e9fb;
+  --accent-foreground: #20263c;
+
+  --destructive: #d1453a;
+  --destructive-foreground: #ffffff;
+  --success: #12946f;
+  --success-foreground: #ffffff;
+  --warning: #a5730a;
+  --warning-foreground: #ffffff;
+  --info: #1f6fb2;
+  --info-foreground: #ffffff;
+
+  --border: #dde1ec;
+  --border-strong: #c3c9db;
+  --input: #dde1ec;
+  --ring: #5b63d3;
+
+  --chart-1: #5b63d3;
+  --chart-2: #1f6fb2;
+  --chart-3: #12946f;
+  --chart-4: #a5730a;
+  --chart-5: #b23e78;
+
+  --shadow: 0 12px 35px rgba(24, 33, 47, 0.09);
+}
+
+/* Real per-property fallback: browsers that don't understand oklch() never
+   parse the declarations in this block at all, so the hex values above are
+   what they use. Browsers that do understand it apply this block (it comes
+   later in source order) and get the oklch tokens instead. */
+@supports (color: oklch(0.6 0.15 250)) {
+  :root {
+    --background: oklch(0.19 0.019 264);
+    --foreground: oklch(0.955 0.008 260);
+    --surface: oklch(0.225 0.021 264);
+    --surface-2: oklch(0.26 0.023 264);
+    --card: oklch(0.228 0.021 264);
+    --popover: oklch(0.235 0.022 264);
+    --primary: oklch(0.66 0.14 273);
+    --primary-foreground: oklch(0.1 0.015 264);
+    --secondary: oklch(0.29 0.024 264);
+    --secondary-foreground: oklch(0.94 0.008 260);
+    --muted: oklch(0.275 0.022 264);
+    --muted-foreground: oklch(0.735 0.021 262);
+    --accent: oklch(0.31 0.03 268);
+    --accent-foreground: oklch(0.96 0.008 260);
+    --destructive: oklch(0.63 0.18 22);
+    --destructive-foreground: oklch(0.98 0.006 260);
+    --success: oklch(0.68 0.13 162);
+    --success-foreground: oklch(0.17 0.02 264);
+    --warning: oklch(0.78 0.13 78);
+    --warning-foreground: oklch(0.17 0.02 264);
+    --info: oklch(0.7 0.11 235);
+    --info-foreground: oklch(0.17 0.02 264);
+    --border: oklch(0.3 0.022 264);
+    --border-strong: oklch(0.38 0.026 264);
+    --input: oklch(0.32 0.024 264);
+    --ring: oklch(0.7 0.13 273);
+    --chart-1: oklch(0.66 0.14 273);
+    --chart-2: oklch(0.7 0.11 235);
+    --chart-3: oklch(0.68 0.13 162);
+    --chart-4: oklch(0.78 0.13 78);
+    --chart-5: oklch(0.65 0.15 340);
+    --sidebar: oklch(0.175 0.018 264);
+    --sidebar-foreground: oklch(0.88 0.012 260);
+    --sidebar-accent: oklch(0.26 0.026 268);
+    --sidebar-accent-foreground: oklch(0.97 0.008 260);
+    --sidebar-border: oklch(0.27 0.02 264);
+  }
+
+  :root[data-theme="light"] {
+    --background: oklch(0.965 0.004 264);
+    --foreground: oklch(0.22 0.024 264);
+    --surface: oklch(1 0 0);
+    --surface-2: oklch(0.95 0.006 264);
+    --card: oklch(1 0 0);
+    --popover: oklch(1 0 0);
+    --primary: oklch(0.52 0.16 273);
+    --primary-foreground: oklch(1 0 0);
+    --secondary: oklch(0.93 0.014 270);
+    --secondary-foreground: oklch(0.27 0.03 264);
+    --muted: oklch(0.95 0.006 264);
+    --muted-foreground: oklch(0.48 0.021 262);
+    --accent: oklch(0.91 0.02 270);
+    --accent-foreground: oklch(0.24 0.03 264);
+    --destructive: oklch(0.55 0.19 22);
+    --destructive-foreground: oklch(1 0 0);
+    --success: oklch(0.5 0.12 162);
+    --success-foreground: oklch(1 0 0);
+    --warning: oklch(0.55 0.13 78);
+    --warning-foreground: oklch(1 0 0);
+    --info: oklch(0.5 0.12 235);
+    --info-foreground: oklch(1 0 0);
+    --border: oklch(0.9 0.008 264);
+    --border-strong: oklch(0.82 0.014 264);
+    --input: oklch(0.9 0.008 264);
+    --ring: oklch(0.52 0.16 273);
+    --chart-1: oklch(0.52 0.16 273);
+    --chart-2: oklch(0.5 0.12 235);
+    --chart-3: oklch(0.5 0.12 162);
+    --chart-4: oklch(0.55 0.13 78);
+    --chart-5: oklch(0.5 0.16 340);
+  }
 }
 * {
   box-sizing: border-box;
@@ -94,6 +315,7 @@ body {
   margin: 0;
   color: var(--ink);
   background: var(--color-canvas);
+  -webkit-font-smoothing: antialiased;
 }
 button,
 input,
@@ -104,6 +326,37 @@ textarea {
 button {
   cursor: pointer;
 }
+/* Reusable design-system utilities (mirrors the reference's @utility rules) */
+.panel {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.icon {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+}
+.show-narrow {
+  display: none;
+}
+@media (max-width: 480px) {
+  .hide-narrow {
+    display: none;
+  }
+  .show-narrow {
+    display: inline;
+  }
+}
+button .icon,
+.btn .icon {
+  width: 1rem;
+  height: 1rem;
+}
 .skip-link {
   position: absolute;
   left: -9999px;
@@ -111,7 +364,8 @@ button {
 .skip-link:focus {
   left: 1rem;
   top: 1rem;
-  background: #fff;
+  background: var(--card);
+  color: var(--foreground);
   padding: 0.75rem;
   z-index: 99;
 }
@@ -119,23 +373,25 @@ button {
   min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(320px, 520px);
+  background: var(--background);
 }
 .auth-brand {
   padding: clamp(3rem, 8vw, 8rem);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  background: #253f9f;
-  color: #fff;
+  background: linear-gradient(160deg, var(--sidebar), color-mix(in srgb, var(--primary) 22%, var(--sidebar)));
+  color: var(--sidebar-foreground);
 }
 .auth-brand h1 {
   font-size: clamp(3rem, 7vw, 6rem);
   margin: 0;
   letter-spacing: -0.07em;
+  color: #fff;
 }
 .auth-brand p {
   max-width: 34rem;
-  color: #d8e0ff;
+  color: color-mix(in srgb, var(--sidebar-foreground) 85%, transparent);
   font-size: 1.2rem;
   line-height: 1.6;
 }
@@ -143,7 +399,7 @@ button {
   padding: clamp(2rem, 6vw, 5rem);
   display: flex;
   align-items: center;
-  background: #fff;
+  background: var(--card);
 }
 .auth-panel form {
   width: 100%;
@@ -151,58 +407,153 @@ button {
 .shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr);
 }
 aside {
   position: sticky;
   top: 0;
   height: 100vh;
-  padding: 0.75rem;
-  background: var(--color-sidebar);
-  color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: var(--sidebar);
+  color: var(--sidebar-foreground);
   overflow: auto;
-  border-right: 1px solid var(--color-border);
+  border-right: 1px solid var(--sidebar-border);
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-color: var(--sidebar-accent) transparent;
 }
 .logo {
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  padding: 0.4rem;
-  font-size: 1.1rem;
+  padding: 0.65rem;
+  font-size: 1rem;
   font-weight: 800;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
+}
+.logo-mark {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--primary-foreground);
+  background: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 900;
 }
 nav {
-  display: grid;
-  gap: 0.25rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 0.75rem;
+}
+.nav-section,
+.nav-section-static {
+  display: flex;
+  flex-direction: column;
+}
+.nav-section summary,
+.nav-group {
+  margin: 0 0 0.35rem;
+  padding: 0 0.5rem;
+  color: color-mix(in srgb, var(--sidebar-foreground) 62%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+.nav-section summary::-webkit-details-marker {
+  display: none;
+}
+.nav-group {
+  cursor: default;
+}
+.nav-section button,
+.nav-section-static button {
+  margin-top: 2px;
 }
 nav button {
+  display: flex !important;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  min-height: 2.25rem;
   border: 0;
-  border-radius: 0.6rem;
-  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.65rem;
   text-align: left;
-  color: var(--color-text-muted);
+  color: color-mix(in srgb, var(--sidebar-foreground) 85%, transparent);
   background: transparent;
+  font-size: 0.875rem;
+  transition: background-color 120ms ease, color 120ms ease;
 }
-nav button:hover,
+nav button .icon {
+  flex-shrink: 0;
+  color: currentColor;
+  opacity: 0.85;
+}
+nav button:hover {
+  color: var(--sidebar-accent-foreground);
+  background: color-mix(in srgb, var(--sidebar-accent) 60%, transparent);
+}
 nav button.active {
-  color: var(--color-text);
-  background: var(--color-accent-soft);
+  color: var(--sidebar-accent-foreground);
+  background: var(--sidebar-accent);
+  font-weight: 700;
+}
+nav button.active .icon {
+  opacity: 1;
 }
 .user-card {
-  margin-top: 2rem;
-  padding: 1rem 0.7rem;
-  border-top: 1px solid var(--color-border);
-  color: var(--color-text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: auto;
+  padding: 0.85rem;
+  border-top: 1px solid var(--sidebar-border);
+  color: var(--sidebar-foreground);
   font-size: 0.88rem;
 }
-.user-card > span {
-  display: block;
-  margin: 0.25rem 0 0.75rem;
+.user-card .actions {
+  gap: 0.4rem;
 }
-:root[data-visual-test="true"] .user-card > span {
+.user-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.user-identity strong,
+.user-identity span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-identity span {
+  color: color-mix(in srgb, var(--sidebar-foreground) 65%, transparent);
+  font-size: 0.78rem;
+}
+.user-avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+:root[data-visual-test="true"] .user-identity span,
+:root[data-visual-test="true"] .user-identity strong {
   visibility: hidden;
 }
 .workspace {
@@ -242,19 +593,13 @@ nav button.active {
   display: inline-grid;
   place-items: center;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--color-text-muted);
   background: var(--color-surface-1);
 }
-.logo-mark {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 7px;
-  color: #fff;
-  background: var(--color-accent);
-  font-size: 0.72rem;
+.icon-button:hover {
+  color: var(--foreground);
+  border-color: var(--border-strong);
 }
 .sidebar-close {
   display: none;
@@ -268,6 +613,7 @@ nav button.active {
 .navigation-collapsed .logo-word,
 .navigation-collapsed .nav-label,
 .navigation-collapsed .nav-section summary,
+.navigation-collapsed .nav-group,
 .navigation-collapsed .user-card,
 .navigation-collapsed .nav-badge {
   display: none;
@@ -275,9 +621,15 @@ nav button.active {
 .navigation-collapsed .logo {
   justify-content: center;
 }
+.navigation-collapsed nav {
+  gap: 0.4rem;
+}
 .navigation-collapsed nav button {
   min-height: 40px;
   justify-content: center;
+}
+.navigation-collapsed .desktop-collapse .icon {
+  transform: rotate(180deg);
 }
 main {
   min-width: 0;
@@ -309,7 +661,7 @@ h1 {
   font-weight: 800;
 }
 .muted {
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .grid {
   display: grid;
@@ -409,13 +761,17 @@ legend {
   font-weight: 800;
 }
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   width: auto;
   border: 0;
-  border-radius: 0.58rem;
+  border-radius: var(--radius-md);
   padding: 0.72rem 1rem;
   font-weight: 750;
   background: var(--brand);
-  color: #fff;
+  color: var(--primary-foreground);
 }
 .btn:hover {
   background: var(--brand2);
@@ -425,7 +781,7 @@ legend {
   color: var(--control-secondary-text);
 }
 .btn.danger {
-  background: #feeceb;
+  background: var(--error-surface);
   color: var(--bad);
 }
 .btn.small {
@@ -440,24 +796,24 @@ legend {
 .table-wrap {
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 0.8rem;
+  border-radius: var(--radius-lg);
   background: var(--paper);
 }
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
 }
 th,
 td {
-  padding: 0.75rem;
+  padding: 0.65rem 0.75rem;
   border-bottom: 1px solid var(--line);
   text-align: left;
-  vertical-align: top;
+  vertical-align: middle;
   white-space: nowrap;
 }
 th {
-  color: var(--muted);
+  color: var(--muted-foreground);
   background: var(--wash);
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -491,15 +847,15 @@ th {
   font-weight: 750;
 }
 .badge.good {
-  background: #e9f7f2;
+  background: color-mix(in srgb, var(--success) 16%, transparent);
   color: var(--good);
 }
 .badge.bad {
-  background: #fff0ef;
+  background: color-mix(in srgb, var(--destructive) 16%, transparent);
   color: var(--bad);
 }
 .badge.warn {
-  background: #fff4e8;
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
   color: var(--warn);
 }
 .error {
@@ -537,12 +893,12 @@ a {
 .empty {
   padding: 3rem 1rem;
   text-align: center;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .loading {
   padding: 4rem;
   text-align: center;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 #toast {
   position: fixed;
@@ -552,8 +908,8 @@ a {
   max-width: 360px;
   padding: 0.8rem 1rem;
   border-radius: 0.6rem;
-  color: #fff;
-  background: #17213c;
+  color: var(--sidebar-foreground);
+  background: var(--sidebar);
   box-shadow: var(--shadow);
   opacity: 0;
   transform: translateY(1rem);
@@ -570,20 +926,13 @@ pre.example {
   max-height: 260px;
   overflow: auto;
   border-radius: 0.7rem;
-  background: #18212f;
-  color: #e7ecf8;
+  background: var(--sidebar);
+  color: var(--sidebar-foreground);
+  font-family: var(--font-mono);
   font-size: 0.8rem;
 }
 .mobile-nav {
   display: none;
-}
-.nav-group {
-  margin: 0.9rem 0.8rem 0.25rem;
-  color: #8290aa;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.65rem;
-  font-weight: 800;
 }
 .inline,
 .check {
@@ -669,64 +1018,91 @@ pre.example {
 .timeline-event p {
   margin: 0.25rem 0;
 }
+/* Stage → tone. Mirrors the reference's semantic pill colors (Applied =
+   indigo, Screening = blue, Interview = green, Offer = amber, Rejected =
+   red, Ghosted = muted) extended to JobQuest's fuller 13-stage pipeline. */
 .stage-saved::before,
 .stage-saved {
-  --stage: #64748b;
+  --stage: var(--muted-foreground);
 }
 .stage-preparing::before,
 .stage-preparing {
-  --stage: #7c3aed;
+  --stage: var(--muted-foreground);
 }
 .stage-applied::before,
 .stage-applied {
-  --stage: #2563eb;
+  --stage: var(--primary);
 }
 .stage-assessment::before,
 .stage-assessment {
-  --stage: #0891b2;
+  --stage: var(--info);
 }
 .stage-recruiter-screen::before,
 .stage-recruiter-screen {
-  --stage: #4f46e5;
+  --stage: var(--info);
 }
 .stage-interview::before,
 .stage-interview {
-  --stage: #9333ea;
+  --stage: var(--success);
 }
 .stage-final-interview::before,
 .stage-final-interview {
-  --stage: #6d28d9;
+  --stage: var(--success);
 }
 .stage-offer::before,
 .stage-offer {
-  --stage: #d97706;
+  --stage: var(--warning);
 }
 .stage-accepted::before,
 .stage-accepted {
-  --stage: #16a34a;
+  --stage: var(--success);
 }
 .stage-rejected::before,
 .stage-rejected {
-  --stage: #dc2626;
+  --stage: var(--destructive);
 }
 .stage-ghosted::before,
 .stage-ghosted {
-  --stage: #ea580c;
+  --stage: var(--muted-foreground);
 }
 .stage-withdrawn::before,
 .stage-withdrawn {
-  --stage: #6b7280;
+  --stage: var(--muted-foreground);
 }
 .stage-position-closed::before,
 .stage-position-closed {
-  --stage: #9f1239;
+  --stage: var(--muted-foreground);
 }
 .timeline-event::before {
   background: var(--stage, var(--brand));
 }
 .stage-badge {
-  color: #fff !important;
-  background: var(--stage, var(--brand)) !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--stage, var(--brand)) 32%, transparent) !important;
+  color: var(--stage, var(--brand)) !important;
+  background: color-mix(in srgb, var(--stage, var(--brand)) 15%, transparent) !important;
+  font-weight: 700 !important;
+}
+.stage-badge::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* Pale tint backgrounds don't leave enough room for the raw accent colors to
+   clear WCAG AA (4.5:1) as text in either theme — axe flagged
+   .stage-badge.stage-applied at 4.2:1 in light and 4.28:1 in dark, plus
+   .stage-rejected (3.8) and .tone-destructive (3.76) in dark. Light theme
+   needs the text darkened toward black; dark theme needs it lightened toward
+   white — same fix, opposite mix direction. */
+:root[data-theme="light"] .stage-badge {
+  color: color-mix(in srgb, var(--stage, var(--brand)) 78%, black) !important;
+}
+:root[data-theme="dark"] .stage-badge {
+  color: color-mix(in srgb, var(--stage, var(--brand)) 82%, white) !important;
 }
 .summary-grid {
   display: grid;
@@ -780,17 +1156,28 @@ pre.example {
   background: color-mix(in srgb, var(--brand) 8%, var(--paper));
   outline: none;
 }
+.clickable-row.is-selected {
+  background: color-mix(in srgb, var(--primary) 10%, var(--paper));
+}
+.clickable-row.is-selected:hover {
+  background: color-mix(in srgb, var(--primary) 15%, var(--paper));
+}
+tbody td:nth-child(2),
+tbody td.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
 .widget-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 0.9rem;
 }
 .widget-grid [data-widget="activity-chart"] {
   grid-column: span 2;
 }
 .widget-grid [data-widget="weekly-goals"],
 .widget-grid [data-widget="daily-goals"] {
-  background: color-mix(in srgb, var(--brand) 7%, var(--paper));
+  background: color-mix(in srgb, var(--primary) 6%, var(--paper));
 }
 
 .dashboard-hero {
@@ -804,13 +1191,13 @@ pre.example {
   margin: 0.35rem 0;
   font-size: clamp(1.85rem, 4vw, 2.65rem);
   letter-spacing: -0.04em;
-}
-.eyebrow,
-.widget-kicker {
-  color: var(--brand);
-  font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0.12em;
+}
+.eyebrow {
+  color: var(--brand);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 .dashboard-controls {
@@ -822,18 +1209,46 @@ pre.example {
 }
 .widget {
   transition: border-color 160ms ease, transform 160ms ease;
+  display: flex;
+  flex-direction: column;
 }
 .widget:hover {
   border-color: color-mix(in srgb, var(--brand) 38%, var(--line));
   transform: translateY(-1px);
 }
+.widget-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
 .widget-kicker {
   display: block;
-  margin-bottom: 0.35rem;
-  color: var(--muted);
+  margin-bottom: 0.15rem;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.widget-drill {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.6rem;
+  color: var(--muted-foreground);
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.widget-drill:hover {
+  color: var(--foreground);
+  border-color: var(--border-strong);
 }
 .widget-kpi .metric {
-  font-size: clamp(2rem, 4vw, 2.8rem);
+  font-size: clamp(1.7rem, 4vw, 2.2rem);
+  line-height: 1;
 }
 .customize-toolbar {
   display: flex;
@@ -848,7 +1263,7 @@ pre.example {
 .layout-row code {
   display: block;
   margin-top: 0.2rem;
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 0.75rem;
 }
 .applications-meta {
@@ -866,49 +1281,93 @@ pre.example {
   justify-content: space-between;
   gap: 0.75rem;
   min-width: 0;
-  padding: 0.75rem 0.9rem;
+  padding: 0.65rem 0.9rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--paper);
 }
 .application-summary span {
   overflow: hidden;
-  color: var(--muted);
-  font-size: 0.78rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .application-summary strong {
   flex: 0 0 auto;
-  font-size: 1.2rem;
+  font-size: 1.15rem;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 .application-workspace .table-wrap table {
   min-width: 1040px;
 }
 .result-count {
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-weight: 700;
+}
+.search-field {
+  position: relative;
+  min-width: 0;
+  flex: 1 1 16rem;
+}
+.search-field .icon {
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+.search-field input {
+  padding-left: 2.1rem;
+}
+.filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 0.6875rem;
+  font-weight: 800;
 }
 .active-filters {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
   overflow-x: auto;
   padding: 0.25rem 0 0.75rem;
 }
 .filter-chip {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   border: 1px solid color-mix(in srgb, var(--brand) 45%, var(--line));
   border-radius: 999px;
   background: color-mix(in srgb, var(--brand) 12%, var(--paper));
   color: var(--ink);
-  padding: 0.4rem 0.65rem;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
   cursor: pointer;
 }
 .pagination {
   align-items: center;
   justify-content: flex-end;
   margin-top: 1rem;
+}
+.pagination.applications-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  padding: 0.75rem 0.9rem 0;
+  border-top: 1px solid var(--border);
 }
 
 @media (max-width: 800px) {
@@ -933,16 +1392,17 @@ pre.example {
   }
 }
 .widget {
-  min-height: 180px;
-  padding: 1.1rem;
+  min-height: 160px;
+  padding: 1rem;
   border: 1px solid var(--line);
-  border-radius: 1rem;
+  border-radius: var(--radius-lg);
   background: var(--paper);
-  box-shadow: var(--shadow);
+  box-shadow: none;
 }
 .widget h2 {
-  margin-top: 0;
-  font-size: 1rem;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
 }
 .widget.size-2 {
   grid-column: span 2;
@@ -970,7 +1430,7 @@ pre.example {
 }
 .drag-handle {
   cursor: grab;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .layout-row label {
   display: flex;
@@ -1020,6 +1480,258 @@ pre.example {
 .trend-chart i.missed {
   background: var(--bad);
 }
+
+/* ---- dashboard hero-widget components ---- */
+.tone-dot {
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.tone-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  padding: 0.15rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+.tone-success {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+}
+.tone-warning {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+}
+.tone-destructive {
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 16%, transparent);
+}
+.tone-info {
+  color: var(--info);
+  background: color-mix(in srgb, var(--info) 18%, transparent);
+}
+.tone-muted {
+  color: var(--muted-foreground);
+  background: var(--muted);
+}
+.tone-dot.tone-success,
+.tone-dot.tone-warning,
+.tone-dot.tone-destructive,
+.tone-dot.tone-info,
+.tone-dot.tone-muted {
+  background: currentColor;
+}
+/* Same AA fix as .stage-badge above, applied per tone since .tone-chip/
+   .priority-badge read color from the specific .tone-X class rather than a
+   --stage indirection. .tone-muted is already text-on-surface
+   (var(--muted-foreground) is tuned for AA on var(--muted)), so it's excluded. */
+:root[data-theme="light"] .tone-success {
+  color: color-mix(in srgb, var(--success) 78%, black) !important;
+}
+:root[data-theme="light"] .tone-warning {
+  color: color-mix(in srgb, var(--warning) 78%, black) !important;
+}
+:root[data-theme="light"] .tone-destructive {
+  color: color-mix(in srgb, var(--destructive) 78%, black) !important;
+}
+:root[data-theme="light"] .tone-info {
+  color: color-mix(in srgb, var(--info) 78%, black) !important;
+}
+:root[data-theme="dark"] .tone-success {
+  color: color-mix(in srgb, var(--success) 82%, white) !important;
+}
+:root[data-theme="dark"] .tone-warning {
+  color: color-mix(in srgb, var(--warning) 82%, white) !important;
+}
+:root[data-theme="dark"] .tone-destructive {
+  color: color-mix(in srgb, var(--destructive) 82%, white) !important;
+}
+:root[data-theme="dark"] .tone-info {
+  color: color-mix(in srgb, var(--info) 82%, white) !important;
+}
+
+.funnel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+.funnel-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+.funnel-bar {
+  height: 0.6rem;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--secondary);
+}
+/* Shared by the funnel bar, the mini-bars widget, and any other single
+   0-100% indicator built by app.js's hBar() helper — a 2-rect SVG (track +
+   fill) rather than a width-styled div, since the CSP (style-src 'self',
+   no unsafe-inline) blocks inline style="" attributes. */
+.hbar-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.hbar-track {
+  fill: var(--secondary);
+}
+.hbar-fill {
+  fill: var(--primary);
+}
+.mini-bar {
+  height: 0.55rem;
+}
+/* Shared by the daily-goal-chart and activity-chart "bar" mode — built by
+   app.js's vBars() helper for the same CSP reason as hBar() above. */
+.vbars-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.vbar-fill {
+  fill: var(--primary);
+}
+.vbar-fill.achieved {
+  fill: var(--success);
+}
+.vbar-fill.missed {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.5;
+}
+.goal-chart {
+  height: 110px;
+}
+.goal-chart-svg {
+  height: 100%;
+}
+
+.next-actions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.next-actions-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+.next-action-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.timeline-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.timeline-feed li {
+  display: flex;
+  gap: 0.65rem;
+}
+.timeline-feed-marker {
+  flex-shrink: 0;
+  margin-top: 0.4rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.timeline-feed p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+.timeline-feed p + p {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+}
+
+.kv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+.kv-list li,
+.kv-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+.kv-list dt {
+  flex: 1;
+}
+.kv-list li span:not(.tone-dot),
+.kv-list li strong {
+  margin-left: auto;
+}
+.kv-list li > span:first-of-type:not(.tone-dot) {
+  margin-left: 0;
+}
+
+.goal-radial-wrap {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  flex: 1;
+}
+.goal-radial {
+  width: clamp(84px, 12vw, 108px);
+  height: clamp(84px, 12vw, 108px);
+  flex-shrink: 0;
+  transform: rotate(0deg);
+}
+.goal-radial-value {
+  display: none;
+}
+.goal-radial-count {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.chart-svg-wrap {
+  height: 130px;
+}
+.chart-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.chart-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+}
+.priority-badge {
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+}
+
 .comparison-bar {
   height: 1.2rem;
   overflow: hidden;
@@ -1047,14 +1759,14 @@ pre.example {
 }
 .category-row span {
   flex: 1;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .calendar-weekdays {
   display: grid;
   grid-column: 1/-1;
   grid-template-columns: repeat(7, 1fr);
   text-align: center;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .calendar-grid {
   display: grid;
@@ -1125,7 +1837,7 @@ pre.example {
 }
 .week-grid .agenda-event span {
   display: block;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .export-card {
   color: var(--ink);
@@ -1253,9 +1965,20 @@ progress {
 .view-switcher {
   display: inline-flex;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   padding: 2px;
   background: var(--surface-secondary);
+}
+.view-switcher .btn {
+  border-radius: var(--radius-sm);
+}
+.view-switcher .btn.secondary {
+  background: transparent;
+  color: var(--muted-foreground);
+}
+.view-switcher .btn.secondary:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 .application-workspace {
   overflow: hidden;
@@ -1353,10 +2076,10 @@ dialog {
   background: var(--surface-primary);
   color: var(--text-primary);
   max-width: min(42rem, calc(100vw - 2rem));
-  box-shadow: 0 20px 60px #0008;
+  box-shadow: var(--shadow);
 }
 dialog::backdrop {
-  background: #0f172acc;
+  background: color-mix(in srgb, var(--sidebar) 80%, transparent);
 }
 .mobile-menu,
 .sidebar-backdrop {
@@ -1368,23 +2091,9 @@ dialog::backdrop {
   padding: 0.1rem 0.4rem;
   border-radius: 999px;
   background: var(--danger);
-  color: #fff;
+  color: var(--destructive-foreground);
+  font-family: var(--font-mono);
   text-align: center;
-}
-.nav-section summary {
-  padding: 0.65rem 0.8rem;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-}
-.nav-section button {
-  display: flex !important;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
 }
 @media (max-width: 780px) {
   .mobile-menu {
@@ -1413,7 +2122,7 @@ dialog::backdrop {
     position: fixed;
     inset: 0;
     z-index: 28;
-    background: #0008;
+    background: color-mix(in srgb, var(--sidebar) 70%, transparent);
   }
   .nav-open {
     overflow: hidden;
