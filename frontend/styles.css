@@ -89,7 +89,7 @@
   --popover-foreground: var(--foreground);
 
   --primary: #7d86f2;
-  --primary-foreground: #171b26;
+  --primary-foreground: #0d0f16;
 
   --secondary: #232939;
   --secondary-foreground: #e9ecf3;
@@ -243,7 +243,7 @@
     --card: oklch(0.228 0.021 264);
     --popover: oklch(0.235 0.022 264);
     --primary: oklch(0.66 0.14 273);
-    --primary-foreground: oklch(0.16 0.02 264);
+    --primary-foreground: oklch(0.1 0.015 264);
     --secondary: oklch(0.29 0.024 264);
     --secondary-foreground: oklch(0.94 0.008 260);
     --muted: oklch(0.275 0.022 264);
@@ -1092,6 +1092,18 @@ pre.example {
   border-radius: 50%;
   background: currentColor;
 }
+/* Pale tint backgrounds don't leave enough room for the raw accent colors to
+   clear WCAG AA (4.5:1) as text in either theme — axe flagged
+   .stage-badge.stage-applied at 4.2:1 in light and 4.28:1 in dark, plus
+   .stage-rejected (3.8) and .tone-destructive (3.76) in dark. Light theme
+   needs the text darkened toward black; dark theme needs it lightened toward
+   white — same fix, opposite mix direction. */
+:root[data-theme="light"] .stage-badge {
+  color: color-mix(in srgb, var(--stage, var(--brand)) 78%, black) !important;
+}
+:root[data-theme="dark"] .stage-badge {
+  color: color-mix(in srgb, var(--stage, var(--brand)) 82%, white) !important;
+}
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -1512,6 +1524,34 @@ tbody td.num {
 .tone-dot.tone-info,
 .tone-dot.tone-muted {
   background: currentColor;
+}
+/* Same AA fix as .stage-badge above, applied per tone since .tone-chip/
+   .priority-badge read color from the specific .tone-X class rather than a
+   --stage indirection. .tone-muted is already text-on-surface
+   (var(--muted-foreground) is tuned for AA on var(--muted)), so it's excluded. */
+:root[data-theme="light"] .tone-success {
+  color: color-mix(in srgb, var(--success) 78%, black) !important;
+}
+:root[data-theme="light"] .tone-warning {
+  color: color-mix(in srgb, var(--warning) 78%, black) !important;
+}
+:root[data-theme="light"] .tone-destructive {
+  color: color-mix(in srgb, var(--destructive) 78%, black) !important;
+}
+:root[data-theme="light"] .tone-info {
+  color: color-mix(in srgb, var(--info) 78%, black) !important;
+}
+:root[data-theme="dark"] .tone-success {
+  color: color-mix(in srgb, var(--success) 82%, white) !important;
+}
+:root[data-theme="dark"] .tone-warning {
+  color: color-mix(in srgb, var(--warning) 82%, white) !important;
+}
+:root[data-theme="dark"] .tone-destructive {
+  color: color-mix(in srgb, var(--destructive) 82%, white) !important;
+}
+:root[data-theme="dark"] .tone-info {
+  color: color-mix(in srgb, var(--info) 82%, white) !important;
 }
 
 .funnel-list {
