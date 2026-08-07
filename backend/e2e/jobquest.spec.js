@@ -97,6 +97,7 @@ test("responsive visual states", async ({ page }, testInfo) => {
     animations: "disabled",
   });
   await page.getByRole("button", { name: "Kanban", exact: true }).click();
+  await page.waitForLoadState("networkidle");
   await expect(page).toHaveScreenshot(`applications-kanban-${project}.png`, {
     animations: "disabled",
   });
@@ -114,6 +115,7 @@ test("responsive visual states", async ({ page }, testInfo) => {
     });
   } else {
     await page.getByRole("button", { name: "Open navigation" }).click();
+    await expect(page.locator("#sidebar")).toHaveClass(/\bopen\b/);
     await expect(page).toHaveScreenshot(`mobile-navigation-${project}.png`, {
       animations: "disabled",
     });
