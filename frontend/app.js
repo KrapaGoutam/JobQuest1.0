@@ -17,6 +17,7 @@ import {
   WIDGET_NAMES,
   widgetDefinition,
 } from "./dashboard-config.js";
+import { icon } from "./icons.js";
 
 const state = {
   user: null,
@@ -105,39 +106,38 @@ function table(headers, body, emptyMessage = "No records yet") {
 }
 
 const nav = [
-  ["dashboard", "Dashboard"],
-  ["applications", "Applications"],
-  ["add", "Add Application"],
-  ["bulk", "Bulk Import"],
-  ["calendar", "Calendar"],
-  ["reminders", "Reminder Center"],
-  ["interviews", "Interviews"],
-  ["rejections", "Rejections"],
-  ["follow_ups", "Follow-Ups"],
-  ["networking_contacts", "Networking"],
-  ["resumes", "Resumes"],
-  ["goal-history", "Goal History"],
-  ["aging", "Aging Report"],
-  ["stage-analytics", "Stage Analytics"],
-  ["exports", "Exports"],
-  ["settings", "Settings"],
+  ["dashboard", "Dashboard", "layout-dashboard"],
+  ["applications", "Applications", "briefcase"],
+  ["add", "Add Application", "plus-circle"],
+  ["bulk", "Bulk Import", "upload"],
+  ["calendar", "Calendar", "calendar-days"],
+  ["reminders", "Reminder Center", "bell-ring"],
+  ["interviews", "Interviews", "users"],
+  ["rejections", "Rejections", "x-circle"],
+  ["follow_ups", "Follow-Ups", "send"],
+  ["networking_contacts", "Networking", "network"],
+  ["resumes", "Resumes", "file-text"],
+  ["goal-history", "Goal History", "target"],
+  ["aging", "Aging Report", "timer"],
+  ["stage-analytics", "Stage Analytics", "bar-chart-3"],
+  ["exports", "Exports", "download"],
+  ["settings", "Settings", "settings"],
 ];
+const navButton = ([id, label, iconName]) =>
+  `<button data-page="${id}" class="${state.page === id ? "active" : ""}">${icon(iconName)}<span class="nav-label">${label}</span></button>`;
 function shell(content) {
   const manager =
     state.user.role === "MANAGER"
-      ? `<div class="nav-group">Manager</div>${[
-          ["manager", "Manager Dashboard"],
-          ["users", "User Management"],
-          ["imports", "Import History"],
-          ["audit", "Audit History"],
+      ? `<div class="nav-section-static"><p class="nav-group">Manager</p>${[
+          ["manager", "Manager Dashboard", "shield-check"],
+          ["users", "User Management", "user-cog"],
+          ["imports", "Import History", "history"],
+          ["audit", "Audit History", "scroll-text"],
         ]
-          .map(
-            ([id, label]) =>
-              `<button data-page="${id}" class="${state.page === id ? "active" : ""}">${label}</button>`,
-          )
-          .join("")}`
+          .map(navButton)
+          .join("")}</div>`
       : "";
-  app.innerHTML = `<div class="shell"><aside><header class="sidebar-head"><div class="logo"><span class="logo-mark" aria-hidden="true">JQ</span><span class="logo-word">JobQuest</span></div><button class="icon-button sidebar-close" id="sidebar-close" aria-label="Close navigation">×</button></header><nav>${nav.map(([id, label]) => `<button data-page="${id}" class="${state.page === id ? "active" : ""}"><span class="nav-label">${label}</span></button>`).join("")}${manager}</nav><div class="user-card"><strong>${esc(state.user.full_name)}</strong><span>${esc(state.user.username)} · ${state.user.role}</span><div class="actions"><button class="btn small secondary" id="theme-cycle" aria-label="Change color theme">Theme: ${esc(state.user.theme || "system")}</button><button class="btn small secondary" id="logout">Sign out</button></div></div></aside><div class="workspace"><header class="topbar"><div class="topbar-leading"><button class="icon-button mobile-menu" id="mobile-menu" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">☰</button><button class="icon-button desktop-collapse" id="desktop-collapse" aria-label="Collapse navigation" aria-pressed="false">⇤</button><span class="topbar-title">${esc(pretty(state.page.split(":")[0]))}</span></div><div class="topbar-actions"><button class="btn small" data-page="quick-add">Quick Add</button></div></header><main id="content" tabindex="-1">${content}</main></div></div>`;
+  app.innerHTML = `<div class="shell"><aside><header class="sidebar-head"><div class="logo"><span class="logo-mark" aria-hidden="true">JQ</span><span class="logo-word">JobQuest</span></div><button class="icon-button sidebar-close" id="sidebar-close" aria-label="Close navigation">${icon("x")}</button></header><nav>${nav.map(navButton).join("")}${manager}</nav><div class="user-card"><span class="user-avatar" aria-hidden="true">${esc((state.user.full_name || "?").slice(0, 1))}</span><div class="user-identity"><strong>${esc(state.user.full_name)}</strong><span>${esc(state.user.username)} · ${state.user.role}</span></div><div class="actions"><button class="btn small secondary" id="theme-cycle" aria-label="Change color theme">Theme: ${esc(state.user.theme || "system")}</button><button class="btn small secondary" id="logout">Sign out</button></div></div></aside><div class="workspace"><header class="topbar"><div class="topbar-leading"><button class="icon-button mobile-menu" id="mobile-menu" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">${icon("menu")}</button><button class="icon-button desktop-collapse" id="desktop-collapse" aria-label="Collapse navigation" aria-pressed="false">${icon("chevron-left")}</button><span class="topbar-title">${esc(pretty(state.page.split(":")[0]))}</span></div><div class="topbar-actions"><button class="btn small" data-page="quick-add">${icon("plus")}Quick Add</button></div></header><main id="content" tabindex="-1">${content}</main></div></div>`;
   const sidebar = qs(".shell aside");
   sidebar.id = "sidebar";
   sidebar.setAttribute("aria-label", "Primary navigation");
@@ -181,7 +181,10 @@ function shell(content) {
     });
     details.ontoggle = () =>
       localStorage.setItem(`nav-${label}`, details.open ? "open" : "closed");
-    navRoot.insertBefore(details, navRoot.querySelector(".nav-group"));
+    navRoot.insertBefore(
+      details,
+      navRoot.querySelector(".nav-section-static"),
+    );
   });
   qs("#logout").onclick = logout;
   qs("#theme-cycle").onclick = cycleTheme;
