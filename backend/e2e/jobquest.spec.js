@@ -97,7 +97,21 @@ test("responsive visual states", async ({ page }, testInfo) => {
     animations: "disabled",
   });
   await page.getByRole("button", { name: "Kanban", exact: true }).click();
-  await page.waitForLoadState("networkidle");
+  // The view-switch handler awaits a preference PUT, then renderApplications()
+  // awaits a further sequential+parallel fetch chain before it rebuilds the
+  // whole shell (see shell() in app.js, which replaces app.innerHTML wholesale
+  // including the sidebar). waitForLoadState("networkidle") is not reliable
+  // here: there is a real gap between the first `await api(preference)` and
+  // the follow-up `Promise.all([...])` inside renderApplications, and under
+  // CI load that gap can exceed the idle threshold, letting networkidle
+  // resolve before the second wave of requests (and the shell rebuild it
+  // triggers) finishes. Waiting on the DOM signal that only exists once that
+  // final render has landed (Kanban's aria-pressed flipping) is exact instead
+  // of timing-based, and Playwright re-resolves the locator by role/name on
+  // each retry so it survives the shell being replaced wholesale.
+  await expect(
+    page.getByRole("button", { name: "Kanban", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(page).toHaveScreenshot(`applications-kanban-${project}.png`, {
     animations: "disabled",
   });
