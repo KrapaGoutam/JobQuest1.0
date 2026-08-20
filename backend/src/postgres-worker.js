@@ -78,23 +78,44 @@ function postgresSql(original) {
 
 const connectionString = workerData.url;
 const local = /(?:localhost|127\.0\.0\.1)/i.test(connectionString);
-const client = new Client({
-  connectionString,
-  ssl: local ? false : { rejectUnauthorized: true },
-  connectionTimeoutMillis: 10_000,
-  keepAlive: true,
-  application_name: "jobquest",
-});
 
-for (let attempt = 1; ; attempt++) {
-  try {
-    await client.connect();
-    break;
-  } catch (error) {
-    if (attempt >= 3) throw new Error("PostgreSQL connection failed");
-    await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+function createClient() {
+  const c = new Client({
+    connectionString,
+    ssl: local ? false : { rejectUnauthorized: true },
+    connectionTimeoutMillis: 10_000,
+    keepAlive: true,
+    application_name: "jobquest",
+  });
+  // Without this handler, a connection dropped out from under the client (e.g. Neon
+  // suspending its compute after idle) emits an unhandled 'error' event, which is
+  // fatal to the whole Node process. Log it and let reconnect-on-demand below recover.
+  c.on("error", (error) => {
+    console.error("[postgres] connection error:", error.message);
+  });
+  return c;
+}
+
+async function connectWithRetry() {
+  const c = createClient();
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await c.connect();
+      return c;
+    } catch (error) {
+      if (attempt >= 3) throw new Error("PostgreSQL connection failed");
+      await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+    }
   }
 }
+
+function isConnectionError(error) {
+  return /Connection terminated|ECONNRESET|Client has encountered a connection error|connection is closed/i.test(
+    String(error?.message || error)
+  );
+}
+
+let client = await connectWithRetry();
 
 workerData.port.on("message", async ({ op, sql, params = [] }) => {
   try {
@@ -104,7 +125,16 @@ workerData.port.on("message", async ({ op, sql, params = [] }) => {
       return;
     }
     const translated = postgresSql(sql);
-    const result = await client.query(translated, params);
+    let result;
+    try {
+      result = await client.query(translated, params);
+    } catch (error) {
+      if (!isConnectionError(error)) throw error;
+      // The connection died between requests (e.g. Neon suspended its compute).
+      // Reconnect once and retry this query instead of letting the error bubble up.
+      client = await connectWithRetry();
+      result = await client.query(translated, params);
+    }
     publish({
       rows: result.rows || [],
       changes: result.rowCount || 0,
