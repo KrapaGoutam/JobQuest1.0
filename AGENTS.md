@@ -55,7 +55,7 @@ propose the smallest safe change, and wait for explicit approval before making i
   `docs(scope): ...`, `test(scope): ...`, `chore(scope): ...`.
 - Every substantial change ends with: format → `npm run lint` → `npm run typecheck` →
   `npm test` → relevant Playwright suites → `npm run build` → diff review → commit.
-- One feature doc per round in `docs/FEATURE_UPGRADE_0N.md` (see template in
+- One feature doc per round in `docs/FEATURE_UPGRADE_N.md` (see template in
   [docs/PRD.md](docs/PRD.md)) — not a `SPEC.md`/`PLAN.md`/`TASKS.md`/`TESTS.md` folder
   per feature. Only split into separate files if a round is large enough to need it.
 - Update [brain/PROJECT_STATE.md](brain/PROJECT_STATE.md) and
@@ -81,5 +81,5 @@ propose the smallest safe change, and wait for explicit approval before making i
 | [brain/AGENT_HANDOFF_LOG.md](brain/AGENT_HANDOFF_LOG.md) | Notable agent-to-agent handoffs |
 
 `brain/` is a recovery/context layer, not a source of truth. Authoritative requirements
-live in `docs/PRD.md`, `docs/ARCHITECTURE.md`, the per-round `docs/FEATURE_UPGRADE_0N.md`
+live in `docs/PRD.md`, `docs/ARCHITECTURE.md`, the per-round `docs/FEATURE_UPGRADE_N.md`
 files, tests, and the source code itself.

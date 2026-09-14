@@ -5,7 +5,7 @@ detailed spec in the round's own `docs/FEATURE_UPGRADE_0N.md` once it starts.
 
 | # | Round | Status |
 |---|-------|--------|
-| 2 | Frontend build tooling (Vite, ES modules, zero behavior change) | Not started |
+| 2 | Frontend build tooling (Vite, ES modules, zero behavior change) | Implemented on `feature/002-frontend-build-tooling`; PR pending, CI pending |
 | 3 | Dashboard + Applications redesign, search/filter/sort/pagination | Not started (draft prompt exists: `Feature_Upgrade_2_Codex_Prompt.md`, untracked) |
 | 4 | Application checklist — audit + gap-close to stage-aware templates | Not started |
 | 5 | Contacts/networking — audit + gap-close to CRM-lite | Not started |

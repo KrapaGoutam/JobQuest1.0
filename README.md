@@ -9,7 +9,8 @@ The authoritative interface contract is [DESIGN.md](DESIGN.md). The repaired App
 - Node.js 24 HTTP service, PostgreSQL runtime driver, and migration-only built-in SQLite reader
 - Versioned SQL migrations in `backend/jobsearch/migrations`
 - Server-side opaque sessions, HttpOnly/SameSite cookies, CSRF tokens, and salted scrypt PIN hashes
-- Responsive HTML/CSS/JavaScript single-page interface served by the backend
+- Responsive HTML/CSS/JavaScript single-page interface, built with Vite (`frontend/`, no
+  framework) and served as static files by the backend from `frontend/dist`
 - Node's built-in test runner and GitHub Actions CI
 
 The initial repository had no application source, database, authentication, tests, or build configuration. The empty `backend` and `frontend` folders were retained and turned into one application; the broken local `backend/venv` remains ignored and is not used. There were no obsolete tables or existing users to preserve.
@@ -21,11 +22,19 @@ Requirements: Node.js 24 or newer.
 ```powershell
 cd backend
 npm install
+npm run build:frontend
 $env:DATABASE_URL = 'postgresql://jobquest:local-only@127.0.0.1:5432/jobquest_dev'
 npm start
 ```
 
 Open `http://127.0.0.1:3000`. Public registration creates regular users only. Production requires `DATABASE_URL` and never falls back to SQLite. SQLite remains available only for source backup, transfer tooling, and isolated compatibility tests. Environment files are not loaded automatically.
+
+`npm run build:frontend` builds the frontend (`frontend/`, a separate Vite project) into
+`frontend/dist`, which the backend serves as-is; `npm start` does not rebuild it
+automatically (see `docs/FEATURE_UPGRADE_2.md` for why), so re-run it after changing
+frontend source. `npm run dev` rebuilds it once automatically before starting the
+watched backend; for live frontend iteration, also run `npm run dev` inside `frontend/`
+in a second terminal to rebuild on every save (no HMR — refresh the browser manually).
 
 Create or reset a protected manager account by passing secrets through the environment, never the command line or repository:
 
@@ -51,8 +60,9 @@ Run from `backend`:
 | `npm run migrate:sqlite-to-postgres -- --source <path> --dry-run` | Dry-run the SQLite mapping                                                         |
 | `npm run migrate:sqlite-to-postgres -- --source <path>`           | Transactionally import and validate SQLite data                                    |
 | `npm run seed`                                                    | Create/promote the environment-selected manager                                    |
-| `npm run dev`                                                     | Start with Node watch mode                                                         |
-| `npm start`                                                       | Start normally                                                                     |
+| `npm run build:frontend`                                          | Build `frontend/` (Vite) into `frontend/dist`, which the backend serves            |
+| `npm run dev`                                                     | Build the frontend once, then start the backend with Node watch mode               |
+| `npm start`                                                       | Start normally (does not rebuild the frontend — run `build:frontend` first)        |
 | `npm test`                                                        | Run the complete automated suite serially                                          |
 | `npm run test:backend`                                            | Run backend API and authorization tests                                            |
 | `npm run test:frontend`                                           | Run frontend utility/component logic tests                                         |
@@ -63,7 +73,7 @@ Run from `backend`:
 | `npm run test:visual`                                             | Compare responsive and theme screenshots with reviewed baselines                   |
 | `npm run lint`                                                    | Parse-check backend and frontend sources                                           |
 | `npm run typecheck`                                               | Run the supported static syntax checks (the project is JavaScript, not TypeScript) |
-| `npm run build`                                                   | Validate frontend source and clean-database migrations; no compilation is needed   |
+| `npm run build`                                                   | Syntax-check backend/frontend sources and validate migrations against a clean DB   |
 
 Use `npm ci` for repeatable installation. CI exercises PostgreSQL plus the SQLite migration fixture. End-to-end coverage exercises the browser-facing API workflow; focused frontend tests cover themes, dashboard bulk selection, calendar, aging, and accessible widget movement.
 
