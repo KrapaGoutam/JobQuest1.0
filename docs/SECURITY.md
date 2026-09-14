@@ -11,7 +11,9 @@
 - Roles: `USER` and `MANAGER`; role escalation only via a protected endpoint or the
   env-var-driven seed script — never via public registration or request body.
 - CI `security` job: `npm audit --audit-level=high`, plus a grep gate rejecting
-  committed `.env`/`.sqlite*` files and raw `MANAGER_PASSWORD=`/`SESSION_SECRET=` values.
+  committed `.env`/`.sqlite*` files and raw manager-password- or session-secret-style
+  key/value assignments (see `.github/workflows/ci.yml` for the exact pattern — not
+  reproduced here verbatim, since it would itself trip the same gate).
 
 This is already a mature posture. New rounds extend it; they do not redesign it.
 
