@@ -1,7 +1,7 @@
 # Current task
 
-**Status: Round 2 implemented, awaiting PR/CI/merge.** See
-[docs/FEATURE_UPGRADE_2.md](../docs/FEATURE_UPGRADE_2.md) for full detail.
+**Status: Round 2 implemented, CI green, PR #9 open — awaiting the user's review/merge.**
+See [docs/FEATURE_UPGRADE_2.md](../docs/FEATURE_UPGRADE_2.md) for full detail.
 
 Branch: `feature/002-frontend-build-tooling`, based on latest `development`
 (which now includes the merged planning-foundation docs, PR #8).
@@ -21,10 +21,9 @@ Branch: `feature/002-frontend-build-tooling`, based on latest `development`
 
 ## Next safe action
 
-Push `feature/002-frontend-build-tooling`, open a PR into `development`, and get the
-full CI matrix green — **especially `browser-and-visual`/Playwright with zero
-visual-regression baseline diffs**, since that's the real proof this round didn't
-change any observable behavior. Do not merge to `main`. Do not start Round 3
-(`Feature_Upgrade_2_Codex_Prompt.md`'s dashboard/applications work) until this is merged
-and the user has explicitly said to proceed — see the stop condition in the round's
-implementation instructions.
+PR [#9](https://github.com/KrapaGoutam/JobQuest1.0/pull/9) is open into `development`
+with all 8 CI jobs green (browser-and-visual: 13 passed/7 skipped/0 failed, matching the
+pre-Round-2 baseline exactly). Left unmerged for the user's review — merging into
+`development` and any decision to also promote to `main` is theirs to make. Do not start
+Round 3 (`Feature_Upgrade_2_Codex_Prompt.md`'s dashboard/applications work) until this
+PR is merged and the user has explicitly said to proceed.

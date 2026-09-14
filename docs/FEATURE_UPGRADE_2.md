@@ -1,8 +1,9 @@
 # Feature Upgrade 2 — Frontend Build Tooling
 
-**Status**: implemented on `feature/002-frontend-build-tooling`, pending PR review/merge
-into `development`. Round 2 of [docs/PRD.md](PRD.md) — see that document for the roadmap
-this fits into. Not yet deployed to Render/production.
+**Status**: implemented on `feature/002-frontend-build-tooling`; PR #9 open into
+`development`, full CI matrix green, awaiting the user's review/merge. Round 2 of
+[docs/PRD.md](PRD.md) — see that document for the roadmap this fits into. Not yet
+deployed to Render/production.
 
 ## Goal
 
@@ -104,10 +105,11 @@ module boundaries instead of growing a single unbundled file further.
 - [x] `npm run lint`, `npm run typecheck`, `npm run build`, `npm run test:frontend` pass
       locally against the new layout.
 - [x] `npm audit --audit-level=high` clean for the new frontend dependency (Vite).
-- [ ] Full CI matrix green on the PR (backend/frontend/integration/e2e tests,
+- [x] Full CI matrix green on the PR (backend/frontend/integration/e2e tests,
       sqlite-postgres-migration, security, static-quality including the new Vite build
       step, and browser-and-visual/Playwright with **zero** visual-regression baseline
-      diffs) — pending, see CI status below.
+      diffs: 13 passed / 7 skipped / 0 failed — identical to the pre-Round-2 baseline
+      run on PR #8). See CI status below.
 - [ ] Render deploy of this branch's equivalent build succeeds — not performed (would
       require deploying to protected infrastructure); CI's `browser-and-visual` job
       exercising a full `node src/server.js` boot against the built output is the
@@ -198,13 +200,15 @@ tasks/BACKLOG.md, tasks/CURRENT_TASK.md, brain/PROJECT_STATE.md, brain/AGENT_HAN
 
 ## CI status
 
-Branch `feature/002-frontend-build-tooling`, not yet pushed at the time this doc was
-written. PR to be opened against `development`; full matrix (8 jobs, matching the
-planning-foundation PR #8) must be green — in particular `browser-and-visual` with no
-visual-baseline diffs — before merge. This section will be updated with the actual
-result before Round 2 is called done.
+PR [#9](../../../pull/9) into `development`, run [34910943865](../../../actions/runs/34910943865):
+all 8 jobs pass — `static-quality` (including the new Vite build step), `security`
+(including the new frontend audit), `sqlite-postgres-migration`, `tests` × 4
+(backend/frontend/integration/e2e), and `browser-and-visual`. The Playwright run itself:
+13 passed, 7 skipped, 0 failed — an exact match to PR #8's pre-Round-2 baseline run,
+confirming no functional or visual regression.
 
 ## Completion notes
 
-Nothing in Round 3+ ([docs/PRD.md](PRD.md)) has started. Do not begin Round 3 until this
-round's PR is reviewed and merged and the user has explicitly said to proceed.
+PR #9 is open and green but **not merged** — left for the user's review, per the Round 2
+stop condition. Nothing in Round 3+ ([docs/PRD.md](PRD.md)) has started; do not begin
+Round 3 until this PR is merged and the user has explicitly said to proceed.
