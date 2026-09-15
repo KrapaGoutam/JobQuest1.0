@@ -75,6 +75,12 @@ const addDays = (date, count) => {
 function fail(message, status = 400) {
   throw Object.assign(new Error(message), { status });
 }
+function checklistLabel(value) {
+  const label = String(value ?? "").trim();
+  if (!label) fail("Checklist item text is required");
+  if (label.length > 200) fail("Checklist item text must be 200 characters or fewer");
+  return label;
+}
 function ownerId(actor, query = {}) {
   return actor.role === "MANAGER" && query.user_id
     ? Number(query.user_id)
@@ -607,14 +613,17 @@ export async function handleAdvanced(context, helpers) {
       if (appAction[3]) {
         const item = owned(db, actor, "checklist_items", Number(appAction[3]));
         if (item.application_id !== app.id) fail("Not found", 404);
+        if (request.method === "DELETE") {
+          db.prepare("DELETE FROM checklist_items WHERE id=?").run(item.id);
+          return (json(response, 200, { message: "Deleted" }), true);
+        }
+        const hasLabel = typeof input.label === "string";
+        const label = hasLabel ? checklistLabel(input.label) : null;
+        const hasCompleted = input.completed !== undefined;
+        const completed = hasCompleted ? Number(Boolean(input.completed)) : null;
         db.prepare(
-          "UPDATE checklist_items SET completed=?,completed_at=CASE WHEN ?=1 THEN CURRENT_TIMESTAMP ELSE NULL END,note=coalesce(?,note),updated_at=CURRENT_TIMESTAMP WHERE id=?",
-        ).run(
-          Number(Boolean(input.completed)),
-          Number(Boolean(input.completed)),
-          input.note || null,
-          item.id,
-        );
+          "UPDATE checklist_items SET label=coalesce(?,label),completed=coalesce(?,completed),completed_at=CASE WHEN ?=1 THEN CURRENT_TIMESTAMP WHEN ?=0 THEN NULL ELSE completed_at END,note=coalesce(?,note),updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        ).run(label, completed, completed, completed, input.note || null, item.id);
       } else {
         const position = db
           .prepare(
@@ -623,10 +632,40 @@ export async function handleAdvanced(context, helpers) {
           .get(app.id).position;
         db.prepare(
           "INSERT INTO checklist_items(application_id,user_id,label,is_custom,position) VALUES (?,?,?,1,?)",
-        ).run(app.id, app.user_id, input.label, position);
+        ).run(app.id, app.user_id, checklistLabel(input.label), position);
       }
     }
     return (json(response, 200, { message: "Application updated" }), true);
+  }
+
+  const checklistMoveMatch = path.match(
+    /^\/api\/applications\/(\d+)\/checklist\/(\d+)\/move$/,
+  );
+  if (checklistMoveMatch && request.method === "PATCH") {
+    const actor = requireAuth(context, { csrf: true }),
+      app = ownedApplication(db, actor, Number(checklistMoveMatch[1]));
+    if (!app) fail("Not found", 404);
+    const item = owned(db, actor, "checklist_items", Number(checklistMoveMatch[2]));
+    if (item.application_id !== app.id) fail("Not found", 404);
+    const input = await body(request);
+    if (!["up", "down"].includes(input.direction))
+      fail("direction must be 'up' or 'down'");
+    const comparator = input.direction === "up" ? "<" : ">",
+      order = input.direction === "up" ? "DESC" : "ASC";
+    const sibling = db
+      .prepare(
+        `SELECT id,position FROM checklist_items WHERE application_id=? AND position${comparator}? ORDER BY position ${order} LIMIT 1`,
+      )
+      .get(app.id, item.position);
+    if (sibling) {
+      db.prepare(
+        "UPDATE checklist_items SET position=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+      ).run(sibling.position, item.id);
+      db.prepare(
+        "UPDATE checklist_items SET position=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+      ).run(item.position, sibling.id);
+    }
+    return (json(response, 200, { message: "Reordered" }), true);
   }
 
   const resourceMatch = path.match(
