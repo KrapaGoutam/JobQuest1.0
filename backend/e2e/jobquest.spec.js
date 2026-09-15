@@ -181,3 +181,114 @@ test("settings forms reports and empty states visual contract", async ({
     animations: "disabled",
   });
 });
+
+test("application checklist: grouping, completion, custom items, reorder, delete, and persistence", async ({
+  page,
+}, testInfo) => {
+  if (["tablet", "mobile", "small-mobile"].includes(testInfo.project.name))
+    await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.getByRole("button", { name: "Applications", exact: true }).click();
+  await page.getByText("Northstar Labs").click();
+  await expect(
+    page.getByRole("heading", { name: "Application Checklist" }),
+  ).toBeVisible();
+
+  // The 11 seeded defaults render grouped by lifecycle phase.
+  await expect(page.getByRole("heading", { name: "Preparing to apply" })).toBeVisible();
+  await expect(page.getByText("0 of 11 complete")).toBeVisible();
+  const resumeItem = page.locator("[data-checklist-row]", {
+    hasText: "Resume tailored",
+  });
+  await expect(resumeItem).toBeVisible();
+
+  // Complete an item; verify it actually persisted server-side (not just in
+  // the DOM) via a direct API call. This app has no URL-based routing
+  // (state.page lives in memory), so a real page.reload() always lands back
+  // on the Dashboard by design - that's a routing characteristic, not a
+  // checklist bug, and re-navigating through the UI a second time to prove
+  // persistence would mean two full mobile-nav-drawer round-trips in one
+  // test, which turned out flaky on narrow viewports. Asking the server
+  // directly is both more precise and more reliable.
+  await resumeItem.getByRole("checkbox").check();
+  await expect(page.getByText("1 of 11 complete")).toBeVisible();
+  const found = await (
+    await page.request.get("/api/applications/query?search=Northstar")
+  ).json();
+  const appId = found.items[0].id;
+  const persisted = await (
+    await page.request.get(`/api/applications/${appId}/detail`)
+  ).json();
+  const persistedResume = persisted.checklist.find(
+    (item) => item.label === "Resume tailored",
+  );
+  expect(persistedResume.completed).toBe(1);
+  expect(persistedResume.completed_at).toBeTruthy();
+
+  // Uncomplete.
+  await page
+    .locator("[data-checklist-row]", { hasText: "Resume tailored" })
+    .getByRole("checkbox")
+    .uncheck();
+  await expect(page.getByText("0 of 11 complete")).toBeVisible();
+
+  // Add two custom items; they render under "Your items", in order added.
+  const addItem = async (label) => {
+    await page.getByPlaceholder("Custom checklist item").fill(label);
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(page.getByText(label)).toBeVisible();
+  };
+  await addItem("Ask about relocation");
+  await addItem("Ask about team size");
+  const yourItems = page.locator(".checklist-group", { hasText: "Your items" });
+  await expect(yourItems.locator("[data-checklist-row]")).toHaveCount(2);
+  await expect(yourItems.locator("[data-checklist-row]").first()).toContainText(
+    "Ask about relocation",
+  );
+
+  // Reorder: moving the second custom item up swaps it with the first,
+  // within the same group (a cross-group swap isn't visible in the grouped
+  // display, since group membership is decided by label, not position - see
+  // docs/FEATURE_UPGRADE_4.md Known Debt).
+  await yourItems
+    .locator("[data-checklist-row]", { hasText: "Ask about team size" })
+    .getByRole("button", { name: /^Move '.*' up$/ })
+    .click();
+  await expect(yourItems.locator("[data-checklist-row]").first()).toContainText(
+    "Ask about team size",
+  );
+
+  // Edit a label.
+  page.once("dialog", (dialog) => dialog.accept("Ask about relocation package"));
+  await yourItems
+    .locator("[data-checklist-row]", { hasText: "Ask about relocation" })
+    .getByRole("button", { name: /^Edit '.*'$/ })
+    .click();
+  await expect(page.getByText("Ask about relocation package")).toBeVisible();
+
+  // Delete both custom items; the group disappears entirely once empty.
+  page.on("dialog", (dialog) => dialog.accept());
+  await yourItems
+    .locator("[data-checklist-row]", { hasText: "Ask about team size" })
+    .getByRole("button", { name: /^Delete '.*'$/ })
+    .click();
+  await expect(page.getByText("Ask about team size")).toHaveCount(0);
+  await yourItems
+    .locator("[data-checklist-row]", { hasText: "Ask about relocation package" })
+    .getByRole("button", { name: /^Delete '.*'$/ })
+    .click();
+  await expect(page.getByRole("heading", { name: "Your items" })).toHaveCount(0);
+  await expect(page.getByText("0 of 11 complete")).toBeVisible();
+
+  // Scoped to the checklist panel itself, not the whole detail page: the
+  // rest of the page (timeline, workflow actions, edit form) is pre-existing
+  // and out of this round's scope - a full-page scan here surfaced several
+  // unrelated, pre-existing missing-label selects (#detail-stage among
+  // others). Two trivially-fixable ones on this same page (#timeline-filter/
+  // #timeline-sort) were fixed in passing; the rest are backlogged rather
+  // than expanding this round into an unrelated page-wide accessibility
+  // audit - see docs/FEATURE_UPGRADE_4.md Known Debt.
+  const results = await new AxeBuilder({ page })
+    .include("#checklist-panel")
+    .analyze();
+  expect(results.violations).toEqual([]);
+});
