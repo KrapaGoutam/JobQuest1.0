@@ -34,3 +34,20 @@ pushed, no PR open, CI has not run on it**. Do that first (push, open PR into
 `development`, confirm all 8 jobs green including zero visual-regression diffs) before
 trusting this round is actually done. Do not start Round 3 without the user's explicit
 go-ahead — see the stop condition recorded in `tasks/CURRENT_TASK.md`.
+
+## 2026-09-14 (same day, continued session) — Claude Code (Claude Sonnet 5) — Round 3 implemented
+
+Merged PR #9 (regular merge, correcting PR #8's squash — see `brain/DECISIONS.md`).
+Reconciled `Feature_Upgrade_2_Codex_Prompt.md` against the real codebase: most of its
+search/filter/sort/export/saved-views wishlist was already implemented (full table in
+`docs/FEATURE_UPGRADE_3.md`). Implemented the two real gaps — dashboard 3-tier
+information hierarchy and Applications quick filters (with one new `status_group`
+backend param) — plus removed one dead frontend function. On
+`feature/003-dashboard-applications-revamp`, off `development`.
+
+**For the next agent**: not pushed yet, no PR, CI not run. **This round intentionally
+changes Dashboard/Applications visuals** — unlike Round 2, do not expect a zero-diff
+visual-regression result; a deliberate baseline update (via a one-off Linux CI job,
+never generated/judged locally on Windows) is part of finishing this round. See
+`brain/PROJECT_STATE.md`'s "Next safe action" for the exact plan. Do not start Round 4
+without the user's explicit go-ahead.
