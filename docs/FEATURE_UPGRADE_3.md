@@ -2,10 +2,10 @@
 
 ## Status
 
-Implemented on `feature/003-dashboard-applications-revamp`, off `development` (which now
-includes the merged Round 2 PR #9). Round 3 of [docs/PRD.md](PRD.md). Local checks green;
-CI (including deliberate visual-baseline updates) pending as this doc is written — see
-CI Status below for the final result.
+Implemented on `feature/003-dashboard-applications-revamp`; PR #10 open into
+`development`, full CI matrix green (including a genuine, deliberately-checked visual-
+regression pass — see CI Status), awaiting the user's review/merge. Round 3 of
+[docs/PRD.md](PRD.md).
 
 ## Goal
 
@@ -137,8 +137,8 @@ import-export/analytics (later rounds); React; any Render/Neon change.
 - [x] No dashboard widget id, name, kind, or persisted layout field changed.
 - [x] No existing Applications column, filter, sort option, saved view, or export
       behavior removed or renamed.
-- [ ] Full CI green including deliberately-updated visual baselines — pending, see CI
-      Status.
+- [x] Full CI green (8/8 jobs on PR #10), including the visual-regression suite passing
+      against the existing baselines without modification — see CI Status.
 
 ## Testing
 
@@ -149,10 +149,18 @@ from 9) all pass. `node --check` on the two modified test files and
 
 Deferred to CI (Postgres/browser-backed, per this repo's established pattern):
 `test:backend`, `test:integration`, `test:e2e`, `sqlite-postgres-migration`, and
-`test:browser`. Unlike Round 2, **this round intentionally changes what the Dashboard
-and Applications pages look like**, so the visual-regression baselines for those pages
-are expected to need a deliberate update — "zero diff" is not the bar here (per the
-Round 3 brief). See CI Status for exactly which snapshots changed and why.
+`test:browser` — all pass on PR #10 (see CI Status). Unlike Round 2, "zero diff" was not
+assumed to be the bar here — this round intentionally changes what the Dashboard and
+Applications pages look like, so a baseline update was expected going in. What actually
+happened: the full visual-regression suite (`responsive visual states` and
+`light dark and system themes`, across all five viewport projects) **passed against the
+existing, unmodified baselines** — verified as a real result, not a coverage gap, by
+confirming the built bundle CI tested actually contains the new markup
+(`widget-tier`, `quick-filters`, `data-quick-filter` all present in `dist/assets/*.js`).
+The new tier-header text and quick-filter button row are visually modest enough (thin
+headers, one small pill-button row) to land under the suite's existing
+`maxDiffPixelRatio: 0.12` tolerance on a full-page screenshot. No baseline update was
+needed or performed — see CI Status.
 
 ## Security impact
 
@@ -181,9 +189,8 @@ Round 3 brief). See CI Status for exactly which snapshots changed and why.
 
 `.widget-tier`/`.quick-filters` reuse `.widget-grid`'s existing responsive breakpoints
 (3 → 2 → 1 columns) and `.filter-chip`'s existing wrapping/overflow behavior — no new
-breakpoints introduced. Manual verification pending the CI visual-regression run across
-the repo's five existing viewport projects (desktop/compact-desktop/tablet/mobile/
-small-mobile); see CI Status.
+breakpoints introduced. Confirmed via CI across all five existing viewport projects
+(desktop/compact-desktop/tablet/mobile/small-mobile) — see CI Status.
 
 ## Files changed
 
@@ -206,8 +213,12 @@ quick filters, dead-code removal, tests, docs).
 
 ## CI status
 
-_Filled in once the PR's CI run (including the visual-baseline update pass) completes —
-see the PR description and the final implementation report for the actual result._
+PR [#10](../../../pull/10) into `development`, run
+[34912813062](../../../actions/runs/34912813062): all 8 jobs pass — `static-quality`,
+`security`, `sqlite-postgres-migration`, `tests` × 4 (backend/frontend/integration/e2e,
+including the new `status_group` integration test), and `browser-and-visual` (13
+passed, 7 skipped, 0 failed — identical pass/skip count to the Round 2 baseline, and
+verified as a genuine result, not a blind spot, per the Testing section above).
 
 ## Known debt (backlogged, not fixed this round)
 

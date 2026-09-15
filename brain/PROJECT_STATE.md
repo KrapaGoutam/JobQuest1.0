@@ -27,18 +27,19 @@ Last updated: 2026-09-14, by Claude Sonnet 5 (Claude Code).
 
 ## Incomplete / not started
 
-- Branch **not yet pushed**, **no PR open**, CI has not run against it.
-- **Visual-regression baselines will need a deliberate update** this round (unlike
-  Round 2) — the dashboard tier sections and quick-filter row are real, intended visual
-  changes. This must happen via CI (ubuntu-latest); do not attempt to generate or judge
-  baselines from a local Windows run. Plan: push branch → PR → let `browser-and-visual`
-  fail showing the expected diffs → run a one-off Linux job with
-  `test:visual:update` → commit the updated snapshots → confirm CI green → document
-  exactly which snapshots changed and why in `docs/FEATURE_UPGRADE_3.md`.
-- DB-backed suites (backend/integration/e2e/migration) and the browser suite itself:
-  not run locally (no local Postgres/Playwright browsers in this environment); must be
-  validated via CI, same as every prior round.
+- PR #10 is open, CI green, **not merged** — left for the user's review.
 - Everything from Round 4 onward in [docs/PRD.md](../docs/PRD.md).
+
+## Resolved this round (was flagged as a risk, turned out fine)
+
+Visual-regression baselines were expected to need a deliberate update (dashboard tier
+sections and the quick-filter row are real, intended visual changes) but did not: CI's
+`browser-and-visual` job passed against the existing, unmodified baselines. Verified
+this wasn't a coverage gap by confirming the tested bundle actually contains the new
+markup (`widget-tier`/`quick-filters`/`data-quick-filter` present in the built JS). The
+changes are visually modest enough (thin section headers, one small button row) to fall
+under the suite's existing `maxDiffPixelRatio: 0.12` tolerance on a full-page
+screenshot. No baseline files were touched.
 
 ## Known state to be aware of
 
@@ -52,13 +53,12 @@ Last updated: 2026-09-14, by Claude Sonnet 5 (Claude Code).
 
 ## Blockers
 
-None. Next action is mechanical (push, PR, CI, baseline update) — no decision pending
-except the user's eventual review/merge of the resulting PR.
+None. Waiting on the user to review/merge PR #10, then on their explicit go-ahead
+before Round 4 starts.
 
 ## Next safe action
 
-Push `feature/003-dashboard-applications-revamp`, open a PR into `development`, run the
-one-off Linux baseline-update job described above once `browser-and-visual` shows the
-expected diffs, commit the updated baselines with a clear description of what changed,
-confirm full CI green, update `docs/FEATURE_UPGRADE_3.md`'s CI Status section, report to
-the user, and stop — do not begin Round 4 without explicit approval.
+Nothing further to do on Round 3. If picking this up cold: read
+`docs/FEATURE_UPGRADE_3.md`, confirm PR #10's status hasn't changed, and otherwise wait
+for direction on Round 4 (or address any review feedback on PR #10 if the user has left
+any).

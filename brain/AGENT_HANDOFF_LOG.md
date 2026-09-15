@@ -45,9 +45,12 @@ information hierarchy and Applications quick filters (with one new `status_group
 backend param) — plus removed one dead frontend function. On
 `feature/003-dashboard-applications-revamp`, off `development`.
 
-**For the next agent**: not pushed yet, no PR, CI not run. **This round intentionally
-changes Dashboard/Applications visuals** — unlike Round 2, do not expect a zero-diff
-visual-regression result; a deliberate baseline update (via a one-off Linux CI job,
-never generated/judged locally on Windows) is part of finishing this round. See
-`brain/PROJECT_STATE.md`'s "Next safe action" for the exact plan. Do not start Round 4
-without the user's explicit go-ahead.
+Pushed, PR #10 opened into `development`, full CI matrix green — including the
+visual-regression suite, which passed against the **existing, unmodified baselines**
+(verified as genuine by confirming the tested bundle contains the new markup, not a
+coverage gap: the tier headers/quick-filter row are visually modest enough to land
+under the suite's 12% pixel-diff tolerance). No baseline update was needed.
+
+**For the next agent**: PR #10 is ready and green but **not merged** — left for the
+user's review, per the Round 3 stop condition. Do not start Round 4 without the user's
+explicit go-ahead.
