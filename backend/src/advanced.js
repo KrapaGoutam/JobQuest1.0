@@ -622,7 +622,12 @@ export async function handleAdvanced(context, helpers) {
         const hasCompleted = input.completed !== undefined;
         const completed = hasCompleted ? Number(Boolean(input.completed)) : null;
         db.prepare(
-          "UPDATE checklist_items SET label=coalesce(?,label),completed=coalesce(?,completed),completed_at=CASE WHEN ?=1 THEN CURRENT_TIMESTAMP WHEN ?=0 THEN NULL ELSE completed_at END,note=coalesce(?,note),updated_at=CURRENT_TIMESTAMP WHERE id=?",
+          // completed_at mixes a CURRENT_TIMESTAMP branch with a completed_at
+          // (TEXT column) branch in the same CASE; Postgres unifies branch
+          // types stricter than it does a plain assignment cast, so the
+          // CURRENT_TIMESTAMP branch needs an explicit CAST here (a no-op on
+          // SQLite, whose CURRENT_TIMESTAMP is already text).
+          "UPDATE checklist_items SET label=coalesce(?,label),completed=coalesce(?,completed),completed_at=CASE WHEN ?=1 THEN CAST(CURRENT_TIMESTAMP AS TEXT) WHEN ?=0 THEN NULL ELSE completed_at END,note=coalesce(?,note),updated_at=CURRENT_TIMESTAMP WHERE id=?",
         ).run(label, completed, completed, completed, input.note || null, item.id);
       } else {
         const position = db

@@ -189,19 +189,34 @@ Import-Export/Analytics/design-system rounds; React; Render/Neon changes.
 
 ## Testing
 
-Local (no Postgres available, same constraint as every prior round):
-`npm run lint`, `typecheck`, `build`, `build:frontend`, `test:frontend` (16 tests, up
-from 13) all pass. A full manual curl smoke test against a real running server (SQLite
-backend) exercised every new endpoint end-to-end: complete+note, label edit
-(independent of completed/note), empty-label rejection (400), custom-item add, move-up
-(verified position swap), delete (verified count drops and item disappears) — all
-behaved exactly as designed.
+Local: `npm run lint`, `typecheck`, `build`, `build:frontend`, `test:frontend` (16
+tests, up from 13) all pass. A full manual curl smoke test against a real running
+server (SQLite backend) exercised every new endpoint end-to-end: complete+note, label
+edit (independent of completed/note), empty-label rejection (400), custom-item add,
+move-up (verified position swap), delete (verified count drops and item disappears) —
+all behaved exactly as designed.
 
-Deferred to CI (Postgres/browser-backed, per this repo's established pattern):
-`test:backend` (includes the new "Round 4: application checklist ..." integration
-test — create/edit/complete/reorder/delete/validation/ownership/IDOR),
-`test:integration`, `test:e2e`, `sqlite-postgres-migration`, `test:browser`
-(functional + accessibility + visual regression).
+**A real cross-dialect bug was caught by CI and fixed, then verified locally against
+real Postgres** (this environment has Docker, unlike prior rounds — used a throwaway
+`postgres:17-alpine` container rather than trusting the SQLite-only smoke test twice).
+The first CI push failed `tests (backend/integration/e2e)` with a Postgres error:
+`CASE types text and timestamp with time zone cannot be matched`. The new
+`completed_at` update mixed a `CURRENT_TIMESTAMP` (`timestamptz`) branch with a
+`completed_at` (`TEXT` column) branch in the same `CASE` — Postgres unifies branch
+types strictly inside a `CASE`, more strictly than the plain-assignment cast the
+*previous*, simpler 2-branch version relied on (which never referenced the column
+inside its own `CASE`). Fixed with an explicit `CAST(CURRENT_TIMESTAMP AS TEXT)`
+(standard SQL, a no-op on SQLite, whose `CURRENT_TIMESTAMP` is already text). Verified
+by standing up a local Postgres 17 container, migrating it, and running the full
+backend suite (20/20 pass, including the new checklist test) before re-pushing — not
+just re-trusting CI blindly a second time.
+
+`test:backend`, `test:integration`, and `test:e2e` are all aliases for the same
+`test/app.test.js` file in this repo's `package.json` (a pre-existing quirk, not
+something this round changed) — verified locally against real Postgres as described
+above, in addition to running on CI. Deferred to CI: `sqlite-postgres-migration`
+(confirmed unaffected — verified in isolation locally too, see above) and
+`test:browser` (Playwright: functional + accessibility + visual regression).
 
 ## Security impact
 

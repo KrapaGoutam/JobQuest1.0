@@ -28,6 +28,15 @@ Last updated: 2026-09-14, by Claude Sonnet 5 (Claude Code).
 - Branch **not yet pushed**, **no PR open**, CI has not run against it.
 - Everything from Round 5 onward in [docs/PRD.md](../docs/PRD.md).
 
+## Correction to earlier rounds' notes
+
+Rounds 2/3 recorded "no local Postgres available in this environment" as a constraint.
+That was wrong — **Docker is available locally** (confirmed Round 4: a throwaway
+`postgres:17-alpine` container let a real Postgres-dialect bug get caught and verified
+locally instead of only via CI round-trips). Prefer spinning up a local Postgres
+container (matching CI's image/version) to verify any change that touches SQL, rather
+than assuming CI is the only way to test against real Postgres.
+
 ## Known state to be aware of
 
 - Untracked root "mega-prompt" planning files remain (not committed, per convention).
