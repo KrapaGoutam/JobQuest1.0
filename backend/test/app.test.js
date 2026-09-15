@@ -1255,3 +1255,170 @@ test("Round 4: application checklist create, edit, complete, reorder, delete, an
     404,
   );
 });
+
+test("Round 5: networking contact CRUD, application linkage, ownership/IDOR, and delete behavior", async () => {
+  const user = await register("networkinguser"),
+    other = await register("networkingother");
+  const app1 = await request("/api/applications", {
+    method: "POST",
+    auth: user,
+    input: {
+      company: "Acme",
+      job_title: "Engineer",
+      date_applied: "2026-09-01",
+      stage: "Applied",
+    },
+  });
+  assert.equal(app1.status, 201);
+
+  // Create without a linked application - contacts don't require one.
+  const unlinked = await request("/api/networking_contacts", {
+    method: "POST",
+    auth: user,
+    input: { contact_name: "Jane Doe", relationship_type: "Referral" },
+  });
+  assert.equal(unlinked.status, 201);
+
+  // Create linked to an application (the "Link Contact" flow this round
+  // actually fixed - application_id was silently missing from the frontend
+  // form's field list before this round; the backend already supported it).
+  const linked = await request("/api/networking_contacts", {
+    method: "POST",
+    auth: user,
+    input: {
+      contact_name: "Sam Recruiter",
+      application_id: app1.data.id,
+      relationship_type: "Recruiter",
+      email: "sam@acme.test",
+      linkedin_url: "https://linkedin.com/in/sam",
+    },
+  });
+  assert.equal(linked.status, 201);
+
+  // Surfaces on the application detail endpoint (what the new
+  // networkingContactsView() on the frontend renders).
+  const detail = await request(`/api/applications/${app1.data.id}/detail`, {
+    auth: user,
+  });
+  assert.equal(detail.data.networking.length, 1);
+  assert.equal(detail.data.networking[0].contact_name, "Sam Recruiter");
+
+  // Cannot link a contact to another user's application.
+  const otherApp = await request("/api/applications", {
+    method: "POST",
+    auth: other,
+    input: { company: "Other Co", job_title: "Role", date_applied: "2026-09-01" },
+  });
+  assert.equal(
+    (
+      await request("/api/networking_contacts", {
+        method: "POST",
+        auth: user,
+        input: { contact_name: "Bad Link", application_id: otherApp.data.id },
+      })
+    ).status,
+    400,
+  );
+
+  // Edit: no existing test previously covered PATCH on networking_contacts
+  // at all, even though the backend already supported it before this round.
+  assert.equal(
+    (
+      await request(`/api/networking_contacts/${linked.data.id}`, {
+        method: "PATCH",
+        auth: user,
+        input: { networking_stage: "Connected", notes: "Great chat at the meetup" },
+      })
+    ).status,
+    200,
+  );
+  const afterUpdate = (await request("/api/networking_contacts", { auth: user }))
+    .data;
+  const savedContact = afterUpdate.find((item) => item.id === linked.data.id);
+  assert.equal(savedContact.networking_stage, "Connected");
+  assert.equal(savedContact.notes, "Great chat at the meetup");
+
+  // Ownership cannot be changed via update.
+  assert.equal(
+    (
+      await request(`/api/networking_contacts/${linked.data.id}`, {
+        method: "PATCH",
+        auth: user,
+        input: { user_id: other.user.id },
+      })
+    ).status,
+    400,
+  );
+
+  // IDOR: another user cannot list, edit, or delete this user's contacts.
+  assert.equal(
+    (await request("/api/networking_contacts", { auth: other })).data.length,
+    0,
+  );
+  assert.equal(
+    (
+      await request(`/api/networking_contacts/${linked.data.id}`, {
+        method: "PATCH",
+        auth: other,
+        input: { notes: "hijacked" },
+      })
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await request(`/api/networking_contacts/${linked.data.id}`, {
+        method: "DELETE",
+        auth: other,
+      })
+    ).status,
+    404,
+  );
+
+  // Delete behavior, verified rather than assumed (a FK cascade rule exists
+  // in the schema that isn't obvious from the API surface alone): deleting a
+  // contact cascades to delete any follow-ups tied to it.
+  const followUp = await request("/api/follow_ups", {
+    method: "POST",
+    auth: user,
+    input: {
+      networking_contact_id: linked.data.id,
+      follow_up_type: "Networking",
+      due_date: "2026-09-20",
+    },
+  });
+  assert.equal(followUp.status, 201);
+  assert.equal(
+    (await request(`/api/networking_contacts/${linked.data.id}`, {
+      method: "DELETE",
+      auth: user,
+    })).status,
+    200,
+  );
+  assert.equal(
+    (await request("/api/follow_ups", { auth: user })).data.some(
+      (item) => item.id === followUp.data.id,
+    ),
+    false,
+  );
+
+  // Deleting the linked application unlinks (does not delete) any remaining
+  // contact - a second contact, created and linked to app1 above but not yet
+  // exercised, proves this without relying on the already-deleted one.
+  const secondLinked = await request("/api/networking_contacts", {
+    method: "POST",
+    auth: user,
+    input: { contact_name: "Pat Interviewer", application_id: app1.data.id },
+  });
+  assert.equal(secondLinked.status, 201);
+  assert.equal(
+    (await request(`/api/applications/${app1.data.id}`, { method: "DELETE", auth: user }))
+      .status,
+    200,
+  );
+  const remaining = (await request("/api/networking_contacts", { auth: user }))
+    .data;
+  const survivor = remaining.find((item) => item.id === secondLinked.data.id);
+  assert.ok(survivor, "contact must survive its application being deleted");
+  assert.equal(survivor.application_id, null);
+});

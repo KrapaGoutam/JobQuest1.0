@@ -34,6 +34,11 @@ import {
   groupChecklistItems,
   checklistProgress,
 } from "../../frontend/src/features/checklist/groups.js";
+import {
+  safeExternalUrl,
+  contactLabel,
+  isFollowUpOverdue,
+} from "../../frontend/src/features/contacts/format.js";
 
 test("dashboard registry preserves the complete unique widget contract", () => {
   assert.equal(DASHBOARD_WIDGETS.length, 30);
@@ -325,4 +330,40 @@ test("checklist progress counts completed items and computes a percentage", () =
     { completed: 2, total: 4, percent: 50 },
   );
   assert.deepEqual(checklistProgress([]), { completed: 0, total: 0, percent: 0 });
+});
+
+test("safeExternalUrl only accepts http(s), rejecting javascript: and other unsafe protocols", () => {
+  assert.equal(safeExternalUrl("https://linkedin.com/in/jane"), "https://linkedin.com/in/jane");
+  assert.equal(safeExternalUrl("http://example.com"), "http://example.com/");
+  assert.equal(safeExternalUrl("javascript:alert(1)"), null);
+  assert.equal(safeExternalUrl("data:text/html,<script>alert(1)</script>"), null);
+  assert.equal(safeExternalUrl("mailto:jane@example.com"), null);
+  assert.equal(safeExternalUrl(""), null);
+  assert.equal(safeExternalUrl(null), null);
+  assert.equal(safeExternalUrl("not a url"), null);
+});
+
+test("contactLabel degrades gracefully as relationship_type/company are missing", () => {
+  assert.equal(
+    contactLabel({ contact_name: "Jane Doe", relationship_type: "Recruiter", company: "Acme" }),
+    "Jane Doe — Recruiter at Acme",
+  );
+  assert.equal(
+    contactLabel({ contact_name: "Jane Doe", relationship_type: "Recruiter", company: "" }),
+    "Jane Doe — Recruiter",
+  );
+  assert.equal(
+    contactLabel({ contact_name: "Jane Doe", relationship_type: "", company: "Acme" }),
+    "Jane Doe — Acme",
+  );
+  assert.equal(contactLabel({ contact_name: "Jane Doe" }), "Jane Doe");
+});
+
+test("isFollowUpOverdue compares plain calendar dates, not timestamps", () => {
+  const today = new Date(2026, 8, 14); // 2026-09-14
+  assert.equal(isFollowUpOverdue("2026-09-13", today), true);
+  assert.equal(isFollowUpOverdue("2026-09-14", today), false); // due today, not overdue yet
+  assert.equal(isFollowUpOverdue("2026-09-15", today), false);
+  assert.equal(isFollowUpOverdue(null, today), false);
+  assert.equal(isFollowUpOverdue("", today), false);
 });
