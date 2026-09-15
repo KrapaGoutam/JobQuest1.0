@@ -19,6 +19,17 @@ import {
   DASHBOARD_WIDGETS,
   WIDGET_NAMES,
 } from "../../frontend/src/dashboard-config.js";
+import {
+  TIERS,
+  groupWidgetsByTier,
+} from "../../frontend/src/features/dashboard/tiers.js";
+import {
+  QUICK_FILTERS,
+  quickFilterValues,
+  isQuickFilterActive,
+  activeQuickFilter,
+  toggleQuickFilter,
+} from "../../frontend/src/features/applications/quick-filters.js";
 
 test("dashboard registry preserves the complete unique widget contract", () => {
   assert.equal(DASHBOARD_WIDGETS.length, 30);
@@ -194,4 +205,78 @@ test("Excel text escaping prevents formula injection", () => {
   for (const value of ["=1+1", "+cmd", "-2+3", "@SUM(A1:A2)"])
     assert.equal(safeCell(value), `'${value}`);
   assert.equal(safeCell("Normal company"), "Normal company");
+});
+
+test("every dashboard widget is assigned to exactly one information-hierarchy tier", () => {
+  const widgets = DASHBOARD_WIDGETS.map((widget, position) => ({
+    widget_id: widget.id,
+    position,
+    width: 1,
+  }));
+  const tiers = groupWidgetsByTier(widgets);
+  const seen = tiers.flatMap((tier) => tier.widgets.map((item) => item.widget_id));
+  assert.equal(seen.length, DASHBOARD_WIDGETS.length);
+  assert.equal(new Set(seen).size, DASHBOARD_WIDGETS.length);
+  assert.ok(tiers.every((tier) => TIERS.some((definition) => definition.id === tier.id)));
+});
+
+test("dashboard tiers preserve each widget's existing position order", () => {
+  const widgets = [
+    { widget_id: "recent-activity", position: 0 },
+    { widget_id: "overdue-follow-ups", position: 1 },
+    { widget_id: "aging-applications", position: 2 },
+    { widget_id: "follow-ups-due", position: 3 },
+  ];
+  const actionsTier = groupWidgetsByTier(widgets).find((tier) => tier.id === "actions");
+  assert.deepEqual(
+    actionsTier.widgets.map((item) => item.widget_id),
+    ["overdue-follow-ups", "follow-ups-due"],
+  );
+});
+
+test("quick filters map onto the existing date_field/date_from/date_to/status_group params", () => {
+  const today = new Date(2026, 8, 14); // 2026-09-14, a Monday
+  assert.deepEqual(quickFilterValues("applied-today", today), {
+    date_field: "date_applied",
+    date_from: "2026-09-14",
+    date_to: "2026-09-14",
+  });
+  assert.deepEqual(quickFilterValues("applied-week", today), {
+    date_field: "date_applied",
+    date_from: "2026-09-14",
+    date_to: "2026-09-14",
+  });
+  assert.deepEqual(quickFilterValues("applied-month", today), {
+    date_field: "date_applied",
+    date_from: "2026-09-01",
+    date_to: "2026-09-14",
+  });
+  assert.deepEqual(quickFilterValues("recently-updated", today), {
+    date_field: "updated_at",
+    date_from: "2026-09-07",
+    date_to: "2026-09-14",
+  });
+  assert.deepEqual(quickFilterValues("active", today), { status_group: "active" });
+  assert.deepEqual(quickFilterValues("closed", today), { status_group: "closed" });
+  assert.equal(QUICK_FILTERS.length, 6);
+});
+
+test("toggling a quick filter is independent and mutually exclusive", () => {
+  const today = new Date(2026, 8, 14);
+  let params = new URLSearchParams({ search: "engineer", sort: "company", direction: "asc" });
+  params = toggleQuickFilter(params, "active", today);
+  assert.equal(isQuickFilterActive("active", params, today), true);
+  assert.equal(activeQuickFilter(params, today), "active");
+  // Search/sort untouched by the quick filter.
+  assert.equal(params.get("search"), "engineer");
+  assert.equal(params.get("sort"), "company");
+  // Switching to a different quick filter replaces, rather than adds to, the
+  // previous one's params.
+  params = toggleQuickFilter(params, "applied-today", today);
+  assert.equal(activeQuickFilter(params, today), "applied-today");
+  assert.equal(params.get("status_group"), null);
+  // Toggling the active quick filter again clears it.
+  params = toggleQuickFilter(params, "applied-today", today);
+  assert.equal(activeQuickFilter(params, today), null);
+  assert.equal(params.get("date_from"), null);
 });
