@@ -1,48 +1,40 @@
 # Current task
 
-**Status: Round 4 implemented, CI green, PR #11 open — awaiting the user's review/merge.**
-See [docs/FEATURE_UPGRADE_4.md](../docs/FEATURE_UPGRADE_4.md) for full detail.
+**Status: Round 5 implemented locally, ready to push/PR.** See
+[docs/FEATURE_UPGRADE_5.md](../docs/FEATURE_UPGRADE_5.md) for full detail.
 
-Branch: `feature/004-application-checklist-gap-close`, based on `development` (which
-now includes the merged Round 3 PR #10 — regular merge, per convention).
+Branch: `feature/005-contacts-networking-gap-close`, based on `development` (which now
+includes the merged Round 4 PR #11 — regular merge, per convention).
 
 ## What just happened
 
-1. PR #10 (Round 3) merged into `development` via regular merge commit.
-2. Audited the existing checklist implementation end-to-end (schema → API → UI) before
-   writing anything. Found: schema, list, create, complete/uncomplete, progress
-   indicator, and ownership/IDOR protection **already implemented**; edit, delete,
-   reorder, and input validation were **genuinely missing** (not even a DELETE route
-   existed). Full reconciliation table in the feature doc.
-3. Closed the real gaps: `DELETE`/label-edit on the existing checklist endpoint, a new
-   `/move` endpoint (adjacent-position swap, mirroring `moveWidget`'s existing pattern),
-   server-side label validation, and matching UI (edit/delete/move-up/move-down
-   controls, error toasts, empty state). Added a new `frontend/src/features/checklist/
-   groups.js` module that groups the checklist for *display* by lifecycle phase — a
-   safe, read-time-only way to get real stage-awareness value without the
-   duplicate-generation risk of making item *creation* stage-aware (deferred, see the
-   feature doc's Known Debt).
-4. Verified with a full manual curl smoke test against a real running server, plus new
-   backend integration tests (create/edit/complete/reorder/delete/validation/ownership)
-   and frontend unit tests (grouping/progress) — 16 frontend tests total (was 13).
-5. First CI push failed on Postgres (a real dialect bug: mixing a `timestamptz`
-   `CASE` branch with a `TEXT` column reference — fine on SQLite, not on Postgres).
-   Fixed, verified against a local throwaway `postgres:17-alpine` container (Docker is
-   available in this environment — corrected an earlier wrong assumption that it
-   wasn't, see `brain/PROJECT_STATE.md`), then re-pushed.
-6. Added real Playwright E2E coverage for the checklist (none existed before) —
-   installed Chromium locally, ran it against Postgres across all 5 viewport projects.
-   That work surfaced and fixed one real new a11y violation this round introduced
-   (`.btn.small.danger` contrast) and two pre-existing unrelated ones on the same page
-   (`#timeline-filter`/`#timeline-sort` missing labels) — fixed in passing since they
-   were one-line and were blocking honest scanning of this round's own work. A third
-   (`#detail-stage`) was left for the backlog, not fixed, to avoid scope creep into an
-   unrelated page-wide audit.
+1. PR #11 (Round 4) merged into `development` via regular merge commit.
+2. Audited `networking_contacts` end-to-end before writing anything. Found the backend
+   (schema, full CRUD, ownership/IDOR, mass-assignment protection) was **already
+   completely solid** — no backend changes were needed this round. The real gap: the
+   application-detail page's "Link Contact" button navigated to a form that had no
+   application field at all (dead code was already anticipating it — a select branch
+   existed but its trigger field was missing from the type's field list), so contacts
+   could never actually be linked through the UI; there was also no Edit UI, no way to
+   see contacts on an application's own detail page, and LinkedIn/email rendered as
+   inert text.
+3. Closed those gaps: added the missing `application_id` field, built an edit-in-place
+   flow (reusing the existing create form, no new modal), added a real "Networking
+   Contacts" section to the application detail page, made LinkedIn/email safe clickable
+   links (`safeExternalUrl` rejects non-http(s) protocols), added an overdue-follow-up
+   flag, and a `relationship_type` datalist (suggestions, not a hard enum — preserves
+   compatibility with existing free-text values).
+4. Along the way, fixed one real, pre-existing, shared accessibility gap (the generic
+   `table()` wrapper wasn't keyboard-focusable despite being scrollable) — a one-line
+   fix benefiting every tracker page, found because this is the first round to ever
+   accessibility-scan a `renderTracker` page.
+5. Verified with the same rigor established in Round 4: real Postgres via Docker (21/21
+   backend tests, including new linkage/ownership/cascade/unlink coverage), and real
+   Chromium (new E2E test, 5/5 viewports, plus 15/15 on the full non-pixel suite with no
+   regressions) — all before pushing.
 
 ## Next safe action
 
-PR [#11](https://github.com/KrapaGoutam/JobQuest1.0/pull/11) is open into `development`
-with all 8 CI jobs green (browser-and-visual: 18 passed/7 skipped/0 failed across 25
-tests — the 5 new checklist tests all pass, and all 13 pre-existing baseline tests are
-unchanged). Left unmerged for the user's review. Do not start Round 5 until this PR is
-merged and the user has explicitly said to proceed.
+Push the branch, open a PR into `development`, and get CI green. Do not merge to
+`main`. Do not start Round 6 until this PR is merged and the user has explicitly said
+to proceed.

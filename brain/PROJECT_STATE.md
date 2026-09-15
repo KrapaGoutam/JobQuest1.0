@@ -4,69 +4,57 @@ Last updated: 2026-09-14, by Claude Sonnet 5 (Claude Code).
 
 ## Branch / commit
 
-- Working branch: `feature/004-application-checklist-gap-close`, based on `development`.
-- `development` (origin): `7dc295a` — regular merge of PR #10 (Round 3).
+- Working branch: `feature/005-contacts-networking-gap-close`, based on `development`.
+- `development` (origin): `42036e9` — regular merge of PR #11 (Round 4).
 - `main`: unchanged this session, still `7b674f4`.
-- Last full CI run confirmed green: PR #11 into `development`, all 8 jobs,
-  browser-and-visual 18/7/0 (pass/skip/fail) across 25 tests (5 new checklist tests,
-  one per viewport project, plus the 13 pre-existing baseline tests unchanged).
+- Last full CI run confirmed green: PR #11 into `development` (final run after the
+  docs-only follow-up commit), all 8 jobs, 18 passed/7 skipped/0 failed across 25
+  browser tests.
 
 ## What's done
 
-- Round 4 (application checklist gap-close) implemented, tested, pushed, and PR'd —
-  see [docs/FEATURE_UPGRADE_4.md](../docs/FEATURE_UPGRADE_4.md): full CRUD (edit/
-  delete/reorder added; create/complete/progress/ownership already existed),
-  server-side validation, lifecycle-phase display grouping (read-time only, no schema
-  change), plus real Playwright E2E coverage (none existed for checklist before).
-- Along the way: fixed a real Postgres-only dialect bug (CI caught it, fixed, verified
-  locally against a throwaway Postgres container), a real new a11y contrast violation
-  from this round's own Delete button, and two pre-existing unrelated a11y violations
-  on the same page (fixed in passing, one-line each) — a third pre-existing one
-  (`#detail-stage`) was deliberately left for the backlog, not fixed, to avoid scope
-  creep into an unrelated page-wide audit.
-- 16 frontend unit tests (up from 13), 1 new backend integration test, 1 new E2E test
-  (5 viewport variants) — all green on CI.
+- Round 5 (contacts/networking gap-close) implemented — see
+  [docs/FEATURE_UPGRADE_5.md](../docs/FEATURE_UPGRADE_5.md). Backend needed **zero**
+  changes (already fully correct CRUD + security); the real work was frontend: fixed
+  the broken application-linkage flow, added Edit UI, surfaced contacts on the
+  application detail page, safe LinkedIn/email links, overdue-follow-up flag,
+  relationship_type suggestions (datalist, not a hard enum).
+- One real, pre-existing, shared accessibility bug fixed in passing (generic
+  `table()` wrapper wasn't keyboard-focusable) — benefits every tracker page.
+- New tests: 1 backend integration test (CRUD/linkage/ownership/IDOR/cascade/unlink,
+  verified against real Postgres), 3 frontend unit tests worth of pure-function
+  coverage (19 total, up from 16), 1 new Playwright E2E test (verified across all 5
+  viewports against real Postgres + real Chromium before pushing).
 
 ## Incomplete / not started
 
-- PR #11 is open, CI green, **not merged** — left for the user's review.
-- Everything from Round 5 onward in [docs/PRD.md](../docs/PRD.md).
-
-## Correction to earlier rounds' notes
-
-Rounds 2/3 recorded "no local Postgres available in this environment" as a constraint.
-That was wrong — **Docker is available locally**, and so is installing Playwright's
-Chromium (`npx playwright install chromium` — confirmed working, no proxy/network
-issue). Round 4 used both: a throwaway `postgres:17-alpine` container caught and let a
-real Postgres-dialect bug get fixed and verified before pushing, and a local Chromium
-install let the new E2E test run for real (all 5 viewports) before trusting CI with it.
-Prefer verifying locally over round-tripping through CI when the tooling is available —
-it is, in this environment, for both Postgres and Playwright.
+- Branch **not yet pushed**, **no PR open**, CI has not run against it.
+- Everything from Round 6 onward in [docs/PRD.md](../docs/PRD.md).
 
 ## Known state to be aware of
 
 - Untracked root "mega-prompt" planning files remain (not committed, per convention).
 - `ui-upgrade` branch's merge status still unconfirmed (low priority, carried over
   unresolved across rounds).
-- Checklist's `note` field is editable server-side via the same PATCH used for
-  label/completed, but no frontend control sends it except through the (still
-  UI-inaccessible-for-notes) completion flow — see Known Debt in the feature doc.
-- `#detail-stage` (application detail page) has no accessible name — real,
-  critical-impact, pre-existing, not fixed this round (out of scope) — backlogged.
-- Playwright visual baselines remain Linux-only for pixel comparisons; a local Windows
-  run is fine for functional/accessibility signal but never authoritative for pixel
-  diffs (established Round 2/3, still true — confirmed again this round: the new
-  checklist E2E test's *functional* assertions were verified locally on Windows before
-  push, but the *visual*-regression tests were only trusted from CI).
+- The generic `renderTracker` view (interviews/rejections/follow_ups/
+  networking_contacts/daily_goals/weekly_goals) still has no Edit UI for anything
+  except networking_contacts now — same gap, deliberately left for other types (see
+  `docs/FEATURE_UPGRADE_5.md` Known Debt).
+- `#detail-stage` (found in Round 4) is still unfixed; no full accessibility audit of
+  the other tracker pages has happened yet either (Round 5 only scanned Networking +
+  the application-detail page).
+- Docker (for real Postgres) and a local Chromium install are both confirmed available
+  in this environment (established Round 4, reused successfully in Round 5) — keep
+  using them for any round that touches SQL or browser-rendered UI, rather than relying
+  on CI round-trips alone.
 
 ## Blockers
 
-None. Waiting on the user to review/merge PR #11, then on their explicit go-ahead
-before Round 5 starts.
+None. Next action is mechanical (push, PR, CI) — no decision pending except the user's
+eventual review/merge of the resulting PR.
 
 ## Next safe action
 
-Nothing further to do on Round 4. If picking this up cold: read
-`docs/FEATURE_UPGRADE_4.md`, confirm PR #11's status hasn't changed, and otherwise wait
-for direction on Round 5 (or address any review feedback on PR #11 if the user has left
-any).
+Push `feature/005-contacts-networking-gap-close`, open a PR into `development`, confirm
+CI green, report to the user, and stop — do not begin Round 6 without explicit
+approval.
