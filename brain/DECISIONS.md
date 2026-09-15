@@ -47,6 +47,20 @@ redesign), even though Round 3 is already fully specified and "ready."
 on the new module structure, is cheaper than doing it on the old monolith and then
 refactoring the same code into modules immediately after.
 
+## 2026-09-14 — Merge PR #9 as a regular merge, not squash (correcting PR #8)
+
+**Decision**: PR #9 (Round 2) was merged into `development` with a regular merge commit.
+PR #8 (planning foundation) had been squash-merged, which turns out to be a deviation
+from this repo's actual established convention — its own git history (PRs #1-#7) uses
+regular merge commits throughout ("Merge pull request #N from ..."), never squash.
+
+**Why the correction**: the Round 3 brief explicitly said "use the repository's normal
+merge strategy... do not squash/rewrite history unless that is the repository's
+established policy," which prompted re-checking — the policy is regular merges. Left
+PR #8's already-merged squash commit as-is (rewriting merged history is a much bigger,
+separate decision, not undertaken here) but every merge from here on follows the real
+convention.
+
 ## 2026-09-14 — Several "new" product-brief features already exist; scope only the gap
 
 **Decision**: Rounds 4 (checklist), 5 (contacts), 6 (import/export) are scoped as
@@ -56,3 +70,35 @@ audit-then-gap-close, not net-new builds.
 `import_batches`/`import_rows`/`export_preferences`, and the backend already wires them
 up (confirmed in `service.js`/`advanced.js`/`feature-upgrade.js`). Building these "from
 scratch" per the original brief would duplicate real, working functionality.
+
+## 2026-09-14 — Round 3: most of Feature_Upgrade_2_Codex_Prompt.md's wishlist already shipped
+
+**Decision**: Round 3 implemented only two genuinely new things (dashboard information
+hierarchy, Applications quick filters) plus one `status_group` backend addition and one
+dead-code removal, instead of building out the full search/filter/sort/dashboard-redesign
+scope the draft prompt describes.
+
+**Why**: reading the actual schema and the current query engine
+(`feature-upgrade.js`'s `buildApplicationWhere`/`queryApplications`) showed search,
+filters (including a rich per-column operator system well beyond the draft's ask),
+sort, saved views, Kanban, and export are already built and working — see the full
+reconciliation table in `docs/FEATURE_UPGRADE_3.md`. The draft prompt also describes a
+"global job search" / "job listings" page as distinct from "Applications" — JobQuest has
+no such page (by design: it doesn't discover or scrape jobs), so that entire section
+(§6-9 of the draft) is marked NO LONGER APPLICABLE rather than built as a duplicate
+feature. Building any of the already-working pieces again would have been wasted,
+regression-risking effort for no product benefit.
+
+## 2026-09-14 — Round 3: quick filters as thin param wrappers, not a new query layer
+
+**Decision**: `frontend/src/features/applications/quick-filters.js` only computes
+`date_field`/`date_from`/`date_to`/`status_group` values and hands them to the exact
+same `URLSearchParams` → `renderApplications(params)` flow every other filter already
+uses. No new client-side filtering, no new fetch call, no parallel state store.
+
+**Why**: four of the six quick filters (Applied Today/Week/Month, Recently Updated)
+needed zero backend changes — `date_field=updated_at` was already a supported value.
+Only "Active"/"Closed" needed one new `status_group` branch in `buildApplicationWhere`,
+reusing the existing `CLOSED_STAGES` set. Treating quick filters as "just another way to
+set the params the server already understands" kept the change small and impossible to
+drift out of sync with the advanced filter panel.
