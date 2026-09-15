@@ -19,6 +19,12 @@ import {
   widgetDefinition,
 } from "./dashboard-config.js";
 import { icon } from "./icons.js";
+import { groupWidgetsByTier } from "./features/dashboard/tiers.js";
+import {
+  QUICK_FILTERS,
+  activeQuickFilter,
+  toggleQuickFilter,
+} from "./features/applications/quick-filters.js";
 
 const state = {
   user: null,
@@ -726,6 +732,24 @@ function widgetContent(id, data, manager) {
     ? `<div class="metric num">${users.total ?? 0}</div><p>Users in manager scope</p>`
     : empty("No data in the selected range");
 }
+
+function widgetCardHtml(item, data, manager) {
+  const kind = widgetDefinition(item.widget_id)?.kind || "insight";
+  return `<section class="widget size-${item.width} widget-${kind}" data-widget="${item.widget_id}"><header class="widget-header"><div><span class="widget-kicker">${esc(kind)}</span><h2>${esc(WIDGET_NAMES[item.widget_id])}</h2></div>${DASHBOARD_DRILL[item.widget_id] ? `<button class="widget-drill" data-widget-drill="${item.widget_id}" aria-label="Open details for ${esc(WIDGET_NAMES[item.widget_id])}">View</button>` : ""}</header>${widgetContent(item.widget_id, data, manager)}</section>`;
+}
+
+// Round 3: group enabled widgets into the operational hierarchy (needs
+// attention / current pipeline / trends & context) instead of one flat grid,
+// while leaving each widget's own rendering, drill-through, and persisted
+// position/width untouched.
+function renderTieredWidgets(widgets, data, manager) {
+  return groupWidgetsByTier(widgets)
+    .map(
+      (tier) =>
+        `<section class="widget-tier widget-tier-${tier.id}"><header class="widget-tier-header"><h2>${esc(tier.label)}</h2><p class="muted">${esc(tier.description)}</p></header><div class="widget-grid">${tier.widgets.map((item) => widgetCardHtml(item, data, manager)).join("")}</div></section>`,
+    )
+    .join("");
+}
 async function renderDashboard(manager = false) {
   shell(
     pageHead(
@@ -753,7 +777,7 @@ async function renderDashboard(manager = false) {
     : "";
   shell(
     `<section class="dashboard-hero"><div><p class="eyebrow">JobQuest Workspace</p><h1>${manager ? "Team search overview" : `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${esc(state.user.full_name.split(" ")[0])}`}</h1><p class="muted">${manager ? "See team momentum, pipeline health, and where support is needed." : "Here’s what’s moving in your job search and what needs attention next."}</p></div><div class="dashboard-controls"><div class="view-switcher" role="group" aria-label="Dashboard type"><button class="btn small ${manager ? "secondary" : ""}" data-dashboard-mode="user" aria-pressed="${!manager}">User</button>${state.user.role === "MANAGER" ? `<button class="btn small ${manager ? "" : "secondary"}" data-dashboard-mode="manager" aria-pressed="${manager}">Manager</button>` : ""}</div>${scopeSelect}<select id="dashboard-range" aria-label="Dashboard date range"><option value="7" ${state.dashboardDays === 7 ? "selected" : ""}>Last 7 days</option><option value="30" ${state.dashboardDays === 30 ? "selected" : ""}>Last 30 days</option><option value="90" ${state.dashboardDays === 90 ? "selected" : ""}>Last 90 days</option></select><button class="btn secondary" id="dashboard-settings">${icon("sliders-horizontal")}<span class="hide-narrow">Customize Dashboard</span><span class="show-narrow">Customize</span></button></div></section>` +
-      `<div class="widget-grid">${widgets.map((item) => `<section class="widget size-${item.width} widget-${widgetDefinition(item.widget_id)?.kind || "insight"}" data-widget="${item.widget_id}"><header class="widget-header"><div><span class="widget-kicker">${esc(widgetDefinition(item.widget_id)?.kind || "overview")}</span><h2>${esc(WIDGET_NAMES[item.widget_id])}</h2></div>${DASHBOARD_DRILL[item.widget_id] ? `<button class="widget-drill" data-widget-drill="${item.widget_id}" aria-label="Open details for ${esc(WIDGET_NAMES[item.widget_id])}">View</button>` : ""}</header>${widgetContent(item.widget_id, data, manager)}</section>`).join("")}</div>`,
+      renderTieredWidgets(widgets, data, manager),
   );
   qs(".dashboard-controls")?.insertAdjacentHTML(
     "beforeend",
@@ -1285,6 +1309,11 @@ async function renderApplications(params = new URLSearchParams()) {
         `<button class="filter-chip" type="button" data-remove-filter="${esc(key)}" aria-label="Remove ${esc(pretty(key))} filter">${esc(pretty(key))}: ${esc(value)} <span aria-hidden="true">×</span></button>`,
     )
     .join("");
+  const currentQuickFilter = activeQuickFilter(params);
+  const quickFiltersHtml = `<div class="quick-filters" role="group" aria-label="Quick filters">${QUICK_FILTERS.map(
+    (filter) =>
+      `<button type="button" class="chip-toggle ${currentQuickFilter === filter.id ? "active" : ""}" data-quick-filter="${filter.id}" aria-pressed="${currentQuickFilter === filter.id}">${esc(filter.label)}</button>`,
+  ).join("")}</div>`;
   const performance = overview.performance || {};
   const applicationSummary = [
     ["Total Applications", data.total],
@@ -1302,7 +1331,7 @@ async function renderApplications(params = new URLSearchParams()) {
       `${data.total} applications`,
       `<div class="actions"><div class="view-switcher" role="group" aria-label="Applications view"><button class="btn small ${view === "table" ? "" : "secondary"}" data-view="table" aria-pressed="${view === "table"}">${icon("table-2")}Table</button><button class="btn small ${view === "kanban" ? "" : "secondary"}" data-view="kanban" aria-pressed="${view === "kanban"}">${icon("kanban-square")}Kanban</button></div><button class="btn" data-page="quick-add">${icon("plus")}Quick Add</button><button class="btn secondary" id="open-export">${icon("download")}Export</button></div>`,
     ) +
-      `<section class="card full application-workspace"><div class="toolbar applications-meta"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select><span class="result-count num" role="status">${data.total} result${data.total === 1 ? "" : "s"}</span><select id="application-sort" aria-label="Sort applications"><option value="updated_at:desc">Recently updated</option><option value="company:asc">Company A–Z</option><option value="company:desc">Company Z–A</option><option value="job_title:asc">Job title A–Z</option><option value="job_title:desc">Job title Z–A</option><option value="date_applied:desc">Application date: newest</option><option value="date_applied:asc">Application date: oldest</option><option value="salary_min:desc">Salary: highest</option><option value="salary_min:asc">Salary: lowest</option></select></div><form id="app-filters" class="toolbar advanced-filter-bar"><div class="search-field">${icon("search")}<input name="search" type="search" placeholder="Search company, title, location, recruiter, notes, tags..." value="${esc(params.get("search") || "")}"></div><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option>${["High", "Medium", "Low"].map((priority) => `<option ${params.get("priority") === priority ? "selected" : ""}>${priority}</option>`).join("")}</select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">${icon("filter")}More Filters${activeFilters.length ? `<span class="num filter-count">${activeFilters.length}</span>` : ""}</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">${icon("save")}Save View</button></form><div class="active-filters" aria-label="Active filters">${filterChips}${activeFilters.length ? `<button class="link-button" type="button" id="clear-filter-chips">Clear all filters</button>` : ""}</div><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? '<div id="applications-table-root"></div>' : board}<div class="pagination applications-pagination"><button class="btn secondary small" id="prev-page" ${data.page <= 1 ? "disabled" : ""}>${icon("chevron-left")}Previous</button><span class="num muted">Page ${data.page} of ${Math.max(1, data.pages)}</span><button class="btn secondary small" id="next-page" ${data.page >= data.pages ? "disabled" : ""}>Next${icon("chevron-right")}</button></div></section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
+      `<section class="card full application-workspace"><div class="toolbar applications-meta"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select><span class="result-count num" role="status">${data.total} result${data.total === 1 ? "" : "s"}</span><select id="application-sort" aria-label="Sort applications"><option value="updated_at:desc">Recently updated</option><option value="company:asc">Company A–Z</option><option value="company:desc">Company Z–A</option><option value="job_title:asc">Job title A–Z</option><option value="job_title:desc">Job title Z–A</option><option value="date_applied:desc">Application date: newest</option><option value="date_applied:asc">Application date: oldest</option><option value="salary_min:desc">Salary: highest</option><option value="salary_min:asc">Salary: lowest</option></select></div>${quickFiltersHtml}<form id="app-filters" class="toolbar advanced-filter-bar"><div class="search-field">${icon("search")}<input name="search" type="search" placeholder="Search company, title, location, recruiter, notes, tags..." value="${esc(params.get("search") || "")}"></div><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option>${["High", "Medium", "Low"].map((priority) => `<option ${params.get("priority") === priority ? "selected" : ""}>${priority}</option>`).join("")}</select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">${icon("filter")}More Filters${activeFilters.length ? `<span class="num filter-count">${activeFilters.length}</span>` : ""}</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">${icon("save")}Save View</button></form><div class="active-filters" aria-label="Active filters">${filterChips}${activeFilters.length ? `<button class="link-button" type="button" id="clear-filter-chips">Clear all filters</button>` : ""}</div><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? '<div id="applications-table-root"></div>' : board}<div class="pagination applications-pagination"><button class="btn secondary small" id="prev-page" ${data.page <= 1 ? "disabled" : ""}>${icon("chevron-left")}Previous</button><span class="num muted">Page ${data.page} of ${Math.max(1, data.pages)}</span><button class="btn secondary small" id="next-page" ${data.page >= data.pages ? "disabled" : ""}>Next${icon("chevron-right")}</button></div></section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
         "format",
         "Format",
         [
@@ -1440,6 +1469,11 @@ async function renderApplications(params = new URLSearchParams()) {
         });
         renderApplications(params);
       }),
+  );
+  qsa("[data-quick-filter]").forEach(
+    (button) =>
+      (button.onclick = () =>
+        renderApplications(toggleQuickFilter(params, button.dataset.quickFilter))),
   );
   qs("#more-filters").onclick = () =>
     (qs("#advanced-filters").hidden = !qs("#advanced-filters").hidden);
@@ -1582,108 +1616,6 @@ async function renderApplications(params = new URLSearchParams()) {
       values.format === "xlsx"
         ? `/api/exports/applications.xlsx?${next}`
         : `/api/exports/${values.format === "json" ? "json" : "applications"}?${next}`;
-  };
-}
-
-async function legacyRenderApplications(params = new URLSearchParams()) {
-  const [data, savedViews] = await Promise.all([
-    api(`/api/applications?${params}`),
-    api("/api/saved-views"),
-  ]);
-  state.applications = data.items;
-  const rowsHtml = data.items
-    .map(
-      (item) =>
-        `<tr class="clickable-row" data-open="${item.id}" tabindex="0"><td>${item.pinned ? "📌 " : ""}${esc(item.date_applied)}</td><td><strong>${esc(item.company)}</strong></td><td>${esc(item.job_title)}</td><td>${badge(item.stage)}</td><td>${esc(item.priority)}</td><td>${esc(item.source || "—")}</td><td>${esc(item.tags || "—")}</td><td>${item.days_inactive}d · ${esc(agingBand(item.days_inactive))}</td><td><div class="actions"><button class="btn small secondary" data-edit="${item.id}">Edit</button><button class="btn small secondary" data-pin="${item.id}" data-value="${item.pinned ? 0 : 1}">${item.pinned ? "Unpin" : "Pin"}</button><button class="btn small danger" data-archive="${item.id}">${item.archived_at ? "Restore" : "Archive"}</button></div></td></tr>`,
-    )
-    .join("");
-  shell(
-    pageHead(
-      "Applications",
-      `${data.total} records · page ${data.page} of ${Math.max(1, data.pages)}`,
-      `<div class="actions"><button class="btn" data-page="quick-add">Quick Add</button><a class="btn secondary" href="/api/exports/applications">CSV Export</a></div>`,
-    ) +
-      `<section class="card full"><div class="toolbar"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((view) => `<option value="${view.id}">${esc(view.name)}</option>`).join("")}</select><button class="btn small secondary" id="delete-view" disabled>Delete View</button></div><form id="app-filters" class="toolbar"><input name="search" placeholder="Search company, title, location" value="${esc(params.get("search") || "")}"><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select><select name="archived"><option value="">Active</option><option value="true">Archived</option><option value="all">All</option></select><label class="inline"><input type="checkbox" name="pinned" value="true"> Pinned</label><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="save-view">Save View</button></form>${table(["Applied", "Company", "Job title", "Stage", "Priority", "Source", "Tags", "Aging", "Actions"], rowsHtml, "No applications match these filters")}</section><div class="pagination"><button class="btn secondary" id="prev-page" ${data.page <= 1 ? "disabled" : ""}>Previous</button><button class="btn secondary" id="next-page" ${data.page >= data.pages ? "disabled" : ""}>Next</button></div>`,
-  );
-  qs("#app-filters").onsubmit = (e) => {
-    e.preventDefault();
-    renderApplications(new URLSearchParams(new FormData(e.currentTarget)));
-  };
-  qs("#save-view").onclick = async () => {
-    const name = prompt("Saved view name");
-    if (name) {
-      await api("/api/saved-views", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          filters: Object.fromEntries(new FormData(qs("#app-filters"))),
-        }),
-      });
-      toast("View saved");
-    }
-  };
-  qs("#saved-view").onchange = (event) => {
-    const view = savedViews.find(
-      (item) => item.id === Number(event.target.value),
-    );
-    qs("#delete-view").disabled = !view;
-    if (view)
-      renderApplications(new URLSearchParams(JSON.parse(view.filters_json)));
-  };
-  qs("#delete-view").onclick = async () => {
-    const id = qs("#saved-view").value;
-    if (id && confirm("Delete this saved view?")) {
-      await api(`/api/saved-views/${id}`, { method: "DELETE" });
-      renderApplications(params);
-    }
-  };
-  qsa("[data-open]").forEach((row) => {
-    row.onclick = (e) => {
-      if (!e.target.closest("button,a")) go(`detail:${row.dataset.open}`);
-    };
-    row.onkeydown = (e) => {
-      if (e.key === "Enter") go(`detail:${row.dataset.open}`);
-    };
-  });
-  qsa("[data-edit]").forEach(
-    (button) =>
-      (button.onclick = () => {
-        state.editing = state.applications.find(
-          (item) => item.id === Number(button.dataset.edit),
-        );
-        go("add");
-      }),
-  );
-  qsa("[data-pin]").forEach(
-    (button) =>
-      (button.onclick = async () => {
-        await api(`/api/applications/${button.dataset.pin}/pin`, {
-          method: "POST",
-          body: JSON.stringify({ pinned: Number(button.dataset.value) }),
-        });
-        renderApplications(params);
-      }),
-  );
-  qsa("[data-archive]").forEach(
-    (button) =>
-      (button.onclick = async () => {
-        const item = state.applications.find(
-          (value) => value.id === Number(button.dataset.archive),
-        );
-        await api(
-          `/api/applications/${item.id}/${item.archived_at ? "restore" : "archive"}`,
-          { method: "POST", body: "{}" },
-        );
-        renderApplications(params);
-      }),
-  );
-  qs("#prev-page").onclick = () => {
-    params.set("page", data.page - 1);
-    renderApplications(params);
-  };
-  qs("#next-page").onclick = () => {
-    params.set("page", data.page + 1);
-    renderApplications(params);
   };
 }
 

@@ -1179,6 +1179,21 @@ tbody td.num {
 .widget-grid [data-widget="daily-goals"] {
   background: color-mix(in srgb, var(--primary) 6%, var(--paper));
 }
+.widget-tier + .widget-tier {
+  margin-top: 1.75rem;
+}
+.widget-tier-header {
+  margin-bottom: 0.75rem;
+}
+.widget-tier-header h2 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.widget-tier-header p {
+  margin: 0;
+  font-size: 0.8125rem;
+}
 
 .dashboard-hero {
   display: flex;
@@ -1341,6 +1356,27 @@ tbody td.num {
   gap: 0.5rem;
   overflow-x: auto;
   padding: 0.25rem 0 0.75rem;
+}
+.quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.25rem 0 0.75rem;
+}
+.chip-toggle {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.chip-toggle.active {
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
+  background: var(--brand);
+  color: var(--primary-foreground);
 }
 .filter-chip {
   flex: 0 0 auto;

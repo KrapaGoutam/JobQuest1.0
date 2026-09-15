@@ -34,3 +34,23 @@ pushed, no PR open, CI has not run on it**. Do that first (push, open PR into
 `development`, confirm all 8 jobs green including zero visual-regression diffs) before
 trusting this round is actually done. Do not start Round 3 without the user's explicit
 go-ahead — see the stop condition recorded in `tasks/CURRENT_TASK.md`.
+
+## 2026-09-14 (same day, continued session) — Claude Code (Claude Sonnet 5) — Round 3 implemented
+
+Merged PR #9 (regular merge, correcting PR #8's squash — see `brain/DECISIONS.md`).
+Reconciled `Feature_Upgrade_2_Codex_Prompt.md` against the real codebase: most of its
+search/filter/sort/export/saved-views wishlist was already implemented (full table in
+`docs/FEATURE_UPGRADE_3.md`). Implemented the two real gaps — dashboard 3-tier
+information hierarchy and Applications quick filters (with one new `status_group`
+backend param) — plus removed one dead frontend function. On
+`feature/003-dashboard-applications-revamp`, off `development`.
+
+Pushed, PR #10 opened into `development`, full CI matrix green — including the
+visual-regression suite, which passed against the **existing, unmodified baselines**
+(verified as genuine by confirming the tested bundle contains the new markup, not a
+coverage gap: the tier headers/quick-filter row are visually modest enough to land
+under the suite's 12% pixel-diff tolerance). No baseline update was needed.
+
+**For the next agent**: PR #10 is ready and green but **not merged** — left for the
+user's review, per the Round 3 stop condition. Do not start Round 4 without the user's
+explicit go-ahead.
