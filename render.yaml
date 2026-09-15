@@ -3,7 +3,7 @@ services:
     name: jobquest
     runtime: node
     rootDir: backend
-    buildCommand: npm ci
+    buildCommand: npm ci && npm run build:frontend
     preDeployCommand: npm run migrate:postgres
     startCommand: npm start
     healthCheckPath: /api/health

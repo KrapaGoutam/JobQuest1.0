@@ -23,7 +23,9 @@ import { handleAdvanced } from "./advanced.js";
 import { handleFeatureUpgrade } from "./feature-upgrade.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const frontendDir = join(here, "..", "..", "frontend");
+// Built by Vite (see ../../frontend/vite.config.js) into frontend/dist. Only the
+// build output is served — never frontend/src, node_modules, or package.json.
+const frontendDir = join(here, "..", "..", "frontend", "dist");
 const LOCKOUT_ATTEMPTS = 5,
   LOCKOUT_MINUTES = 5,
   SESSION_HOURS = 12;

@@ -12,13 +12,13 @@ import {
   widgetSelectionState,
   kanbanGroupKey,
   groupKanbanItems,
-} from "../../frontend/ui-utils.js";
+} from "../../frontend/src/ui-utils.js";
 import { parseHTML } from "linkedom";
-import { createApplicationTable } from "../../frontend/application-table.js";
+import { createApplicationTable } from "../../frontend/src/application-table.js";
 import {
   DASHBOARD_WIDGETS,
   WIDGET_NAMES,
-} from "../../frontend/dashboard-config.js";
+} from "../../frontend/src/dashboard-config.js";
 
 test("dashboard registry preserves the complete unique widget contract", () => {
   assert.equal(DASHBOARD_WIDGETS.length, 30);
@@ -160,11 +160,11 @@ test("calendar month has stable six-week grid and aging bands", () => {
 test("feature upgrade UI includes accessible Table, Kanban, filters, settings, goal chart, and export controls", () => {
   const source = ["app.js", "application-table.js"]
     .map((file) =>
-      readFileSync(new URL(`../../frontend/${file}`, import.meta.url), "utf8"),
+      readFileSync(new URL(`../../frontend/src/${file}`, import.meta.url), "utf8"),
     )
     .join("\n");
   const css = readFileSync(
-    new URL("../../frontend/styles.css", import.meta.url),
+    new URL("../../frontend/src/styles.css", import.meta.url),
     "utf8",
   );
   for (const marker of [

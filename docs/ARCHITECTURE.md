@@ -52,7 +52,10 @@ existing implementation against the target vision first and scope only the *gap*
 Genuinely absent from the schema today: task management, habit tracking, journal/notes.
 These are net-new domains.
 
-## Target state (post Round 2 — frontend build tooling)
+## Current state, post Round 2
+
+Implemented on `feature/002-frontend-build-tooling`, pending merge — see
+[docs/FEATURE_UPGRADE_2.md](FEATURE_UPGRADE_2.md).
 
 Same runtime/deploy shape (Render + Neon unchanged — this is a frontend-only change).
 The difference is build-time, not run-time:

@@ -18,3 +18,19 @@ not yet committed/pushed at end of this session's work.
 **For the next agent**: nothing has been implemented yet. Read
 `tasks/CURRENT_TASK.md` first. Do not assume checklist/contacts/import-export are
 net-new — they already exist; see `brain/DECISIONS.md`.
+
+## 2026-09-14 (same day, continued session) — Claude Code (Claude Sonnet 5) — Round 2 implemented
+
+Merged the planning-foundation PR (#8) into `development` after fixing a self-inflicted
+CI failure (`docs/SECURITY.md` quoted the repo's own secret-detection regex verbatim,
+tripping it). Then implemented Round 2 (frontend build tooling) on
+`feature/002-frontend-build-tooling`: Vite build for the existing vanilla-JS frontend,
+`frontend/src`+`frontend/public` layout, backend now serves `frontend/dist`, Render
+build command and CI updated, no React/HMR introduced. Full detail and rationale in
+`docs/FEATURE_UPGRADE_2.md`.
+
+**For the next agent**: the branch is implemented and locally verified but **not yet
+pushed, no PR open, CI has not run on it**. Do that first (push, open PR into
+`development`, confirm all 8 jobs green including zero visual-regression diffs) before
+trusting this round is actually done. Do not start Round 3 without the user's explicit
+go-ahead — see the stop condition recorded in `tasks/CURRENT_TASK.md`.

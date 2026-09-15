@@ -20,7 +20,7 @@ tracker (no scraping, no auto-apply) — that scope does not change.
   features below already have partial schema/backend (flagged per round).
 - Every round ships with: lint, typecheck, unit/integration tests, relevant Playwright
   E2E/accessibility/visual-regression coverage, a production build check, and a
-  `docs/FEATURE_UPGRADE_0N.md` write-up using the template in §4.
+  `docs/FEATURE_UPGRADE_N.md` write-up using the template in §4.
 - Branch: `feature/<round>-<slug>` off `development`, merged back via PR (matches the
   repo's existing convention — see [brain/DECISIONS.md](../brain/DECISIONS.md)).
 
@@ -70,7 +70,7 @@ the Dashboard (User + Manager modes) and Applications page, add comprehensive
 search/filter/sort/pagination with persisted state, preserving every existing widget
 name/type-ID and table field. This round should build on Round 2's module structure
 rather than adding more to the monolithic files. Convert that draft into
-`docs/FEATURE_UPGRADE_02.md` when the round starts, carrying over its explicit
+`docs/FEATURE_UPGRADE_2.md` when the round starts, carrying over its explicit
 non-negotiable safety rules.
 
 ### Round 4 — Application checklist
@@ -131,7 +131,7 @@ way rather than letting them drift undocumented per-round.
 
 ## 4. Per-round feature doc template
 
-When a round starts, create `docs/FEATURE_UPGRADE_0N.md` with:
+When a round starts, create `docs/FEATURE_UPGRADE_N.md` with:
 
 `Goal → Scope → Requirements → Design/Architecture → Tasks → Acceptance Criteria →
 Tests → Security/Performance Impact → Decisions → Implementation Status`
