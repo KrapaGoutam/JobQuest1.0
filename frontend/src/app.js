@@ -25,6 +25,10 @@ import {
   activeQuickFilter,
   toggleQuickFilter,
 } from "./features/applications/quick-filters.js";
+import {
+  groupChecklistItems,
+  checklistProgress,
+} from "./features/checklist/groups.js";
 
 const state = {
   user: null,
@@ -1720,28 +1724,114 @@ function bindTimeline(id) {
     go(`detail:${id}`);
   };
 }
+function checklistItemHtml(item) {
+  return `<li class="checklist-item" data-checklist-row="${item.id}"><label><input type="checkbox" data-checklist="${item.id}" ${item.completed ? "checked" : ""} aria-label="Mark '${esc(item.label)}' ${item.completed ? "not complete" : "complete"}"><span>${esc(item.label)}</span></label>${item.note ? `<small class="checklist-note">${esc(item.note)}</small>` : ""}<div class="actions"><button type="button" class="btn small secondary" data-checklist-up="${item.id}" aria-label="Move '${esc(item.label)}' up">↑</button><button type="button" class="btn small secondary" data-checklist-down="${item.id}" aria-label="Move '${esc(item.label)}' down">↓</button><button type="button" class="btn small secondary" data-checklist-edit="${item.id}" aria-label="Edit '${esc(item.label)}'">Edit</button><button type="button" class="btn small danger" data-checklist-delete="${item.id}" aria-label="Delete '${esc(item.label)}'">Delete</button></div></li>`;
+}
+function checklistView(data) {
+  const { completed, total, percent } = checklistProgress(data.checklist);
+  const groups = groupChecklistItems(data.checklist);
+  return `<h2>Application Checklist</h2><p role="status">${completed} of ${total} complete${total ? ` (${percent}%)` : ""}</p><progress value="${completed}" max="${total || 1}"></progress><div id="checklist">${
+    total
+      ? groups
+          .map(
+            (group) =>
+              `<section class="checklist-group"><h3>${esc(group.label)}</h3><ul>${group.items.map(checklistItemHtml).join("")}</ul></section>`,
+          )
+          .join("")
+      : empty("No checklist items yet — add one below")
+  }</div><form id="checklist-add" class="toolbar"><input name="label" placeholder="Custom checklist item" required maxlength="200"><button class="btn small">Add</button></form>`;
+}
 function detailTabs(data) {
-  const progress = data.checklist.filter((item) => item.completed).length;
-  return `<section class="card full"><div class="tabs" role="tablist"><button>Overview</button><button>Timeline</button><button>Interviews (${data.interviews.length})</button><button>Follow-Ups (${data.follow_ups.length})</button><button>Networking (${data.networking.length})</button><button>Resume</button><button>Checklist</button><button>Notes</button>${data.audit ? "<button>Audit History</button>" : ""}</div><div class="tab-content"><h2>Application Checklist</h2><p>${progress} of ${data.checklist.length} complete</p><progress value="${progress}" max="${data.checklist.length || 1}"></progress><div id="checklist">${data.checklist.map((item) => `<label class="checklist-item"><input type="checkbox" data-checklist="${item.id}" ${item.completed ? "checked" : ""}> ${esc(item.label)} <small>${esc(item.note || "")}</small></label>`).join("")}</div><form id="checklist-add" class="toolbar"><input name="label" placeholder="Custom checklist item" required><button class="btn small">Add</button></form>${data.audit ? `<details><summary>Manager audit history</summary>${data.audit.map((item) => `<p>${esc(item.created_at)} · ${esc(item.actor_username)} · ${esc(item.action)} ${esc(item.details || "")}</p>`).join("")}</details>` : ""}</div></section>`;
+  return `<section class="card full"><div class="tabs" role="tablist"><button>Overview</button><button>Timeline</button><button>Interviews (${data.interviews.length})</button><button>Follow-Ups (${data.follow_ups.length})</button><button>Networking (${data.networking.length})</button><button>Resume</button><button>Checklist</button><button>Notes</button>${data.audit ? "<button>Audit History</button>" : ""}</div><div class="tab-content"><div id="checklist-panel">${checklistView(data)}</div>${data.audit ? `<details><summary>Manager audit history</summary>${data.audit.map((item) => `<p>${esc(item.created_at)} · ${esc(item.actor_username)} · ${esc(item.action)} ${esc(item.details || "")}</p>`).join("")}</details>` : ""}</div></section>`;
 }
 function bindChecklist(id) {
+  const refresh = async () => {
+    try {
+      const data = await api(`/api/applications/${id}/detail`);
+      qs("#checklist-panel").innerHTML = checklistView(data);
+      bindChecklist(id);
+    } catch {
+      toast("Could not refresh the checklist — try again");
+    }
+  };
   qsa("[data-checklist]").forEach(
     (input) =>
-      (input.onchange = () =>
-        api(`/api/applications/${id}/checklist/${input.dataset.checklist}`, {
-          method: "POST",
-          body: JSON.stringify({ completed: input.checked }),
-        })),
+      (input.onchange = async () => {
+        const wasChecked = !input.checked;
+        try {
+          await api(`/api/applications/${id}/checklist/${input.dataset.checklist}`, {
+            method: "PATCH",
+            body: JSON.stringify({ completed: input.checked }),
+          });
+          await refresh();
+        } catch {
+          input.checked = wasChecked;
+          toast("Could not update that item — try again");
+        }
+      }),
+  );
+  qsa("[data-checklist-edit]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        const row = button.closest("[data-checklist-row]"),
+          current = row.querySelector("label span").textContent,
+          label = prompt("Edit checklist item", current);
+        if (label === null || label.trim() === current) return;
+        try {
+          await api(`/api/applications/${id}/checklist/${button.dataset.checklistEdit}`, {
+            method: "PATCH",
+            body: JSON.stringify({ label }),
+          });
+          await refresh();
+        } catch {
+          toast("Could not save that change — try again");
+        }
+      }),
+  );
+  qsa("[data-checklist-delete]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        if (!confirm("Delete this checklist item?")) return;
+        try {
+          await api(`/api/applications/${id}/checklist/${button.dataset.checklistDelete}`, {
+            method: "DELETE",
+          });
+          await refresh();
+        } catch {
+          toast("Could not delete that item — try again");
+        }
+      }),
+  );
+  qsa("[data-checklist-up],[data-checklist-down]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        const itemId = button.dataset.checklistUp || button.dataset.checklistDown,
+          direction = button.dataset.checklistUp ? "up" : "down";
+        try {
+          await api(`/api/applications/${id}/checklist/${itemId}/move`, {
+            method: "PATCH",
+            body: JSON.stringify({ direction }),
+          });
+          await refresh();
+        } catch {
+          toast("Could not reorder that item — try again");
+        }
+      }),
   );
   qs("#checklist-add").onsubmit = async (event) => {
     event.preventDefault();
-    await api(`/api/applications/${id}/checklist`, {
-      method: "POST",
-      body: JSON.stringify(
-        Object.fromEntries(new FormData(event.currentTarget)),
-      ),
-    });
-    go(`detail:${id}`);
+    const form = event.currentTarget,
+      label = new FormData(form).get("label");
+    try {
+      await api(`/api/applications/${id}/checklist`, {
+        method: "POST",
+        body: JSON.stringify({ label }),
+      });
+      await refresh();
+      form.reset();
+    } catch {
+      toast("Could not add that item — try again");
+    }
   };
 }
 
