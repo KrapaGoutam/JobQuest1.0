@@ -1193,6 +1193,26 @@ pre.example {
   color: var(--ink);
   background: var(--paper);
 }
+.contact-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+.contact-card {
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--paper);
+}
+.contact-meta {
+  margin-top: 0.3rem;
+  font-size: 0.82rem;
+}
+.contact-meta a {
+  color: var(--brand);
+}
 .previous-next {
   display: flex;
   justify-content: space-between;
