@@ -2,10 +2,9 @@
 
 ## Status
 
-Implemented on `feature/005-contacts-networking-gap-close`, off `development` (which
-now includes the merged Round 4 PR #11). Round 5 of [docs/PRD.md](PRD.md). Local checks
-green, including real PostgreSQL and real-browser validation (see Testing) — CI pending
-as this doc is written; see CI Status for the final result.
+Implemented on `feature/005-contacts-networking-gap-close`; PR #12 open into
+`development`, full CI matrix green on the first push (8/8 jobs), awaiting the user's
+review/merge. Round 5 of [docs/PRD.md](PRD.md).
 
 ## Goal
 
@@ -191,7 +190,7 @@ integration, full CRM features, React, Render/Neon changes.
       load (already the case, via the existing `/detail` endpoint) and once per
       Networking-page load; nothing new queries per-row.
 - [x] No new dependency.
-- [ ] Full CI green — pending, see CI Status.
+- [x] Full CI green (8/8 jobs on the first push) — see CI Status.
 
 ## Testing
 
@@ -260,9 +259,8 @@ before pushing.
 Reuses the existing `.card`/`.table-wrap`/`.form-grid` responsive patterns; the new
 `.contact-list`/`.contact-card` styles use the same simple block/grid layout as
 `.related-card`, which already works down to small-mobile width. Confirmed via the new
-E2E test running on all 5 viewport projects, and will be confirmed via CI's visual
-suite — see CI Status for whether that needed a baseline update or not (per Round 3's
-lesson, not assumed either way).
+E2E test running on all 5 viewport projects, and via CI's visual suite — zero baseline
+diffs (see CI Status).
 
 ## Database impact
 
@@ -295,7 +293,15 @@ section, edit capability, accessibility fix, tests, continuity docs).
 
 ## CI status
 
-_Filled in once CI on this branch's PR completes._
+PR [#12](../../../pull/12) into `development`: **all 8 jobs pass on the first push** —
+`static-quality`, `security`, `sqlite-postgres-migration`, `tests` × 4
+(backend/frontend/integration/e2e), and `browser-and-visual` (23 tests total, up from
+18: 23 passed, 7 skipped, 0 failed — the 5 new networking-contact E2E tests, one per
+viewport project, all pass on real Linux CI, and all 18 pre-existing baseline tests
+still pass unchanged — zero visual regression). No fix round was needed this time; the
+real local PostgreSQL + Chromium validation established in Round 4 and reused here
+caught what would otherwise have been CI failures (the focusability bug) before ever
+pushing.
 
 ## Known debt (backlogged, not fixed this round)
 

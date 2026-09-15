@@ -7,9 +7,8 @@ Last updated: 2026-09-14, by Claude Sonnet 5 (Claude Code).
 - Working branch: `feature/005-contacts-networking-gap-close`, based on `development`.
 - `development` (origin): `42036e9` — regular merge of PR #11 (Round 4).
 - `main`: unchanged this session, still `7b674f4`.
-- Last full CI run confirmed green: PR #11 into `development` (final run after the
-  docs-only follow-up commit), all 8 jobs, 18 passed/7 skipped/0 failed across 25
-  browser tests.
+- Last full CI run confirmed green: PR #12 into `development`, all 8 jobs on the first
+  push, 23 passed/7 skipped/0 failed across 30 browser tests.
 
 ## What's done
 
@@ -28,7 +27,8 @@ Last updated: 2026-09-14, by Claude Sonnet 5 (Claude Code).
 
 ## Incomplete / not started
 
-- Branch **not yet pushed**, **no PR open**, CI has not run against it.
+- PR #12 is open, CI green (8/8 on the first push, no fix round needed), **not
+  merged** — left for the user's review.
 - Everything from Round 6 onward in [docs/PRD.md](../docs/PRD.md).
 
 ## Known state to be aware of
@@ -50,11 +50,12 @@ Last updated: 2026-09-14, by Claude Sonnet 5 (Claude Code).
 
 ## Blockers
 
-None. Next action is mechanical (push, PR, CI) — no decision pending except the user's
-eventual review/merge of the resulting PR.
+None. Waiting on the user to review/merge PR #12, then on their explicit go-ahead
+before Round 6 starts.
 
 ## Next safe action
 
-Push `feature/005-contacts-networking-gap-close`, open a PR into `development`, confirm
-CI green, report to the user, and stop — do not begin Round 6 without explicit
-approval.
+Nothing further to do on Round 5. If picking this up cold: read
+`docs/FEATURE_UPGRADE_5.md`, confirm PR #12's status hasn't changed, and otherwise wait
+for direction on Round 6 (or address any review feedback on PR #12 if the user has left
+any).

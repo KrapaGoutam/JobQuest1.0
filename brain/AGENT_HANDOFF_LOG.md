@@ -95,9 +95,13 @@ LinkedIn/email rendered as inert text. Closed all of that, plus fixed one real
 pre-existing shared a11y bug (table() wrapper not keyboard-focusable) found while
 testing. On `feature/005-contacts-networking-gap-close`, off `development`.
 
-**For the next agent**: not pushed yet, no PR, CI not run. Docker (real Postgres) and a
-local Chromium install are both confirmed available in this environment - use them for
-any SQL- or browser-UI-touching round rather than relying on CI alone; this round's
-Postgres/browser validation caught and fixed a real focusability bug and confirmed real
-FK cascade/unlink behavior before ever reaching CI. Do not start Round 6 without the
-user's explicit go-ahead.
+Pushed; PR #12 opened into `development`, **all 8 CI jobs green on the first push** —
+no fix round needed this time, because the real local Postgres/Chromium validation
+established in Round 4 and reused here caught the one real bug (the focusability issue)
+before it ever reached CI. Docker (real Postgres) and a local Chromium install are both
+confirmed available in this environment - use them for any SQL- or browser-UI-touching
+round rather than relying on CI alone.
+
+**For the next agent**: PR #12 is ready and green but **not merged** — left for the
+user's review, per the Round 5 stop condition. Do not start Round 6 without the user's
+explicit go-ahead.

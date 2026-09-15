@@ -1,7 +1,8 @@
 # Current task
 
-**Status: Round 5 implemented locally, ready to push/PR.** See
-[docs/FEATURE_UPGRADE_5.md](../docs/FEATURE_UPGRADE_5.md) for full detail.
+**Status: Round 5 implemented, CI green on the first push, PR #12 open — awaiting the
+user's review/merge.** See [docs/FEATURE_UPGRADE_5.md](../docs/FEATURE_UPGRADE_5.md)
+for full detail.
 
 Branch: `feature/005-contacts-networking-gap-close`, based on `development` (which now
 includes the merged Round 4 PR #11 — regular merge, per convention).
@@ -35,6 +36,8 @@ includes the merged Round 4 PR #11 — regular merge, per convention).
 
 ## Next safe action
 
-Push the branch, open a PR into `development`, and get CI green. Do not merge to
-`main`. Do not start Round 6 until this PR is merged and the user has explicitly said
-to proceed.
+PR [#12](https://github.com/KrapaGoutam/JobQuest1.0/pull/12) is open into
+`development` with all 8 CI jobs green on the first push (browser-and-visual: 23
+passed/7 skipped/0 failed — 18 pre-existing baseline tests unchanged, 5 new networking
+tests pass on real Linux CI). Left unmerged for the user's review. Do not start Round 6
+until this PR is merged and the user has explicitly said to proceed.
