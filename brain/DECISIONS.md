@@ -102,3 +102,33 @@ Only "Active"/"Closed" needed one new `status_group` branch in `buildApplication
 reusing the existing `CLOSED_STAGES` set. Treating quick filters as "just another way to
 set the params the server already understands" kept the change small and impossible to
 drift out of sync with the advanced filter panel.
+
+## 2026-09-14 — Round 4: stage-aware checklist *display* now, *generation* deferred
+
+**Decision**: group the existing flat, one-shot-generated default checklist items by
+lifecycle phase for display (`frontend/src/features/checklist/groups.js`, a pure
+read-time transform, no schema change). Did **not** make item *generation* stage-aware
+(e.g. only creating "Interview prepared" once an application reaches Interview stage).
+
+**Why**: the current architecture never touches `checklist_items` after creation —
+no hook exists on stage change. Making generation stage-aware safely would need either
+fragile label-string matching or a schema change (e.g. a `stage_hint` column) to track
+which stage a default belongs to, plus careful handling to never duplicate an item a
+stage-change handler had already inserted and never delete a user's completed work.
+That's real, separable scope with real duplicate-generation risk — exactly the
+"document and defer" case the Round 4 brief describes for cases that can't be done
+cleanly with the current schema. The display-only grouping captures most of the
+organizational value with none of that risk.
+
+## 2026-09-14 — Round 4: checklist reorder is a position swap, not free-form drag-and-drop
+
+**Decision**: `PATCH /api/applications/:id/checklist/:itemId/move` takes
+`{direction: "up"|"down"}` and swaps `position` with the adjacent item server-side —
+mirroring `ui-utils.js`'s existing `moveWidget` pattern for dashboard widgets — rather
+than accepting a client-computed target position or introducing drag-and-drop.
+
+**Why**: the Round 4 brief explicitly suggested simple ordering controls may be
+preferable to drag-and-drop for this feature, and a server-side adjacent swap can never
+produce a colliding/duplicate position value (a client-sent arbitrary position could).
+No new dependency, no new interaction pattern to learn — reuses one already in the
+codebase.

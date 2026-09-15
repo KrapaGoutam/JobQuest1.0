@@ -1,13 +1,13 @@
 # Backlog
 
 Mirrors [docs/PRD.md](../docs/PRD.md) §3. Update status here as rounds move; keep the
-detailed spec in the round's own `docs/FEATURE_UPGRADE_0N.md` once it starts.
+detailed spec in the round's own `docs/FEATURE_UPGRADE_N.md` once it starts.
 
 | # | Round | Status |
 |---|-------|--------|
 | 2 | Frontend build tooling (Vite, ES modules, zero behavior change) | Merged (PR #9, regular merge into `development`) |
-| 3 | Dashboard + Applications workspace (info hierarchy + quick filters; most of the draft prompt's search/filter/sort/export wishlist turned out already implemented — see `docs/FEATURE_UPGRADE_3.md`) | Implemented locally; PR pending |
-| 4 | Application checklist — audit + gap-close to stage-aware templates | Not started |
+| 3 | Dashboard + Applications workspace (info hierarchy + quick filters; most of the draft prompt's search/filter/sort/export wishlist turned out already implemented — see `docs/FEATURE_UPGRADE_3.md`) | Merged (PR #10) |
+| 4 | Application checklist — full CRUD (edit/delete/reorder), validation, lifecycle-phase display grouping; stage-aware *generation* deferred — see `docs/FEATURE_UPGRADE_4.md` | Implemented locally; PR pending |
 | 5 | Contacts/networking — audit + gap-close to CRM-lite | Not started |
 | 6 | Import/export hardening — preview, mapping, duplicate detection, JSON backup/restore | Not started |
 | 7 | Task management (Notion-lite) | Not started |
@@ -28,3 +28,24 @@ package, plan-only).
   normalization, not just a UI gap. See same doc.
 - Decide whether to deprecate `GET /api/applications` (the pre-Feature-Upgrade-1 listing
   endpoint) now that its only frontend caller was removed as dead code.
+
+## Smaller items discovered during Round 4 (not yet sequenced into a round)
+
+- Note "add/edit" UI control for checklist items (backend field + PATCH support exist;
+  no frontend control reaches it beyond the initial completion toggle). See
+  `docs/FEATURE_UPGRADE_4.md` Known Debt.
+- Stage-aware checklist *generation* (today's display-only lifecycle grouping is safe;
+  actually varying which defaults get created per stage needs either fragile
+  label-matching or a schema change, deferred pending real product need).
+- Configurable checklist templates — no verified need yet beyond the one fixed set.
+- Dashboard integration of checklist completion/progress — deferred to avoid an N+1
+  query pattern across the application list; needs a deliberate efficient query shape
+  if pursued.
+- **`#detail-stage` (application detail page's stage-change dropdown) has no accessible
+  name** — real, critical-impact, pre-existing WCAG violation, found while scoping
+  Round 4's new E2E test but left unfixed (unrelated to checklists; the rest of the
+  detail page likely has more of the same pattern and deserves a dedicated audit, not a
+  one-off fix here). Cheap to fix whenever someone picks it up.
+- Cross-group checklist reordering has no visible effect in the grouped display (group
+  membership is decided by label, not `position`) — not a bug, but worth knowing if the
+  grouping/reorder interaction is ever revisited. See `docs/FEATURE_UPGRADE_4.md`.

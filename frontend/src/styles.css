@@ -788,6 +788,15 @@ legend {
   padding: 0.45rem 0.65rem;
   font-size: 0.82rem;
 }
+.btn.small.danger {
+  /* At this smaller size the default .btn.danger text color (#c92e3b on
+     #f6dee0) falls just under WCAG AA (4.17:1, needs 4.5:1) - axe-core
+     caught this via the checklist Delete button, but the same combination
+     was already used in 5 other places before this round; darkening here
+     fixes all of them without touching the shared --bad/--destructive
+     tokens other (non-small) danger elements rely on. ~4.9:1 at this size. */
+  color: #b02a37;
+}
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -1134,6 +1143,47 @@ pre.example {
 }
 .checklist-item input {
   width: auto;
+}
+.checklist-group + .checklist-group {
+  margin-top: 1rem;
+}
+.checklist-group h3 {
+  margin: 0 0 0.4rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.checklist-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.checklist-item label {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 0.5rem;
+}
+.checklist-item .checklist-note {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+}
+.checklist-item .actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.3rem;
+}
+@media (max-width: 650px) {
+  .checklist-item {
+    flex-wrap: wrap;
+  }
+  .checklist-item .actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
 }
 .related-card,
 .link-button {

@@ -4,61 +4,69 @@ Last updated: 2026-09-14, by Claude Sonnet 5 (Claude Code).
 
 ## Branch / commit
 
-- Working branch: `feature/003-dashboard-applications-revamp`, based on `development`.
-- `development` (origin): `806bd2e` — regular merge of PR #9 (Round 2). `development`
-  and `main` match exactly on application code (Round 2 changes are additive/frontend).
+- Working branch: `feature/004-application-checklist-gap-close`, based on `development`.
+- `development` (origin): `7dc295a` — regular merge of PR #10 (Round 3).
 - `main`: unchanged this session, still `7b674f4`.
-- Last full CI run confirmed green: PR #9 into `development` (second run, after a
-  docs-only follow-up commit), all 8 jobs, browser-and-visual 13/7/0 (pass/skip/fail).
+- Last full CI run confirmed green: PR #11 into `development`, all 8 jobs,
+  browser-and-visual 18/7/0 (pass/skip/fail) across 25 tests (5 new checklist tests,
+  one per viewport project, plus the 13 pre-existing baseline tests unchanged).
 
 ## What's done
 
-- Round 3 (dashboard + applications workspace) implemented — see
-  [docs/FEATURE_UPGRADE_3.md](../docs/FEATURE_UPGRADE_3.md): dashboard 3-tier
-  information hierarchy, Applications quick filters (`status_group` added
-  server-side), dead-code removal (`legacyRenderApplications`), unit + integration
-  tests for all of it.
-- Reconciled `Feature_Upgrade_2_Codex_Prompt.md` against the real codebase — most of
-  its wishlist (search/filter/sort/saved-views/Kanban/export) turned out already
-  implemented; only two genuinely new things were built this round. Full reconciliation
-  table in the feature doc.
-- Verified locally: lint, typecheck, build, `build:frontend`, `test:frontend` (13
-  tests, up from 9).
+- Round 4 (application checklist gap-close) implemented, tested, pushed, and PR'd —
+  see [docs/FEATURE_UPGRADE_4.md](../docs/FEATURE_UPGRADE_4.md): full CRUD (edit/
+  delete/reorder added; create/complete/progress/ownership already existed),
+  server-side validation, lifecycle-phase display grouping (read-time only, no schema
+  change), plus real Playwright E2E coverage (none existed for checklist before).
+- Along the way: fixed a real Postgres-only dialect bug (CI caught it, fixed, verified
+  locally against a throwaway Postgres container), a real new a11y contrast violation
+  from this round's own Delete button, and two pre-existing unrelated a11y violations
+  on the same page (fixed in passing, one-line each) — a third pre-existing one
+  (`#detail-stage`) was deliberately left for the backlog, not fixed, to avoid scope
+  creep into an unrelated page-wide audit.
+- 16 frontend unit tests (up from 13), 1 new backend integration test, 1 new E2E test
+  (5 viewport variants) — all green on CI.
 
 ## Incomplete / not started
 
-- PR #10 is open, CI green, **not merged** — left for the user's review.
-- Everything from Round 4 onward in [docs/PRD.md](../docs/PRD.md).
+- PR #11 is open, CI green, **not merged** — left for the user's review.
+- Everything from Round 5 onward in [docs/PRD.md](../docs/PRD.md).
 
-## Resolved this round (was flagged as a risk, turned out fine)
+## Correction to earlier rounds' notes
 
-Visual-regression baselines were expected to need a deliberate update (dashboard tier
-sections and the quick-filter row are real, intended visual changes) but did not: CI's
-`browser-and-visual` job passed against the existing, unmodified baselines. Verified
-this wasn't a coverage gap by confirming the tested bundle actually contains the new
-markup (`widget-tier`/`quick-filters`/`data-quick-filter` present in the built JS). The
-changes are visually modest enough (thin section headers, one small button row) to fall
-under the suite's existing `maxDiffPixelRatio: 0.12` tolerance on a full-page
-screenshot. No baseline files were touched.
+Rounds 2/3 recorded "no local Postgres available in this environment" as a constraint.
+That was wrong — **Docker is available locally**, and so is installing Playwright's
+Chromium (`npx playwright install chromium` — confirmed working, no proxy/network
+issue). Round 4 used both: a throwaway `postgres:17-alpine` container caught and let a
+real Postgres-dialect bug get fixed and verified before pushing, and a local Chromium
+install let the new E2E test run for real (all 5 viewports) before trusting CI with it.
+Prefer verifying locally over round-tripping through CI when the tooling is available —
+it is, in this environment, for both Postgres and Playwright.
 
 ## Known state to be aware of
 
-- Untracked root "mega-prompt" planning files remain (not committed, per
-  `f432aa3`/user convention) — `Feature_Upgrade_2_Codex_Prompt.md` was read and
-  reconciled this round but is not itself modified or committed.
-- `ui-upgrade` branch's merge status still unconfirmed (carried over from Round 2 — not
-  re-investigated this round either; low priority unless it starts blocking something).
-- PR #8 was squash-merged (a one-off deviation, now corrected for PR #9 onward) — see
-  `brain/DECISIONS.md`. Not undone; just don't repeat it.
+- Untracked root "mega-prompt" planning files remain (not committed, per convention).
+- `ui-upgrade` branch's merge status still unconfirmed (low priority, carried over
+  unresolved across rounds).
+- Checklist's `note` field is editable server-side via the same PATCH used for
+  label/completed, but no frontend control sends it except through the (still
+  UI-inaccessible-for-notes) completion flow — see Known Debt in the feature doc.
+- `#detail-stage` (application detail page) has no accessible name — real,
+  critical-impact, pre-existing, not fixed this round (out of scope) — backlogged.
+- Playwright visual baselines remain Linux-only for pixel comparisons; a local Windows
+  run is fine for functional/accessibility signal but never authoritative for pixel
+  diffs (established Round 2/3, still true — confirmed again this round: the new
+  checklist E2E test's *functional* assertions were verified locally on Windows before
+  push, but the *visual*-regression tests were only trusted from CI).
 
 ## Blockers
 
-None. Waiting on the user to review/merge PR #10, then on their explicit go-ahead
-before Round 4 starts.
+None. Waiting on the user to review/merge PR #11, then on their explicit go-ahead
+before Round 5 starts.
 
 ## Next safe action
 
-Nothing further to do on Round 3. If picking this up cold: read
-`docs/FEATURE_UPGRADE_3.md`, confirm PR #10's status hasn't changed, and otherwise wait
-for direction on Round 4 (or address any review feedback on PR #10 if the user has left
+Nothing further to do on Round 4. If picking this up cold: read
+`docs/FEATURE_UPGRADE_4.md`, confirm PR #11's status hasn't changed, and otherwise wait
+for direction on Round 5 (or address any review feedback on PR #11 if the user has left
 any).

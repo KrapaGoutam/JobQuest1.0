@@ -30,6 +30,10 @@ import {
   activeQuickFilter,
   toggleQuickFilter,
 } from "../../frontend/src/features/applications/quick-filters.js";
+import {
+  groupChecklistItems,
+  checklistProgress,
+} from "../../frontend/src/features/checklist/groups.js";
 
 test("dashboard registry preserves the complete unique widget contract", () => {
   assert.equal(DASHBOARD_WIDGETS.length, 30);
@@ -279,4 +283,46 @@ test("toggling a quick filter is independent and mutually exclusive", () => {
   params = toggleQuickFilter(params, "applied-today", today);
   assert.equal(activeQuickFilter(params, today), null);
   assert.equal(params.get("date_from"), null);
+});
+
+test("checklist items group into their lifecycle stage, preserving order", () => {
+  const items = [
+    { id: 1, label: "Resume tailored", completed: 0 },
+    { id: 2, label: "Application submitted", completed: 1 },
+    { id: 3, label: "Correct resume selected", completed: 0 },
+    { id: 4, label: "Interview prepared", completed: 0 },
+    { id: 5, label: "Ask about relocation", completed: 0 }, // custom item
+  ];
+  const groups = groupChecklistItems(items);
+  assert.deepEqual(
+    groups.map((group) => group.id),
+    ["preparing", "applying", "interview", "custom"],
+  );
+  // Order within a group follows the input order, not the label's position
+  // in the static group definition (item 1 before item 3, both "preparing").
+  assert.deepEqual(
+    groups.find((group) => group.id === "preparing").items.map((item) => item.id),
+    [1, 3],
+  );
+  assert.deepEqual(
+    groups.find((group) => group.id === "custom").items.map((item) => item.id),
+    [5],
+  );
+});
+
+test("checklist grouping never drops an item, even an unrecognized label", () => {
+  const items = [
+    { id: 1, label: "Resume tailored" },
+    { id: 2, label: "Something entirely custom" },
+  ];
+  const seen = groupChecklistItems(items).flatMap((group) => group.items.map((item) => item.id));
+  assert.deepEqual(seen.sort(), [1, 2]);
+});
+
+test("checklist progress counts completed items and computes a percentage", () => {
+  assert.deepEqual(
+    checklistProgress([{ completed: 1 }, { completed: 0 }, { completed: 1 }, { completed: 0 }]),
+    { completed: 2, total: 4, percent: 50 },
+  );
+  assert.deepEqual(checklistProgress([]), { completed: 0, total: 0, percent: 0 });
 });

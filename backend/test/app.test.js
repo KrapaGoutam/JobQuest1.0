@@ -1078,3 +1078,180 @@ test("feature upgrade application views, kanban movement, resume revisions, goal
     404,
   );
 });
+
+test("Round 4: application checklist create, edit, complete, reorder, delete, and ownership", async () => {
+  const user = await register("checklistuser"),
+    other = await register("checklistother");
+  const created = await request("/api/applications", {
+    method: "POST",
+    auth: user,
+    input: {
+      company: "Checklist Co",
+      job_title: "Engineer",
+      date_applied: "2026-09-01",
+      stage: "Applied",
+    },
+  });
+  assert.equal(created.status, 201);
+  const appId = created.data.id;
+
+  const before = await request(`/api/applications/${appId}/detail`, {
+    auth: user,
+  });
+  assert.equal(before.status, 200);
+  assert.equal(before.data.checklist.length, 11); // seeded defaults
+  assert.ok(before.data.checklist.every((item) => item.is_custom === 0));
+  assert.ok(before.data.checklist.every((item) => item.completed === 0));
+  const [first, second] = before.data.checklist;
+
+  // Create a custom item, appended after the defaults.
+  const addCustom = await request(`/api/applications/${appId}/checklist`, {
+    method: "POST",
+    auth: user,
+    input: { label: "  Ask about relocation  " },
+  });
+  assert.equal(addCustom.status, 200);
+  const afterAdd = await request(`/api/applications/${appId}/detail`, {
+    auth: user,
+  });
+  assert.equal(afterAdd.data.checklist.length, 12);
+  const custom = afterAdd.data.checklist.at(-1);
+  assert.equal(custom.is_custom, 1);
+  assert.equal(custom.label, "Ask about relocation"); // trimmed
+  assert.equal(custom.position, 11);
+
+  // Empty/whitespace-only labels are rejected, both on create and edit.
+  assert.equal(
+    (
+      await request(`/api/applications/${appId}/checklist`, {
+        method: "POST",
+        auth: user,
+        input: { label: "   " },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(`/api/applications/${appId}/checklist/${first.id}`, {
+        method: "PATCH",
+        auth: user,
+        input: { label: "" },
+      })
+    ).status,
+    400,
+  );
+
+  // Complete an item; completed_at is set; note is stored.
+  const complete = await request(
+    `/api/applications/${appId}/checklist/${first.id}`,
+    { method: "PATCH", auth: user, input: { completed: true, note: "done early" } },
+  );
+  assert.equal(complete.status, 200);
+  let detail = (await request(`/api/applications/${appId}/detail`, { auth: user })).data;
+  let updatedFirst = detail.checklist.find((item) => item.id === first.id);
+  assert.equal(updatedFirst.completed, 1);
+  assert.ok(updatedFirst.completed_at);
+  assert.equal(updatedFirst.note, "done early");
+
+  // Editing the label alone does not disturb completed/note.
+  await request(`/api/applications/${appId}/checklist/${first.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { label: "Resume tailored (renamed)" },
+  });
+  detail = (await request(`/api/applications/${appId}/detail`, { auth: user })).data;
+  updatedFirst = detail.checklist.find((item) => item.id === first.id);
+  assert.equal(updatedFirst.label, "Resume tailored (renamed)");
+  assert.equal(updatedFirst.completed, 1);
+  assert.equal(updatedFirst.note, "done early");
+
+  // Uncompleting clears completed_at.
+  await request(`/api/applications/${appId}/checklist/${first.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { completed: false },
+  });
+  detail = (await request(`/api/applications/${appId}/detail`, { auth: user })).data;
+  updatedFirst = detail.checklist.find((item) => item.id === first.id);
+  assert.equal(updatedFirst.completed, 0);
+  assert.equal(updatedFirst.completed_at, null);
+
+  // Reordering: moving the second item up swaps it with the first.
+  const moved = await request(
+    `/api/applications/${appId}/checklist/${second.id}/move`,
+    { method: "PATCH", auth: user, input: { direction: "up" } },
+  );
+  assert.equal(moved.status, 200);
+  detail = (await request(`/api/applications/${appId}/detail`, { auth: user })).data;
+  assert.equal(detail.checklist[0].id, second.id);
+  assert.equal(detail.checklist[1].id, first.id);
+  // Moving the very first item up is a no-op (no sibling above it).
+  const noSibling = await request(
+    `/api/applications/${appId}/checklist/${second.id}/move`,
+    { method: "PATCH", auth: user, input: { direction: "up" } },
+  );
+  assert.equal(noSibling.status, 200);
+  detail = (await request(`/api/applications/${appId}/detail`, { auth: user })).data;
+  assert.equal(detail.checklist[0].id, second.id);
+
+  // Deleting an item (default or custom) works and is reflected immediately.
+  const deleted = await request(
+    `/api/applications/${appId}/checklist/${custom.id}`,
+    { method: "DELETE", auth: user },
+  );
+  assert.equal(deleted.status, 200);
+  detail = (await request(`/api/applications/${appId}/detail`, { auth: user })).data;
+  assert.equal(detail.checklist.length, 11);
+  assert.ok(!detail.checklist.some((item) => item.id === custom.id));
+
+  // Ownership/IDOR: another user cannot read, edit, move, or delete this
+  // application's checklist items, including by guessing a valid item id
+  // under their own (different) application.
+  const otherApp = await request("/api/applications", {
+    method: "POST",
+    auth: other,
+    input: {
+      company: "Other Co",
+      job_title: "Engineer",
+      date_applied: "2026-09-01",
+      stage: "Applied",
+    },
+  });
+  const otherDetail = await request(
+    `/api/applications/${otherApp.data.id}/detail`,
+    { auth: other },
+  );
+  const otherItemId = otherDetail.data.checklist[0].id;
+  assert.equal(
+    (
+      await request(`/api/applications/${appId}/checklist/${first.id}`, {
+        method: "PATCH",
+        auth: other,
+        input: { completed: true },
+      })
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await request(`/api/applications/${appId}/checklist/${first.id}`, {
+        method: "DELETE",
+        auth: other,
+      })
+    ).status,
+    404,
+  );
+  // Cross-wiring a real, owned-by-`other` item id under `user`'s application
+  // id must not be honored (the application_id cross-check must catch it).
+  assert.equal(
+    (
+      await request(`/api/applications/${appId}/checklist/${otherItemId}`, {
+        method: "PATCH",
+        auth: user,
+        input: { completed: true },
+      })
+    ).status,
+    404,
+  );
+});
