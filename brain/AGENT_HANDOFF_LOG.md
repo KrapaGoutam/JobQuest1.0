@@ -54,3 +54,19 @@ under the suite's 12% pixel-diff tolerance). No baseline update was needed.
 **For the next agent**: PR #10 is ready and green but **not merged** — left for the
 user's review, per the Round 3 stop condition. Do not start Round 4 without the user's
 explicit go-ahead.
+
+## 2026-09-14 (same day, continued session) — Claude Code (Claude Sonnet 5) — Round 4 implemented
+
+Merged PR #10 (regular merge, per convention). Audited the checklist feature end-to-end
+before writing anything: schema/create/complete/progress/ownership were already solid;
+edit, delete, reorder, and input validation genuinely did not exist (no DELETE route at
+all). Closed those gaps, added a read-time-only lifecycle-phase grouping module
+(deliberately not stage-aware *generation* — real duplicate-generation risk, deferred),
+and added the checklist test coverage that didn't previously exist. On
+`feature/004-application-checklist-gap-close`, off `development`.
+
+**For the next agent**: not pushed yet, no PR, CI not run. Full detail and the "why
+deferred" reasoning for stage-aware generation is in `docs/FEATURE_UPGRADE_4.md`. Don't
+assume the visual-regression result either way (zero-diff or needs-update) — check the
+actual CI outcome, per what Round 3 taught us. Do not start Round 5 without the user's
+explicit go-ahead.
