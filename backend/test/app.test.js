@@ -974,6 +974,20 @@ test("feature upgrade application views, kanban movement, resume revisions, goal
     0,
   );
 
+  // Round 3 quick filters: status_group groups by the same open/closed stage
+  // split used elsewhere (e.g. the closed-stage-move confirmation), reusing
+  // buildApplicationWhere so table, Kanban, and quick filters all agree.
+  assert.equal(
+    (await request("/api/applications/query?status_group=active", { auth: user }))
+      .data.total,
+    1,
+  );
+  assert.equal(
+    (await request("/api/applications/query?status_group=closed", { auth: user }))
+      .data.total,
+    0,
+  );
+
   const moved = await request(`/api/applications/${created.data.id}/stage`, {
     method: "PATCH",
     auth: user,

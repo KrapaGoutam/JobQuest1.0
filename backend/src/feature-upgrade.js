@@ -154,6 +154,16 @@ function buildApplicationWhere(actor, query = {}) {
     );
     params.push(Number(filters.tag_id));
   }
+  // Round 3 quick filters: reuse the same "closed" stage grouping already used
+  // elsewhere (e.g. the closed-stage-move confirmation) so "Active"/"Closed"
+  // means the same thing everywhere in the product.
+  if (filters.status_group === "active" || filters.status_group === "closed") {
+    const placeholders = [...CLOSED_STAGES].map(() => "?").join(",");
+    where.push(
+      `a.stage ${filters.status_group === "closed" ? "IN" : "NOT IN"} (${placeholders})`,
+    );
+    params.push(...CLOSED_STAGES);
+  }
   const columnFilters = parseJson(filters.column_filters, []);
   for (const filter of columnFilters) {
     const field = filter.field;
