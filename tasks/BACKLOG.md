@@ -41,3 +41,11 @@ package, plan-only).
 - Dashboard integration of checklist completion/progress — deferred to avoid an N+1
   query pattern across the application list; needs a deliberate efficient query shape
   if pursued.
+- **`#detail-stage` (application detail page's stage-change dropdown) has no accessible
+  name** — real, critical-impact, pre-existing WCAG violation, found while scoping
+  Round 4's new E2E test but left unfixed (unrelated to checklists; the rest of the
+  detail page likely has more of the same pattern and deserves a dedicated audit, not a
+  one-off fix here). Cheap to fix whenever someone picks it up.
+- Cross-group checklist reordering has no visible effect in the grouped display (group
+  membership is decided by label, not `position`) — not a bug, but worth knowing if the
+  grouping/reorder interaction is ever revisited. See `docs/FEATURE_UPGRADE_4.md`.

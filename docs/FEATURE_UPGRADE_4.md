@@ -214,9 +214,47 @@ just re-trusting CI blindly a second time.
 `test:backend`, `test:integration`, and `test:e2e` are all aliases for the same
 `test/app.test.js` file in this repo's `package.json` (a pre-existing quirk, not
 something this round changed) — verified locally against real Postgres as described
-above, in addition to running on CI. Deferred to CI: `sqlite-postgres-migration`
-(confirmed unaffected — verified in isolation locally too, see above) and
-`test:browser` (Playwright: functional + accessibility + visual regression).
+above, in addition to running on CI. `sqlite-postgres-migration` confirmed unaffected
+(verified in isolation locally too, see above).
+
+**A real, new Playwright E2E test was added** —
+`"application checklist: grouping, completion, custom items, reorder, delete, and
+persistence"` — since no automated browser test exercised checklist behavior before
+this round (the existing accessibility scan and visual-regression tests never open a
+full application detail page at all). Installed Chromium and ran it locally against the
+same throwaway Postgres container, across **all 5 viewport projects**
+(desktop/compact-desktop/tablet/mobile/small-mobile) — all pass — plus the full existing
+functional/accessibility suite (10/10) to confirm no regressions from this round's CSS
+and markup changes. Writing this test surfaced two more real, useful findings, both
+fixed:
+
+- **Persistence must be checked via a direct API call, not `page.reload()`.** This app
+  has no URL-based routing (`state.page` lives in memory only), so a real browser
+  reload always lands back on the Dashboard by design — that's a pre-existing routing
+  characteristic, not something to "fix" in a checklist round. The test asks the server
+  directly (`GET .../detail`) to confirm `completed`/`completed_at` actually persisted,
+  which is also more precise than trusting the DOM after a UI round-trip. (An earlier
+  version of the test tried two nav round-trips through the mobile drawer instead, which
+  turned out flaky on narrow viewports — the direct API check is strictly better, not
+  just a workaround.)
+- **A real, new WCAG AA violation from this round's own Delete button**: axe-core
+  flagged `.btn.small.danger` (used by the checklist's `Delete` button, but already used
+  in 5 other places before this round) at 4.17:1 contrast, needing 4.5:1. Fixed with a
+  scoped `.btn.small.danger { color: #b02a37 }` override (~4.9:1) rather than touching
+  the shared `--bad`/`--destructive` tokens other, non-small danger elements rely on —
+  this also fixes the 5 pre-existing instances of the same combination as a side effect.
+- Two **pre-existing, unrelated** critical violations were found by an initial
+  whole-page axe scan (`#timeline-filter`/`#timeline-sort` selects with no accessible
+  name, and `#detail-stage` likewise) — none are checklist controls. The first two were
+  trivial one-line `aria-label` fixes, made in passing; `#detail-stage` and scanning the
+  rest of the detail page for further pre-existing issues was **not** pursued further —
+  see Known Debt — and the test's axe scan was scoped to `#checklist-panel` specifically
+  so it verifies this round's own controls without silently taking on an unbounded,
+  unrelated page-wide accessibility audit.
+
+Deferred to CI: `test:browser`'s visual-regression assertions specifically (ran locally
+on Windows as a sanity check — passed — but per this repo's own established history,
+only a Linux CI run is authoritative for pixel comparisons).
 
 ## Security impact
 
@@ -254,6 +292,14 @@ above, in addition to running on CI. Deferred to CI: `sqlite-postgres-migration`
   context — addresses "every checkbox/control must have an accessible name," not just
   the checkbox.
 - No color-only signaling was introduced (text labels throughout).
+- **A real, new violation from this round's Delete button was found and fixed**:
+  insufficient color contrast on `.btn.small.danger` (4.17:1, needs 4.5:1) — see
+  Testing for the full story and the fix.
+- Two pre-existing, unrelated violations on the same page (`#timeline-filter`/
+  `#timeline-sort` missing accessible names) were fixed in passing since they were
+  one-line `aria-label` additions blocking honest test coverage of this round's own
+  work; a third (`#detail-stage`) and a full page-wide audit were **not** pursued —
+  see Known Debt.
 
 ## Responsive validation
 
@@ -279,13 +325,16 @@ No migration. The schema already supported every gap closed this round.
 ## Files changed
 
 ```
-backend/src/advanced.js                          (DELETE/label/validation/move endpoint)
+backend/e2e/jobquest.spec.js                      (new checklist E2E test)
+backend/src/advanced.js                           (DELETE/label/validation/move endpoint, CURRENT_TIMESTAMP cast fix)
 backend/test/app.test.js                          (Round 4 checklist integration test)
 backend/test/frontend.test.js                     (groups.js unit tests)
 docs/FEATURE_UPGRADE_4.md                         (new, this doc)
-frontend/src/app.js                               (checklist rendering/binding rewrite: 2658 -> 2748 lines)
+frontend/src/app.js                               (checklist rendering/binding rewrite: 2658 -> 2748 lines;
+                                                    #timeline-filter/#timeline-sort aria-label fix)
 frontend/src/features/checklist/groups.js         (new)
-frontend/src/styles.css                           (.checklist-group, .checklist-item layout, mobile wrap)
+frontend/src/styles.css                           (.checklist-group/.checklist-item layout, mobile wrap,
+                                                    .btn.small.danger contrast fix)
 ```
 
 ## Commits
@@ -313,6 +362,20 @@ _Filled in once CI on this branch's PR completes._
 - **Dashboard "Needs your attention" does not surface checklist progress.** Deferred
   to avoid an N+1 query pattern across the application list; would need a deliberate,
   efficient query shape (e.g. a single aggregate join) if pursued later.
+- **`#detail-stage` (the application detail page's stage-change dropdown) has no
+  accessible name** — a real, critical-impact, pre-existing violation found while
+  scoping this round's new E2E test, left unfixed because it's unrelated to checklists
+  and a full audit of the rest of the detail page (which likely has more of the same
+  pattern) is out of scope here. Worth a dedicated pass — possibly as part of the
+  Round 11 capstone, or sooner given it's cheap and "critical" impact.
+- **Cross-group checklist reordering has no visible effect in the grouped display.**
+  Group membership is decided by label match, not by `position` — moving an item past
+  one in a *different* lifecycle-phase group changes its stored position (correctly)
+  but doesn't change which group it displays under, so the reorder looks like a no-op
+  unless both items are in the same group (e.g. two custom items in "Your items").
+  Not a bug (nothing is lost or duplicated), but a UX subtlety discovered while writing
+  the E2E test for this round; worth a mention if the grouping/reorder interaction ever
+  gets revisited.
 
 ## Completion notes
 
