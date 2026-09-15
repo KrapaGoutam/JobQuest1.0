@@ -788,6 +788,15 @@ legend {
   padding: 0.45rem 0.65rem;
   font-size: 0.82rem;
 }
+.btn.small.danger {
+  /* At this smaller size the default .btn.danger text color (#c92e3b on
+     #f6dee0) falls just under WCAG AA (4.17:1, needs 4.5:1) - axe-core
+     caught this via the checklist Delete button, but the same combination
+     was already used in 5 other places before this round; darkening here
+     fixes all of them without touching the shared --bad/--destructive
+     tokens other (non-small) danger elements rely on. ~4.9:1 at this size. */
+  color: #b02a37;
+}
 .actions {
   display: flex;
   flex-wrap: wrap;
