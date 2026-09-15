@@ -65,8 +65,19 @@ all). Closed those gaps, added a read-time-only lifecycle-phase grouping module
 and added the checklist test coverage that didn't previously exist. On
 `feature/004-application-checklist-gap-close`, off `development`.
 
-**For the next agent**: not pushed yet, no PR, CI not run. Full detail and the "why
-deferred" reasoning for stage-aware generation is in `docs/FEATURE_UPGRADE_4.md`. Don't
-assume the visual-regression result either way (zero-diff or needs-update) — check the
-actual CI outcome, per what Round 3 taught us. Do not start Round 5 without the user's
+Pushed; first CI run failed on Postgres (a real dialect bug in the new `completed_at`
+`CASE` — fixed, verified against a local throwaway Postgres container). Added real
+Playwright E2E coverage for checklists (none existed), run locally (Chromium install
+worked fine in this environment) across all 5 viewports before trusting CI with it —
+which surfaced and got fixed: one real new a11y violation from this round's own Delete
+button, and two pre-existing unrelated ones on the same page (one-line fixes, done in
+passing); a third pre-existing one (`#detail-stage`) was deliberately left alone and
+backlogged rather than expanding into an unrelated page audit. Also corrected a wrong
+assumption carried from Rounds 2/3: Docker (and Playwright browser installs) are
+available in this environment — use them to verify locally rather than only trusting CI
+round-trips. PR #11 opened into `development`, full CI matrix green (8/8 jobs, 18
+passed/7 skipped/0 failed across 25 browser tests).
+
+**For the next agent**: PR #11 is ready and green but **not merged** — left for the
+user's review, per the Round 4 stop condition. Do not start Round 5 without the user's
 explicit go-ahead.

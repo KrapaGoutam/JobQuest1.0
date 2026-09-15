@@ -2,9 +2,10 @@
 
 ## Status
 
-Implemented on `feature/004-application-checklist-gap-close`, off `development` (which
-now includes the merged Round 3 PR #10). Round 4 of [docs/PRD.md](PRD.md). Local checks
-green; CI pending as this doc is written — see CI Status for the final result.
+Implemented on `feature/004-application-checklist-gap-close`; PR #11 open into
+`development`, full CI matrix green (8/8 jobs, including a real new Playwright E2E
+test passing on all 5 viewport projects — see CI Status), awaiting the user's
+review/merge. Round 4 of [docs/PRD.md](PRD.md).
 
 ## Goal
 
@@ -184,8 +185,7 @@ Import-Export/Analytics/design-system rounds; React; Render/Neon changes.
 - [x] Desktop/tablet/mobile: new controls reuse existing responsive patterns; a
       dedicated mobile wrap rule added for the action-button row.
 - [x] No new dependency added.
-- [ ] Full CI green (lint/typecheck/build/tests/E2E/accessibility/visual) — pending,
-      see CI Status.
+- [x] Full CI green (8/8 jobs; 25 browser tests, 0 failed) — see CI Status.
 
 ## Testing
 
@@ -345,7 +345,17 @@ continuity docs, CI result).
 
 ## CI status
 
-_Filled in once CI on this branch's PR completes._
+PR [#11](../../../pull/11) into `development`: all 8 jobs pass —
+`static-quality`, `security`, `sqlite-postgres-migration`, `tests` × 4
+(backend/frontend/integration/e2e, including the new checklist integration test), and
+`browser-and-visual` (25 tests total, up from 20: 18 passed, 7 skipped, 0 failed — the
+5 new checklist E2E tests, one per viewport project, all pass on real Linux CI, and all
+13 pre-existing baseline tests still pass unchanged — zero visual regression).
+
+One fix round was needed before this: the first push failed
+`tests (backend/integration/e2e)` with a genuine Postgres-only bug (see Testing) that
+doesn't exist on SQLite — caught by CI, root-caused and fixed, then verified against a
+local throwaway Postgres container before re-pushing rather than re-trusting CI blindly.
 
 ## Known debt (backlogged, not fixed this round)
 
