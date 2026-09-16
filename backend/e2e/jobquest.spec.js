@@ -292,3 +292,79 @@ test("application checklist: grouping, completion, custom items, reorder, delete
     .analyze();
   expect(results.violations).toEqual([]);
 });
+
+test("networking contacts: link to an application, edit, show on application detail, and unlink-safe delete", async ({
+  page,
+}, testInfo) => {
+  if (["tablet", "mobile", "small-mobile"].includes(testInfo.project.name))
+    await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.getByRole("button", { name: "Applications", exact: true }).click();
+  await page.getByText("Northstar Labs").click();
+
+  // Empty state before any contact is linked.
+  await expect(page.getByRole("heading", { name: "Networking Contacts", exact: true })).toBeVisible();
+  await expect(page.getByText("No networking contacts linked to this application yet")).toBeVisible();
+
+  // "Link Contact" is Round 5's fix: this button already existed, but the
+  // destination form had no application field at all before this round, so
+  // it was impossible to actually complete a link through it.
+  await page.getByRole("button", { name: "Link Contact" }).first().click();
+  await expect(page.getByRole("heading", { name: "Networking" })).toBeVisible();
+  await expect(page.locator('select[name="application_id"]')).toHaveValue(/\d+/);
+  await expect(
+    page.locator('select[name="application_id"] option:checked'),
+  ).toHaveText("Northstar Labs — Product Engineer");
+
+  await page.getByLabel("Contact Name").fill("Sam Recruiter");
+  await page.getByLabel("Relationship Type").fill("Recruiter");
+  await page.getByLabel("Email").fill("sam@northstar.test");
+  await page.getByLabel("Linkedin Url").fill("https://linkedin.com/in/sam");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Record saved")).toBeVisible();
+
+  // The list shows a real link to the application, not a raw numeric id.
+  const appLink = page.getByRole("button", {
+    name: "Northstar Labs — Product Engineer",
+  });
+  await expect(appLink).toBeVisible();
+  // The LinkedIn URL renders as an actual link (validated http(s) only).
+  await expect(page.getByRole("link", { name: "https://linkedin.com/in/sam" })).toHaveAttribute(
+    "href",
+    "https://linkedin.com/in/sam",
+  );
+
+  // Edit: change the stage, verify it's reflected.
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Edit Networking" })).toBeVisible();
+  await page.getByLabel("Stage").selectOption("Connected");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Record updated")).toBeVisible();
+  await expect(page.locator("tbody")).toContainText("Connected");
+
+  // Visible from the application side too.
+  await appLink.click();
+  await expect(page.getByRole("heading", { name: "Networking Contacts", exact: true })).toBeVisible();
+  await expect(page.getByText("Sam Recruiter — Recruiter")).toBeVisible();
+  await expect(page.getByRole("link", { name: "sam@northstar.test" })).toHaveAttribute(
+    "href",
+    "mailto:sam@northstar.test",
+  );
+
+  // Delete: safe for the application (unlink, not cascade) - verified
+  // end-to-end here; the underlying FK/ownership behavior has its own
+  // dedicated backend test (see docs/FEATURE_UPGRADE_5.md).
+  if (["tablet", "mobile", "small-mobile"].includes(testInfo.project.name))
+    await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.getByRole("button", { name: "Networking", exact: true }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  // Scoped to the list table, not the whole page: the application select in
+  // the (still-present) create form always lists every application as an
+  // option regardless of whether any contact is linked to it.
+  await expect(
+    page.locator("tbody").getByText("Northstar Labs — Product Engineer"),
+  ).toHaveCount(0);
+
+  const results = await new AxeBuilder({ page }).exclude(".goal-chart").analyze();
+  expect(results.violations).toEqual([]);
+});

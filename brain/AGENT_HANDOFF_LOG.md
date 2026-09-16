@@ -81,3 +81,27 @@ passed/7 skipped/0 failed across 25 browser tests).
 **For the next agent**: PR #11 is ready and green but **not merged** — left for the
 user's review, per the Round 4 stop condition. Do not start Round 5 without the user's
 explicit go-ahead.
+
+## 2026-09-14 (same day, continued session) — Claude Code (Claude Sonnet 5) — Round 5 implemented
+
+Merged PR #11 (regular merge, per convention). Audited `networking_contacts`
+end-to-end: backend CRUD/ownership/IDOR/mass-assignment protection was already fully
+correct - zero backend changes needed. The real gap was frontend: the "Link Contact"
+button on an application's detail page navigated to a form with no application field at
+all (a select-rendering branch already existed for it, just never triggered - the field
+was missing from the type's field list), so links could never actually be completed;
+there was also no Edit UI, no contacts shown on the application detail page, and
+LinkedIn/email rendered as inert text. Closed all of that, plus fixed one real
+pre-existing shared a11y bug (table() wrapper not keyboard-focusable) found while
+testing. On `feature/005-contacts-networking-gap-close`, off `development`.
+
+Pushed; PR #12 opened into `development`, **all 8 CI jobs green on the first push** —
+no fix round needed this time, because the real local Postgres/Chromium validation
+established in Round 4 and reused here caught the one real bug (the focusability issue)
+before it ever reached CI. Docker (real Postgres) and a local Chromium install are both
+confirmed available in this environment - use them for any SQL- or browser-UI-touching
+round rather than relying on CI alone.
+
+**For the next agent**: PR #12 is ready and green but **not merged** — left for the
+user's review, per the Round 5 stop condition. Do not start Round 6 without the user's
+explicit go-ahead.

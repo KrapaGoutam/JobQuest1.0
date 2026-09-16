@@ -29,6 +29,11 @@ import {
   groupChecklistItems,
   checklistProgress,
 } from "./features/checklist/groups.js";
+import {
+  safeExternalUrl,
+  contactLabel,
+  isFollowUpOverdue,
+} from "./features/contacts/format.js";
 
 const state = {
   user: null,
@@ -170,7 +175,15 @@ function empty(message) {
   return `<div class="empty">${esc(message)}</div>`;
 }
 function table(headers, body, emptyMessage = "No records yet") {
-  return `<div class="table-wrap"><table><thead><tr>${headers.map((header) => `<th>${esc(header)}</th>`).join("")}</tr></thead><tbody>${body || `<tr><td colspan="${headers.length}">${empty(emptyMessage)}</td></tr>`}</tbody></table></div>`;
+  // tabindex so the scrollable wrapper (overflow: auto in styles.css) is
+  // itself keyboard-focusable, not just its cell contents - a real,
+  // pre-existing WCAG 2.1.1/2.1.3 gap on every page using this helper,
+  // surfaced by Round 5's first-ever accessibility scan of a tracker page
+  // (interviews/rejections/follow_ups/networking_contacts/goals). Fixed here
+  // since it's a one-line, shared, unambiguous, low-risk fix - unlike the
+  // page-specific pre-existing issues left backlogged (see
+  // docs/FEATURE_UPGRADE_5.md Known Debt).
+  return `<div class="table-wrap" tabindex="0"><table><thead><tr>${headers.map((header) => `<th>${esc(header)}</th>`).join("")}</tr></thead><tbody>${body || `<tr><td colspan="${headers.length}">${empty(emptyMessage)}</td></tr>`}</tbody></table></div>`;
 }
 
 const nav = [
@@ -1633,7 +1646,7 @@ async function renderDetail(id) {
       "Application details, decisions, and complete history",
       `<div class="actions"><button class="btn secondary" id="pin-detail">${item.pinned ? "Unpin" : "Pin"}</button><button class="btn secondary" id="archive-detail">${item.archived_at ? "Restore" : "Archive"}</button><button class="btn danger" id="delete-detail">Delete</button></div>`,
     ) +
-      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${item.job_url ? `<a href="${esc(item.job_url)}" target="_blank" rel="noopener">Open posting</a>` : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
+      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${item.job_url ? `<a href="${esc(item.job_url)}" target="_blank" rel="noopener">Open posting</a>` : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}${networkingContactsView(data.networking)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
   );
   bindApplicationForm(item);
   qsa("[data-detail]").forEach(
@@ -1723,6 +1736,32 @@ function bindTimeline(id) {
     toast("Timeline updated");
     go(`detail:${id}`);
   };
+}
+function networkingContactsView(contacts) {
+  const linkButton = `<button type="button" class="btn small secondary" data-related-page="networking_contacts">${contacts.length ? "Link Another Contact" : "Link Contact"}</button>`;
+  return `<section class="card full"><h2>Networking Contacts</h2>${
+    contacts.length
+      ? `<ul class="contact-list">${contacts
+          .map((contact) => {
+            const linkedin = safeExternalUrl(contact.linkedin_url);
+            const overdue = isFollowUpOverdue(contact.next_follow_up_date);
+            return `<li class="contact-card"><strong>${esc(contactLabel(contact))}</strong>${contact.networking_stage ? ` <span class="badge">${esc(contact.networking_stage)}</span>` : ""}<div class="contact-meta muted">${[
+              contact.email
+                ? `<a href="mailto:${esc(contact.email)}">${esc(contact.email)}</a>`
+                : "",
+              linkedin
+                ? `<a href="${esc(linkedin)}" target="_blank" rel="noopener noreferrer">LinkedIn</a>`
+                : "",
+              contact.next_follow_up_date
+                ? `Follow up ${esc(contact.next_follow_up_date)}${overdue ? ` <span class="tone-chip tone-warning">Overdue</span>` : ""}`
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" · ")}</div>${contact.notes ? `<p class="muted">${esc(contact.notes)}</p>` : ""}</li>`;
+          })
+          .join("")}</ul>`
+      : empty("No networking contacts linked to this application yet")
+  }${linkButton}</section>`;
 }
 function checklistItemHtml(item) {
   return `<li class="checklist-item" data-checklist-row="${item.id}"><label><input type="checkbox" data-checklist="${item.id}" ${item.completed ? "checked" : ""} aria-label="Mark '${esc(item.label)}' ${item.completed ? "not complete" : "complete"}"><span>${esc(item.label)}</span></label>${item.note ? `<small class="checklist-note">${esc(item.note)}</small>` : ""}<div class="actions"><button type="button" class="btn small secondary" data-checklist-up="${item.id}" aria-label="Move '${esc(item.label)}' up">↑</button><button type="button" class="btn small secondary" data-checklist-down="${item.id}" aria-label="Move '${esc(item.label)}' down">↓</button><button type="button" class="btn small secondary" data-checklist-edit="${item.id}" aria-label="Edit '${esc(item.label)}'">Edit</button><button type="button" class="btn small danger" data-checklist-delete="${item.id}" aria-label="Delete '${esc(item.label)}'">Delete</button></div></li>`;
@@ -1971,6 +2010,7 @@ const trackerMeta = {
   networking_contacts: {
     title: "Networking",
     fields: [
+      "application_id",
       "contact_name",
       "company",
       "job_title",
@@ -1983,6 +2023,25 @@ const trackerMeta = {
     ],
   },
 };
+function trackerCellHtml(name, item, appsById) {
+  if (name === "application_id") {
+    const app = appsById.get(item.application_id);
+    return app
+      ? `<button class="link-button" type="button" data-open-application="${app.id}">${esc(app.company)} — ${esc(app.job_title)}</button>`
+      : "—";
+  }
+  if (name === "email" && item.email)
+    return `<a href="mailto:${esc(item.email)}">${esc(item.email)}</a>`;
+  if (name === "linkedin_url" && item.linkedin_url) {
+    const href = safeExternalUrl(item.linkedin_url);
+    return href
+      ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(item.linkedin_url)}</a>`
+      : esc(item.linkedin_url);
+  }
+  if (name === "next_follow_up_date" && item.next_follow_up_date)
+    return `${esc(item.next_follow_up_date)}${isFollowUpOverdue(item.next_follow_up_date) ? ` <span class="tone-chip tone-warning">Overdue</span>` : ""}`;
+  return esc(item[name] ?? "—");
+}
 async function renderTracker(type) {
   const meta = trackerMeta[type],
     [items, apps] = await Promise.all([
@@ -1996,6 +2055,7 @@ async function renderTracker(type) {
       label: `${item.company} — ${item.job_title}`,
     })),
   ];
+  const appsById = new Map(apps.items.map((item) => [item.id, item]));
   const controls = meta.fields
     .map((name) => {
       if (name === "application_id")
@@ -2045,6 +2105,22 @@ async function renderTracker(type) {
           "Referred",
           "Closed",
         ]);
+      if (name === "relationship_type")
+        // A datalist, not a <select>: relationship_type is a free-text
+        // column with no existing controlled values, so a hard dropdown
+        // would silently misrepresent (or block editing) any contact whose
+        // stored value doesn't match one of these suggestions. This keeps
+        // full backward compatibility while still nudging toward consistency.
+        return `<label>${esc(pretty(name))}<input name="${name}" list="relationship-type-options"></label><datalist id="relationship-type-options">${[
+          "Recruiter",
+          "Hiring Manager",
+          "Interviewer",
+          "Referral",
+          "Employee Connection",
+          "Other",
+        ]
+          .map((option) => `<option value="${esc(option)}">`)
+          .join("")}</datalist>`;
       const inputType =
         name === "scheduled_at"
           ? "datetime-local"
@@ -2052,9 +2128,11 @@ async function renderTracker(type) {
             ? "date"
             : name === "linkedin_url"
               ? "url"
-              : name === "eligible_for_reapplication"
-                ? "checkbox"
-                : "text";
+              : name === "email"
+                ? "email"
+                : name === "eligible_for_reapplication"
+                  ? "checkbox"
+                  : "text";
       return field(
         name,
         pretty(name),
@@ -2075,9 +2153,24 @@ async function renderTracker(type) {
       );
     })
     .join("");
+  // Edit (as opposed to create/delete) is scoped to networking_contacts this
+  // round, not generalized to every tracker type sharing this view -
+  // interviews/rejections/follow_ups/goals have the same "no edit in UI" gap
+  // (the backend already supports PATCH for all of them), left alone here to
+  // keep this round's change to its actual scope - see
+  // docs/FEATURE_UPGRADE_5.md Known Debt.
+  const editable = type === "networking_contacts";
   shell(
     pageHead(meta.title, "Owned records linked to your application workflow") +
-      `<div class="grid"><section class="card wide">${table(["ID", ...meta.fields, "Owner", "Actions"], items.map((item) => `<tr><td>${item.id}</td>${meta.fields.map((name) => `<td>${esc(item[name] ?? "—")}</td>`).join("")}<td>${esc(item.owner_username || "")}</td><td><button class="btn small danger" data-delete="${item.id}">Delete</button></td></tr>`).join(""))}</section><section class="card"><h2>Add ${meta.title.replace(/s$/, "")}</h2><form id="tracker-form" class="form-grid">${await managerOwner()}${controls}<label class="full">Notes<textarea name="notes"></textarea></label><button class="btn full">Save</button><div id="tracker-error" class="full"></div></form></section></div>`,
+      `<div class="grid"><section class="card wide">${table(
+        ["ID", ...meta.fields, "Owner", "Actions"],
+        items
+          .map(
+            (item) =>
+              `<tr><td>${item.id}</td>${meta.fields.map((name) => `<td>${trackerCellHtml(name, item, appsById)}</td>`).join("")}<td>${esc(item.owner_username || "")}</td><td><div class="actions">${editable ? `<button type="button" class="btn small secondary" data-edit="${item.id}">Edit</button>` : ""}<button class="btn small danger" data-delete="${item.id}">Delete</button></div></td></tr>`,
+          )
+          .join(""),
+      )}</section><section class="card"><h2 id="tracker-form-heading">Add ${meta.title.replace(/s$/, "")}</h2><form id="tracker-form" class="form-grid">${await managerOwner()}${controls}<label class="full">Notes<textarea name="notes"></textarea></label><div class="actions full"><button class="btn">Save</button><button type="button" class="btn secondary" id="tracker-cancel-edit" hidden>Cancel</button></div><div id="tracker-error" class="full"></div></form></section></div>`,
   );
   if (type === "follow_ups")
     qs("select[name=application_id]").onchange = async (event) => {
@@ -2090,16 +2183,52 @@ async function renderTracker(type) {
         qs("input[name=due_date]").value = result.suggested_first_follow_up;
       }
     };
-  qs("#tracker-form").onsubmit = async (event) => {
+  qsa("[data-open-application]").forEach(
+    (button) => (button.onclick = () => go(`detail:${button.dataset.openApplication}`)),
+  );
+  let editingId = null;
+  const form = qs("#tracker-form"),
+    cancelButton = qs("#tracker-cancel-edit");
+  const resetForm = () => {
+    editingId = null;
+    form.reset();
+    qs("#tracker-form-heading").textContent = `Add ${meta.title.replace(/s$/, "")}`;
+    form.querySelector("button.btn:not(.secondary)").textContent = "Save";
+    cancelButton.hidden = true;
+    state.relatedAppId = "";
+  };
+  if (editable)
+    qsa("[data-edit]").forEach(
+      (button) =>
+        (button.onclick = () => {
+          const item = items.find((row) => row.id === Number(button.dataset.edit));
+          editingId = item.id;
+          for (const name of meta.fields)
+            if (form.elements[name]) form.elements[name].value = item[name] ?? "";
+          if (form.elements.notes) form.elements.notes.value = item.notes ?? "";
+          qs("#tracker-form-heading").textContent = `Edit ${meta.title.replace(/s$/, "")}`;
+          form.querySelector("button.btn:not(.secondary)").textContent =
+            "Save changes";
+          cancelButton.hidden = false;
+          form.scrollIntoView({ behavior: "smooth", block: "start" });
+        }),
+    );
+  cancelButton.onclick = resetForm;
+  form.onsubmit = async (event) => {
     event.preventDefault();
+    const payload = Object.fromEntries(new FormData(event.currentTarget));
+    // Ownership can never be changed via update (the backend rejects it
+    // outright) - only relevant when a manager edits another user's record.
+    if (editingId) delete payload.target_user_id;
     try {
-      await api(`/api/${type}`, {
-        method: "POST",
-        body: JSON.stringify(
-          Object.fromEntries(new FormData(event.currentTarget)),
-        ),
-      });
-      toast("Record saved");
+      await api(
+        editingId ? `/api/${type}/${editingId}` : `/api/${type}`,
+        {
+          method: editingId ? "PATCH" : "POST",
+          body: JSON.stringify(payload),
+        },
+      );
+      toast(editingId ? "Record updated" : "Record saved");
       state.relatedAppId = "";
       renderTracker(type);
     } catch (error) {

@@ -7,8 +7,8 @@ detailed spec in the round's own `docs/FEATURE_UPGRADE_N.md` once it starts.
 |---|-------|--------|
 | 2 | Frontend build tooling (Vite, ES modules, zero behavior change) | Merged (PR #9, regular merge into `development`) |
 | 3 | Dashboard + Applications workspace (info hierarchy + quick filters; most of the draft prompt's search/filter/sort/export wishlist turned out already implemented — see `docs/FEATURE_UPGRADE_3.md`) | Merged (PR #10) |
-| 4 | Application checklist — full CRUD (edit/delete/reorder), validation, lifecycle-phase display grouping; stage-aware *generation* deferred — see `docs/FEATURE_UPGRADE_4.md` | Implemented locally; PR pending |
-| 5 | Contacts/networking — audit + gap-close to CRM-lite | Not started |
+| 4 | Application checklist — full CRUD (edit/delete/reorder), validation, lifecycle-phase display grouping; stage-aware *generation* deferred — see `docs/FEATURE_UPGRADE_4.md` | Merged (PR #11) |
+| 5 | Contacts/networking — fixed the broken application-linkage flow, added Edit UI, surfaced contacts on application detail; backend CRUD/security was already solid — see `docs/FEATURE_UPGRADE_5.md` | Implemented locally; PR pending |
 | 6 | Import/export hardening — preview, mapping, duplicate detection, JSON backup/restore | Not started |
 | 7 | Task management (Notion-lite) | Not started |
 | 8 | Habit tracker | Not started |
@@ -49,3 +49,18 @@ package, plan-only).
 - Cross-group checklist reordering has no visible effect in the grouped display (group
   membership is decided by label, not `position`) — not a bug, but worth knowing if the
   grouping/reorder interaction is ever revisited. See `docs/FEATURE_UPGRADE_4.md`.
+
+## Smaller items discovered during Round 5 (not yet sequenced into a round)
+
+- **Edit UI gap for interviews/rejections/follow_ups/daily_goals/weekly_goals** — same
+  "no edit control in the UI, backend already supports PATCH" gap this round closed for
+  networking_contacts, identically present for every other type sharing the generic
+  `renderTracker` view. See `docs/FEATURE_UPGRADE_5.md`.
+- No accessibility audit of the other `renderTracker`-based pages (interviews,
+  rejections, follow_ups, goals, resumes, reminders) — only Networking and the
+  application-detail page were scanned this round.
+- Contact search/filter/sort and duplicate-contact detection — deferred, no evidence of
+  need at current scale.
+- `job_url` on the application detail page has the same unvalidated-external-link-
+  protocol pattern `linkedin_url` had before this round — noticed in passing, not fixed
+  (application field, not a contact field — out of scope).
