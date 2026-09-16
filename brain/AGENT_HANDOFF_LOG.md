@@ -105,3 +105,25 @@ round rather than relying on CI alone.
 **For the next agent**: PR #12 is ready and green but **not merged** — left for the
 user's review, per the Round 5 stop condition. Do not start Round 6 without the user's
 explicit go-ahead.
+
+## 2026-09-16 — Claude Code (Claude Sonnet 5) — Round 6 implemented
+
+Merged PR #12 (regular merge, per convention). Audited import/export end-to-end: the
+preview/validation/duplicate-detection/transaction pipeline was already exceptionally
+solid (both partial-failure models already implemented and tested, XLSX already had
+formula-injection protection). Found and fixed two real security gaps - every CSV
+export had zero formula-injection protection (only XLSX did), and job_url accepted
+javascript:/data: as "valid" on both manual entry and import, rendered as a clickable
+link with no further check - plus closed one real missing capability (CSV import
+didn't exist at all) and surfaced one existing-but-invisible one (import batch
+row-level detail was written but never read back; "Import History" was manager-only in
+the nav despite the API already working for everyone). On
+`feature/006-import-export-hardening`, off `development`.
+
+Note: Docker Desktop wasn't running at the start of this session - `docker ps` failed
+until the process was started and the daemon polled for readiness. Worth checking
+before assuming Docker is unavailable in a future round.
+
+**For the next agent**: not pushed yet, no PR, CI not run. Full detail in
+`docs/FEATURE_UPGRADE_6.md`. Do not start Round 7 without the user's explicit
+go-ahead.

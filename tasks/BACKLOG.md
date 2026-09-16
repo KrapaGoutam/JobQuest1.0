@@ -8,8 +8,8 @@ detailed spec in the round's own `docs/FEATURE_UPGRADE_N.md` once it starts.
 | 2 | Frontend build tooling (Vite, ES modules, zero behavior change) | Merged (PR #9, regular merge into `development`) |
 | 3 | Dashboard + Applications workspace (info hierarchy + quick filters; most of the draft prompt's search/filter/sort/export wishlist turned out already implemented — see `docs/FEATURE_UPGRADE_3.md`) | Merged (PR #10) |
 | 4 | Application checklist — full CRUD (edit/delete/reorder), validation, lifecycle-phase display grouping; stage-aware *generation* deferred — see `docs/FEATURE_UPGRADE_4.md` | Merged (PR #11) |
-| 5 | Contacts/networking — fixed the broken application-linkage flow, added Edit UI, surfaced contacts on application detail; backend CRUD/security was already solid — see `docs/FEATURE_UPGRADE_5.md` | Implemented locally; PR pending |
-| 6 | Import/export hardening — preview, mapping, duplicate detection, JSON backup/restore | Not started |
+| 5 | Contacts/networking — fixed the broken application-linkage flow, added Edit UI, surfaced contacts on application detail; backend CRUD/security was already solid — see `docs/FEATURE_UPGRADE_5.md` | Merged (PR #12) |
+| 6 | Import/export hardening — fixed CSV formula-injection (every CSV export), job_url unsafe-protocol gap, added CSV import, batch row-detail viewing; preview/validation/duplicate/transaction logic was already solid — see `docs/FEATURE_UPGRADE_6.md` | Implemented locally; PR pending |
 | 7 | Task management (Notion-lite) | Not started |
 | 8 | Habit tracker | Not started |
 | 9 | Journal / notes | Not started |
@@ -61,6 +61,22 @@ package, plan-only).
   application-detail page were scanned this round.
 - Contact search/filter/sort and duplicate-contact detection — deferred, no evidence of
   need at current scale.
-- `job_url` on the application detail page has the same unvalidated-external-link-
-  protocol pattern `linkedin_url` had before this round — noticed in passing, not fixed
-  (application field, not a contact field — out of scope).
+- ~~`job_url` on the application detail page has the same unvalidated-external-link-
+  protocol pattern `linkedin_url` had before this round~~ — **fixed in Round 6**
+  (`docs/FEATURE_UPGRADE_6.md`).
+
+## Smaller items discovered during Round 6 (not yet sequenced into a round)
+
+- No restore path for the full-workspace JSON export (`/api/exports/json`) — the
+  export itself is comprehensive (14 tables) and already backup-labeled, but a safe
+  restore across that many FK-related tables is real, separate, higher-risk feature
+  work. See `docs/FEATURE_UPGRADE_6.md` Known Debt.
+- No downloadable error-report CSV for a bulk-import batch — row-level detail is now
+  viewable in the UI (this round); exporting it is a small, separate follow-up.
+- `import_rows` has no dedicated index on `batch_id` — fine at current scale, worth
+  adding if import volume ever grows.
+- The Edit-UI gap noted in Round 5 (interviews/rejections/follow_ups/goals sharing
+  `renderTracker` still have no Edit control) is still open — unrelated to this round.
+- A non-reproducible, coincidental PIN-hash test flake was observed once during this
+  round's testing (`PIN validation accepts leading zero...` — a substring-coincidence
+  assertion, not a real bug). Not fixed; noted for whoever next sees it.
