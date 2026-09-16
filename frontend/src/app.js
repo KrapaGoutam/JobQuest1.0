@@ -34,6 +34,10 @@ import {
   contactLabel,
   isFollowUpOverdue,
 } from "./features/contacts/format.js";
+import {
+  summarizeImportResult,
+  previewRowMessage,
+} from "./features/import-export/format.js";
 
 const state = {
   user: null,
@@ -191,6 +195,11 @@ const nav = [
   ["applications", "Applications", "briefcase"],
   ["add", "Add Application", "plus-circle"],
   ["bulk", "Bulk Import", "upload"],
+  // Round 6: was manager-only, even though /api/import/history already
+  // correctly scopes to "my own batches" for a regular user (managers see
+  // everyone's) - the data and the page both already supported this, only
+  // the nav entry didn't.
+  ["imports", "Import History", "history"],
   ["calendar", "Calendar", "calendar-days"],
   ["reminders", "Reminder Center", "bell-ring"],
   ["interviews", "Interviews", "users"],
@@ -212,7 +221,6 @@ function shell(content) {
       ? `<div class="nav-section-static"><p class="nav-group">Manager</p>${[
           ["manager", "Manager Dashboard", "shield-check"],
           ["users", "User Management", "user-cog"],
-          ["imports", "Import History", "history"],
           ["audit", "Audit History", "scroll-text"],
         ]
           .map(navButton)
@@ -1639,14 +1647,15 @@ async function renderApplications(params = new URLSearchParams()) {
 async function renderDetail(id) {
   const data = await api(`/api/applications/${id}/detail`),
     item = data.application,
-    form = await applicationForm(item);
+    form = await applicationForm(item),
+    jobUrlHref = safeExternalUrl(item.job_url);
   shell(
     pageHead(
       `${item.company} — ${item.job_title}`,
       "Application details, decisions, and complete history",
       `<div class="actions"><button class="btn secondary" id="pin-detail">${item.pinned ? "Unpin" : "Pin"}</button><button class="btn secondary" id="archive-detail">${item.archived_at ? "Restore" : "Archive"}</button><button class="btn danger" id="delete-detail">Delete</button></div>`,
     ) +
-      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${item.job_url ? `<a href="${esc(item.job_url)}" target="_blank" rel="noopener">Open posting</a>` : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}${networkingContactsView(data.networking)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
+      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${jobUrlHref ? `<a href="${esc(jobUrlHref)}" target="_blank" rel="noopener noreferrer">Open posting</a>` : item.job_url ? esc(item.job_url) : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}${networkingContactsView(data.networking)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
   );
   bindApplicationForm(item);
   qsa("[data-detail]").forEach(
@@ -1892,14 +1901,20 @@ const jsonExample = JSON.stringify(
   2,
 );
 const textExample = `company: ABC Technologies\njob_title: QA Engineer\ndate_applied: ${date()}\nsource: LinkedIn\nstage: Applied\npriority: High\nresume_used: Test 35\ntags: QA, Remote\npinned: true`;
+const csvExample = `Company Name,Title,Applied Date,Source,Stage,Priority,Resume Version\nABC Technologies,QA Engineer,${date()},LinkedIn,Applied,High,QA36`;
+const importExamples = {
+  json: jsonExample,
+  structured_text: textExample,
+  csv: csvExample,
+};
 async function renderBulk() {
   const owner = await managerOwner();
   shell(
     pageHead(
       "Bulk Import",
-      "Preview, validate, and import JSON or structured text",
+      "Preview, validate, and import CSV, JSON, or structured text",
     ) +
-      `<section class="card full"><form id="bulk-form"><div class="form-grid">${owner}${select("format", "Format", ["json", "structured_text"], "json")}${select(
+      `<section class="card full"><form id="bulk-form"><div class="form-grid">${owner}${select("format", "Format", ["json", "csv", "structured_text"], "json")}${select(
         "import_mode",
         "Mode",
         [
@@ -1914,8 +1929,7 @@ async function renderBulk() {
   );
   const form = qs("#bulk-form");
   form.elements.format.onchange = () =>
-    (form.elements.text.value =
-      form.elements.format.value === "json" ? jsonExample : textExample);
+    (form.elements.text.value = importExamples[form.elements.format.value]);
   qs("#copy-example").onclick = () =>
     navigator.clipboard
       .writeText(form.elements.text.value)
@@ -1949,7 +1963,7 @@ async function renderBulk() {
           result.rows
             .map(
               (row) =>
-                `<tr><td>${row.row_number}</td><td>${esc(row.data.company)}</td><td>${esc(row.data.job_title)}</td><td>${esc(row.data.date_applied)}</td><td>${badge(row.data.stage)}</td><td>${esc(row.data.resume_version || "No resume specified")}</td><td>${esc(row.result)}</td><td>${esc(row.errors.join("; ") || (row.duplicate ? `Matches #${row.duplicate_id}` : "Ready"))}</td></tr>`,
+                `<tr><td>${row.row_number}</td><td>${esc(row.data.company)}</td><td>${esc(row.data.job_title)}</td><td>${esc(row.data.date_applied)}</td><td>${badge(row.data.stage)}</td><td>${esc(row.data.resume_version || "No resume specified")}</td><td>${esc(row.result)}</td><td>${esc(previewRowMessage(row))}</td></tr>`,
             )
             .join(""),
         );
@@ -1958,9 +1972,7 @@ async function renderBulk() {
           method: "POST",
           body: JSON.stringify(input),
         });
-        toast(
-          `${result.created_rows} created · ${result.updated_rows} updated · ${result.skipped_rows} skipped`,
-        );
+        toast(summarizeImportResult(result));
         go("applications");
       }
     } catch (error) {
@@ -2818,15 +2830,38 @@ async function renderImports() {
           "Skipped",
           "Rejected",
           "Status",
-          "Created",
+          "Created At",
+          "Actions",
         ],
         items
           .map(
             (item) =>
-              `<tr><td>${item.id}</td><td>${esc(item.owner_username || item.user_id)}</td><td>${item.input_format}</td><td>${item.import_mode}</td><td>${item.total_rows}</td><td>${item.created_rows}</td><td>${item.updated_rows}</td><td>${item.skipped_rows}</td><td>${item.rejected_rows}</td><td>${item.status}</td><td>${item.created_at}</td></tr>`,
+              `<tr><td>${item.id}</td><td>${esc(item.owner_username || item.user_id)}</td><td>${item.input_format}</td><td>${item.import_mode}</td><td>${item.total_rows}</td><td>${item.created_rows}</td><td>${item.updated_rows}</td><td>${item.skipped_rows}</td><td>${item.rejected_rows}</td><td>${item.status}</td><td>${item.created_at}</td><td><button type="button" class="btn small secondary" data-import-rows="${item.id}">View Rows</button></td></tr>`,
           )
           .join(""),
-      ),
+      ) +
+      `<section id="import-rows-detail" aria-live="polite"></section>`,
+  );
+  // Round 6: import_rows (row_number/status/per-row messages) already
+  // existed for every batch - this is the first UI that ever reads it back,
+  // rather than only the aggregate counts in the table above.
+  qsa("[data-import-rows]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        const rowsForBatch = await api(
+          `/api/import/history/${button.dataset.importRows}/rows`,
+        );
+        qs("#import-rows-detail").innerHTML = `<h2>Batch #${button.dataset.importRows} rows</h2>${table(
+          ["Row", "Status", "Messages"],
+          rowsForBatch
+            .map(
+              (row) =>
+                `<tr><td>${row.row_number}</td><td>${esc(row.status)}</td><td>${esc(row.messages.join("; "))}</td></tr>`,
+            )
+            .join(""),
+        )}`;
+        qs("#import-rows-detail").scrollIntoView({ behavior: "smooth" });
+      }),
   );
 }
 async function renderAudit() {
