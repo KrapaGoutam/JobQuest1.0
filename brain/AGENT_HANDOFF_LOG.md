@@ -124,6 +124,16 @@ Note: Docker Desktop wasn't running at the start of this session - `docker ps` f
 until the process was started and the daemon polled for readiness. Worth checking
 before assuming Docker is unavailable in a future round.
 
-**For the next agent**: not pushed yet, no PR, CI not run. Full detail in
-`docs/FEATURE_UPGRADE_6.md`. Do not start Round 7 without the user's explicit
-go-ahead.
+Pushed; PR #13 opened into `development`. First two CI pushes both failed
+`browser-and-visual` on a *different, random* viewport each time - the same error, a
+pre-existing (Round 5) non-exact `getByRole("heading", {name:"Networking"})` assertion
+ambiguous against two headings on one page. Never reproduced locally (4/4, then 5/5
+across all viewports). Fixed with `exact: true`; CI went green on the very next push.
+Full CI matrix green (8/8 jobs, 28 passed/7 skipped/0 failed across 35 browser tests).
+
+**For the next agent**: PR #13 is ready and green but **not merged** — left for the
+user's review, per the Round 6 stop condition. Worth remembering: a Playwright locator
+that "usually" resolves an ambiguous match to one element isn't safe - prefer `exact:
+true` whenever two elements could plausibly share a substring, rather than relying on
+it never mattering in practice (see `brain/PROJECT_STATE.md` for the fuller note). Do
+not start Round 7 without the user's explicit go-ahead.

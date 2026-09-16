@@ -1,7 +1,8 @@
 # Current task
 
-**Status: Round 6 implemented locally, ready to push/PR.** See
-[docs/FEATURE_UPGRADE_6.md](../docs/FEATURE_UPGRADE_6.md) for full detail.
+**Status: Round 6 implemented, CI green, PR #13 open — awaiting the user's
+review/merge.** See [docs/FEATURE_UPGRADE_6.md](../docs/FEATURE_UPGRADE_6.md) for full
+detail.
 
 Branch: `feature/006-import-export-hardening`, based on `development` (which now
 includes the merged Round 5 PR #12 — regular merge, per convention).
@@ -36,8 +37,16 @@ includes the merged Round 5 PR #12 — regular merge, per convention).
    Chromium — new E2E test 5/5 viewports, full existing non-pixel suite 20/20, no
    regressions — all before pushing.
 
+5. First two CI pushes failed `browser-and-visual` on a different random viewport
+   each time — a pre-existing (Round 5), latent strict-mode heading ambiguity that
+   never reproduced locally. Fixed with `exact: true` (matching an identical fix
+   already applied elsewhere in Round 5); verified by watching CI go green on the
+   next push, not just local re-runs.
+
 ## Next safe action
 
-Push the branch, open a PR into `development`, and get CI green. Do not merge to
-`main`. Do not start Round 7 until this PR is merged and the user has explicitly said
-to proceed.
+PR [#13](https://github.com/KrapaGoutam/JobQuest1.0/pull/13) is open into
+`development` with all 8 CI jobs green (browser-and-visual: 28 passed/7 skipped/0
+failed across 35 tests — 5 new bulk-import tests all pass, 23 pre-existing baseline
+tests unchanged). Left unmerged for the user's review. Do not start Round 7 until this
+PR is merged and the user has explicitly said to proceed.

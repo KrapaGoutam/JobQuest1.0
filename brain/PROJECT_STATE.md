@@ -7,8 +7,9 @@ Last updated: 2026-09-16, by Claude Sonnet 5 (Claude Code).
 - Working branch: `feature/006-import-export-hardening`, based on `development`.
 - `development` (origin): `74894aa` — regular merge of PR #12 (Round 5).
 - `main`: unchanged this session, still `7b674f4`.
-- Last full CI run confirmed green: PR #12 into `development`, all 8 jobs on the first
-  push, 23 passed/7 skipped/0 failed across 30 browser tests.
+- Last full CI run confirmed green: PR #13 into `development`, all 8 jobs (after one
+  fix round for a flaky pre-existing E2E test — see below), 28 passed/7 skipped/0
+  failed across 35 browser tests.
 
 ## What's done
 
@@ -26,7 +27,7 @@ Last updated: 2026-09-16, by Claude Sonnet 5 (Claude Code).
 
 ## Incomplete / not started
 
-- Branch **not yet pushed**, **no PR open**, CI has not run against it.
+- PR #13 is open, CI green, **not merged** — left for the user's review.
 - Everything from Round 7 onward in [docs/PRD.md](../docs/PRD.md).
 
 ## Known state to be aware of
@@ -41,15 +42,25 @@ Last updated: 2026-09-16, by Claude Sonnet 5 (Claude Code).
   it's unavailable — don't silently fall back to "no real Postgres" without checking.
 - A one-off, non-reproducible PIN-hash test flake was observed and is not a real bug —
   see `docs/FEATURE_UPGRADE_6.md` Known Debt.
+- A **real, now-fixed** E2E test flake was also found this round: a non-`exact`
+  `getByRole("heading", {name:"Networking"})` assertion (written in Round 5) was
+  ambiguous against two headings on the same page, and CI's timing exposed it on two
+  different viewports across two runs while it never reproduced locally. Fixed with
+  `exact: true`. Worth remembering: **a Playwright assertion that "usually" resolves
+  a strict-mode-ambiguous locator to only one element isn't safe** — prefer `exact:
+  true` (or a more specific locator) whenever two headings/elements could plausibly
+  share a substring, rather than relying on it never mattering in practice.
 - The Edit-UI gap for interviews/rejections/follow_ups/goals (noted in Round 5) is
   still open, as is the `#detail-stage` accessibility gap (Round 4).
 
 ## Blockers
 
-None. Next action is mechanical (push, PR, CI) — no decision pending except the user's
-eventual review/merge of the resulting PR.
+None. Waiting on the user to review/merge PR #13, then on their explicit go-ahead
+before Round 7 starts.
 
 ## Next safe action
 
-Push `feature/006-import-export-hardening`, open a PR into `development`, confirm CI
-green, report to the user, and stop — do not begin Round 7 without explicit approval.
+Nothing further to do on Round 6. If picking this up cold: read
+`docs/FEATURE_UPGRADE_6.md`, confirm PR #13's status hasn't changed, and otherwise wait
+for direction on Round 7 (or address any review feedback on PR #13 if the user has left
+any).

@@ -2,10 +2,9 @@
 
 ## Status
 
-Implemented on `feature/006-import-export-hardening`, off `development` (which now
-includes the merged Round 5 PR #12). Round 6 of [docs/PRD.md](PRD.md). Local checks
-green, including real PostgreSQL and real-browser validation (see Testing) — CI pending
-as this doc is written; see CI Status for the final result.
+Implemented on `feature/006-import-export-hardening`; PR #13 open into `development`,
+full CI matrix green (8/8 jobs) after one fix round for a flaky, pre-existing E2E test
+(see CI Status), awaiting the user's review/merge. Round 6 of [docs/PRD.md](PRD.md).
 
 ## Goal
 
@@ -302,7 +301,7 @@ existing JSON/structured_text callers).
 - [x] A user can view their own past import batches' row-level results; ownership/IDOR
       verified by test.
 - [x] No N+1, no new dependency, no migration.
-- [ ] Full CI green — pending, see CI Status.
+- [x] Full CI green (8/8 jobs) — see CI Status.
 
 ## Testing
 
@@ -353,7 +352,23 @@ batch row-detail endpoint + UI, nav/UX polish, tests, continuity docs).
 
 ## CI status
 
-_Filled in once CI on this branch's PR completes._
+PR [#13](../../../pull/13) into `development`: all 8 jobs pass — `static-quality`,
+`security`, `sqlite-postgres-migration`, `tests` × 4 (backend/frontend/integration/
+e2e), and `browser-and-visual` (35 tests total, up from 30: 28 passed, 7 skipped,
+0 failed — the 5 new bulk-import E2E tests, one per viewport, all pass, and all 23
+pre-existing baseline tests unchanged — zero visual regression).
+
+**One fix round was needed, for a genuinely interesting reason**: the first two CI
+pushes both failed `browser-and-visual`, on a *different, effectively random* viewport
+project each time (`tablet`, then `compact-desktop`) — with the identical error: a
+pre-existing (Round 5) assertion, `getByRole("heading", { name: "Networking" })`
+without `exact: true`, ambiguously matched both the Networking tracker page's own
+`<h1>Networking</h1>` and its create-form's `<h2>Add Networking</h2>`. This never
+reproduced locally (4/4 passes on the specific viewport CI first failed on, 5/5 across
+all viewports afterward) — a real, latent test fragility that CI's timing happened to
+expose and local runs didn't. Fixed with `exact: true`, matching the identical fix
+already applied to a similar case earlier in Round 5; verified fixed by watching CI
+turn green on the very next push, not just by local re-runs.
 
 ## Known debt (backlogged, not fixed this round)
 
