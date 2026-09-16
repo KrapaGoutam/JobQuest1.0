@@ -704,6 +704,38 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
                 );
         return json(response, 200, items);
       }
+      // Round 6: import_rows (batch_id, row_number, status, messages_json)
+      // was already written by every import - created_rows/updated_rows/
+      // skipped_rows/rejected_rows counts were the only thing visible
+      // afterward. This surfaces the per-row detail that already exists,
+      // rather than adding a new tracking mechanism.
+      const importRowsMatch = url.pathname.match(
+        /^\/api\/import\/history\/(\d+)\/rows$/,
+      );
+      if (importRowsMatch && request.method === "GET") {
+        const actor = requireAuth(context),
+          batchId = Number(importRowsMatch[1]),
+          batch =
+            actor.role === "MANAGER"
+              ? db.prepare("SELECT id FROM import_batches WHERE id=?").get(batchId)
+              : db
+                  .prepare(
+                    "SELECT id FROM import_batches WHERE id=? AND user_id=?",
+                  )
+                  .get(batchId, actor.id);
+        if (!batch)
+          throw Object.assign(new Error("Not found"), { status: 404 });
+        const items = rows(
+          db.prepare(
+            "SELECT id,row_number,status,messages_json,application_id FROM import_rows WHERE batch_id=? ORDER BY row_number",
+          ),
+          [batchId],
+        ).map(({ messages_json, ...row }) => ({
+          ...row,
+          messages: JSON.parse(messages_json || "[]"),
+        }));
+        return json(response, 200, items);
+      }
       if (url.pathname === "/api/dashboard" && request.method === "GET")
         return json(response, 200, dashboard(db, requireAuth(context).id));
       if (
