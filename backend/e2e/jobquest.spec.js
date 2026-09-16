@@ -309,7 +309,14 @@ test("networking contacts: link to an application, edit, show on application det
   // destination form had no application field at all before this round, so
   // it was impossible to actually complete a link through it.
   await page.getByRole("button", { name: "Link Contact" }).first().click();
-  await expect(page.getByRole("heading", { name: "Networking" })).toBeVisible();
+  // exact: true - the create form on this same page has its own "Add
+  // Networking" heading, whose accessible name also contains "Networking"
+  // as a substring (a real, pre-existing ambiguity in a non-exact match,
+  // independently of any timing - fixed here since it's a one-line,
+  // unambiguous improvement to a test in this same file).
+  await expect(
+    page.getByRole("heading", { name: "Networking", exact: true }),
+  ).toBeVisible();
   await expect(page.locator('select[name="application_id"]')).toHaveValue(/\d+/);
   await expect(
     page.locator('select[name="application_id"] option:checked'),
