@@ -1,5 +1,6 @@
 import { rows } from "./db.js";
 import { STAGES, changeStage, ownedApplication } from "./service.js";
+import { safeCell } from "./feature-upgrade.js";
 
 const BUILTIN_WIDGETS = [
   "applications-today",
@@ -64,7 +65,16 @@ const GOAL_CATEGORIES = [
   "recruiter_messages",
   "interview_prep_minutes",
 ];
-const csvEscape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+// safeCell (already used by the XLSX export in feature-upgrade.js, and
+// already tested there) neutralizes spreadsheet-formula injection by
+// prefixing a leading '=','+','-','@' with an apostrophe, forcing text
+// interpretation when opened in Excel/Sheets. Round 6: every CSV export in
+// this file used quote-escaping only, with no formula-injection protection
+// at all - a real gap the XLSX path never had. Applying it here closes that
+// gap for every CSV export (application/interview/rejection/follow-up/
+// networking/reminder/goal/timeline), not just one.
+const csvEscape = (value) =>
+  `"${String(safeCell(value) ?? "").replaceAll('"', '""')}"`;
 const isoDate = (date = new Date()) => date.toISOString().slice(0, 10);
 const addDays = (date, count) => {
   const result = new Date(`${date}T12:00:00Z`);

@@ -309,7 +309,14 @@ test("networking contacts: link to an application, edit, show on application det
   // destination form had no application field at all before this round, so
   // it was impossible to actually complete a link through it.
   await page.getByRole("button", { name: "Link Contact" }).first().click();
-  await expect(page.getByRole("heading", { name: "Networking" })).toBeVisible();
+  // exact: true - the create form on this same page has its own "Add
+  // Networking" heading, whose accessible name also contains "Networking"
+  // as a substring (a real, pre-existing ambiguity in a non-exact match,
+  // independently of any timing - fixed here since it's a one-line,
+  // unambiguous improvement to a test in this same file).
+  await expect(
+    page.getByRole("heading", { name: "Networking", exact: true }),
+  ).toBeVisible();
   await expect(page.locator('select[name="application_id"]')).toHaveValue(/\d+/);
   await expect(
     page.locator('select[name="application_id"] option:checked'),
@@ -366,5 +373,43 @@ test("networking contacts: link to an application, edit, show on application det
   ).toHaveCount(0);
 
   const results = await new AxeBuilder({ page }).exclude(".goal-chart").analyze();
+  expect(results.violations).toEqual([]);
+});
+
+test("bulk import: CSV format, preview, and import; Import History reachable by a regular user", async ({
+  page,
+}, testInfo) => {
+  const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
+  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.getByRole("button", { name: "Bulk Import", exact: true }).click();
+
+  await page.getByLabel("Format").selectOption("csv");
+  const csvInput = [
+    "Company Name,Title,Applied Date",
+    "Acme Robotics,Backend Engineer,2026-09-10",
+  ].join("\n");
+  await page.getByLabel("Input").fill(csvInput);
+  await page.getByRole("button", { name: "Validate", exact: true }).click();
+  await expect(page.getByRole("cell", { name: "Acme Robotics" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Backend Engineer" })).toBeVisible();
+  const importButton = page.getByRole("button", { name: "Import", exact: true });
+  await expect(importButton).toBeEnabled();
+  await importButton.click();
+  await expect(page.getByText(/1 created/)).toBeVisible();
+
+  // Lands on Applications; the CSV-imported row (header aliases resolved:
+  // "Company Name" -> company, "Title" -> job_title) is really there.
+  await expect(page.getByText("Acme Robotics")).toBeVisible();
+
+  // Import History - Round 6 fix: previously manager-only in the nav, even
+  // though the API already scoped a regular user to their own batches.
+  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.getByRole("button", { name: "Import History", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Import History" })).toBeVisible();
+  await page.getByRole("button", { name: "View Rows" }).first().click();
+  await expect(page.getByText(/Batch #\d+ rows/)).toBeVisible();
+  await expect(page.locator("tbody").getByText("created")).toBeVisible();
+
+  const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
