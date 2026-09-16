@@ -286,6 +286,98 @@ test("bulk preview is non-persistent and imports support modes and duplicate act
   assert.equal(duplicate.data.skipped_rows, 1);
 });
 
+test("Round 6: import batch row detail is visible to its owner and hidden from other users", async () => {
+  const user = await register("rowdetailuser"),
+    other = await register("rowdetailother");
+  const text = JSON.stringify([
+    { company: "Northwind", job_title: "Tester", date_applied: "2026-08-03" },
+    { company: "Missing date", job_title: "Tester" },
+  ]);
+  const result = await request("/api/import", {
+    method: "POST",
+    auth: user,
+    input: {
+      format: "json",
+      text,
+      import_mode: "valid_rows_only",
+      duplicate_action: "skip",
+    },
+  });
+  assert.equal(result.status, 201);
+  const batchId = result.data.import_batch_id;
+
+  const detail = await request(`/api/import/history/${batchId}/rows`, {
+    auth: user,
+  });
+  assert.equal(detail.status, 200);
+  assert.equal(detail.data.length, 2);
+  const validRow = detail.data.find((row) => row.status === "created");
+  assert.ok(validRow);
+  assert.deepEqual(validRow.messages, []);
+  const invalidRow = detail.data.find((row) => row.status === "invalid");
+  assert.ok(invalidRow);
+  assert.ok(invalidRow.messages.some((message) => message.includes("Date applied")));
+
+  assert.equal(
+    (await request(`/api/import/history/${batchId}/rows`, { auth: other }))
+      .status,
+    404,
+  );
+  assert.equal(
+    (await request("/api/import/history/999999/rows", { auth: user })).status,
+    404,
+  );
+});
+
+test("Round 6: CSV import (header aliases, quoted fields) round-trips through CSV export safely", async () => {
+  const user = await register("csvuser");
+  const csvText = [
+    "Company Name,Title,Applied Date,Notes",
+    '=1+1,Engineer,2026-09-01,"Talked to Jane, the recruiter"',
+  ].join("\n");
+
+  const preview = await request("/api/import/preview", {
+    method: "POST",
+    auth: user,
+    input: { format: "csv", text: csvText },
+  });
+  assert.equal(preview.status, 200);
+  assert.equal(preview.data.rows.length, 1);
+  assert.equal(preview.data.rows[0].valid, true);
+  // "Company Name"/"Title"/"Applied Date" are header aliases onto the real
+  // field names - the same alias table the JSON/structured_text formats
+  // already used, applied identically here (CSV isn't a second code path).
+  assert.equal(preview.data.rows[0].data.company, "=1+1");
+  assert.equal(preview.data.rows[0].data.job_title, "Engineer");
+  assert.equal(preview.data.rows[0].data.date_applied, "2026-09-01");
+  // The quoted comma inside "Talked to Jane, the recruiter" was parsed as
+  // one field, not split into two.
+  assert.equal(preview.data.rows[0].data.notes, "Talked to Jane, the recruiter");
+
+  const imported = await request("/api/import", {
+    method: "POST",
+    auth: user,
+    input: {
+      format: "csv",
+      text: csvText,
+      import_mode: "valid_rows_only",
+      duplicate_action: "skip",
+    },
+  });
+  assert.equal(imported.data.created_rows, 1);
+
+  // The formula-like company name ("=1+1") is stored as-is (import doesn't
+  // need to know it's dangerous) - CSV export is where it must be
+  // neutralized, since that's the point it becomes a real spreadsheet-
+  // formula-injection risk if opened in Excel/Sheets. Every CSV export in
+  // this app shares one csvEscape() helper, so this one row also stands in
+  // for interviews/rejections/follow_ups/networking/reminders/goals.
+  const csv = await request("/api/exports/applications", { auth: user });
+  assert.equal(csv.status, 200);
+  assert.match(csv.data, /"'=1\+1"/);
+  assert.doesNotMatch(csv.data, /"=1\+1"/); // would match if safeCell weren't applied
+});
+
 test("structured text splits at the first colon", async () => {
   const user = await register("textuser");
   const text =

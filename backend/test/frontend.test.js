@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { safeCell } from "../src/feature-upgrade.js";
+import { parseCsvRows, parseBulk, validateApplication } from "../src/service.js";
 import {
   moveWidget,
   applyTheme,
@@ -39,6 +40,10 @@ import {
   contactLabel,
   isFollowUpOverdue,
 } from "../../frontend/src/features/contacts/format.js";
+import {
+  summarizeImportResult,
+  previewRowMessage,
+} from "../../frontend/src/features/import-export/format.js";
 
 test("dashboard registry preserves the complete unique widget contract", () => {
   assert.equal(DASHBOARD_WIDGETS.length, 30);
@@ -366,4 +371,98 @@ test("isFollowUpOverdue compares plain calendar dates, not timestamps", () => {
   assert.equal(isFollowUpOverdue("2026-09-15", today), false);
   assert.equal(isFollowUpOverdue(null, today), false);
   assert.equal(isFollowUpOverdue("", today), false);
+});
+
+test("parseCsvRows handles quoted commas, doubled quotes, embedded newlines, CRLF, and Unicode", () => {
+  const simple = "company,job_title\nAcme,Engineer\nGlobex,Analyst";
+  assert.deepEqual(parseCsvRows(simple), [
+    ["company", "job_title"],
+    ["Acme", "Engineer"],
+    ["Globex", "Analyst"],
+  ]);
+
+  const quotedComma = 'company,notes\nAcme,"Talked to Jane, the recruiter"';
+  assert.deepEqual(parseCsvRows(quotedComma), [
+    ["company", "notes"],
+    ["Acme", "Talked to Jane, the recruiter"],
+  ]);
+
+  const doubledQuote = 'company,notes\nAcme,"She said ""great fit"""';
+  assert.deepEqual(parseCsvRows(doubledQuote), [
+    ["company", "notes"],
+    ["Acme", 'She said "great fit"'],
+  ]);
+
+  const multiline = 'company,notes\nAcme,"Line one\nLine two"';
+  assert.deepEqual(parseCsvRows(multiline), [
+    ["company", "notes"],
+    ["Acme", "Line one\nLine two"],
+  ]);
+
+  const crlf = "company,job_title\r\nAcme,Engineer\r\n";
+  assert.deepEqual(parseCsvRows(crlf), [
+    ["company", "job_title"],
+    ["Acme", "Engineer"],
+  ]);
+
+  const unicode = "company,notes\nÀcme Café,Résumé sent — naïve but good";
+  assert.deepEqual(parseCsvRows(unicode), [
+    ["company", "notes"],
+    ["Àcme Café", "Résumé sent — naïve but good"],
+  ]);
+});
+
+test("parseBulk('csv') maps the header row onto plain objects, same shape as JSON/structured_text input", () => {
+  const text = "company,job_title,date_applied\nAcme,Engineer,2026-09-01";
+  assert.deepEqual(parseBulk("csv", text), [
+    { company: "Acme", job_title: "Engineer", date_applied: "2026-09-01" },
+  ]);
+  assert.throws(() => parseBulk("csv", "company,job_title"), /header row and at least one data row/);
+});
+
+test("validateApplication rejects javascript:/data: job_url values, accepting only http(s)", () => {
+  const safe = validateApplication({
+    company: "Acme",
+    job_title: "Engineer",
+    date_applied: "2026-09-01",
+    job_url: "https://acme.example/careers/123",
+  });
+  assert.deepEqual(safe.errors, []);
+
+  for (const unsafe of [
+    "javascript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "vbscript:msgbox(1)",
+  ]) {
+    const result = validateApplication({
+      company: "Acme",
+      job_title: "Engineer",
+      date_applied: "2026-09-01",
+      job_url: unsafe,
+    });
+    assert.ok(
+      result.errors.some((message) => message.includes("Job URL")),
+      `expected a Job URL error for ${unsafe}`,
+    );
+  }
+});
+
+test("summarizeImportResult mentions invalid rows only when there are any", () => {
+  assert.equal(
+    summarizeImportResult({ created_rows: 3, updated_rows: 1, skipped_rows: 0, rejected_rows: 0 }),
+    "3 created · 1 updated · 0 skipped",
+  );
+  assert.equal(
+    summarizeImportResult({ created_rows: 0, updated_rows: 0, skipped_rows: 0, rejected_rows: 2 }),
+    "0 created · 0 updated · 0 skipped · 2 invalid",
+  );
+});
+
+test("previewRowMessage reflects errors, then duplicate, then ready - in that priority", () => {
+  assert.equal(previewRowMessage({ errors: ["Company is required"] }), "Company is required");
+  assert.equal(
+    previewRowMessage({ errors: [], duplicate: true, duplicate_id: 42 }),
+    "Matches #42",
+  );
+  assert.equal(previewRowMessage({ errors: [], duplicate: false }), "Ready");
 });
