@@ -2331,3 +2331,63 @@ test("Round 9: search, type/pinned/application filters, previews, and stored XSS
   });
   assert.equal(unpinned.data.pinned, 0);
 });
+
+test("Final round: resume performance analytics is owner-scoped and computes correct rates", async () => {
+  const user = await register("analyticsuser"),
+    other = await register("analyticsother");
+  const resume = await request("/api/resumes", {
+    method: "POST",
+    auth: user,
+    input: { version_name: "Backend v1" },
+  });
+  assert.equal(resume.status, 201);
+
+  const responded = await request("/api/applications", {
+    method: "POST",
+    auth: user,
+    input: {
+      company: "Acme",
+      job_title: "Engineer",
+      date_applied: "2026-09-01",
+      resume_id: resume.data.id,
+      last_response_date: "2026-09-05",
+      stage: "Interview",
+    },
+  });
+  assert.equal(responded.status, 201);
+  const noResponse = await request("/api/applications", {
+    method: "POST",
+    auth: user,
+    input: {
+      company: "Globex",
+      job_title: "Engineer",
+      date_applied: "2026-09-02",
+      resume_id: resume.data.id,
+    },
+  });
+  assert.equal(noResponse.status, 201);
+
+  const analytics = await request(
+    "/api/analytics/resume?date_from=2026-01-01&date_to=2026-12-31",
+    { auth: user },
+  );
+  assert.equal(analytics.status, 200);
+  const row = analytics.data.find((item) => item.version_name === "Backend v1");
+  assert.equal(row.applications, 2);
+  assert.equal(row.responses, 1);
+  assert.equal(row.response_rate, 50);
+  assert.equal(row.interviews, 1);
+  assert.equal(row.interview_rate, 50);
+  assert.equal(row.offers, 0);
+  assert.equal(row.offer_rate, 0);
+
+  // IDOR: another user's request never sees this user's resume rows.
+  const otherAnalytics = await request(
+    "/api/analytics/resume?date_from=2026-01-01&date_to=2026-12-31",
+    { auth: other },
+  );
+  assert.equal(
+    otherAnalytics.data.some((item) => item.version_name === "Backend v1"),
+    false,
+  );
+});

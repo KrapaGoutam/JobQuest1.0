@@ -51,6 +51,28 @@ function isoDate(offsetDays = 0) {
   return date.toISOString().slice(0, 10);
 }
 
+// The mobile sidebar drawer opens via a CSS transform transition (~0.2s),
+// not a display/visibility change. Waiting for the "open" *class* is not
+// enough - confirmed by direct measurement (getBoundingClientRect) that the
+// class can be present while the element is still rendered at its fully
+// closed off-screen transform, for well over a second under load (this only
+// started surfacing once the nav list grew long enough - Analytics is the
+// newest addition - to add enough render/layout work that the transition
+// reliably lags behind the class toggle in a full sequential test run,
+// though it can happen in isolation too). Poll the real rendered position
+// instead of a proxy for it, per the Playwright reliability rule (wait for
+// actual state, not timing assumptions).
+async function openMobileNav(page) {
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await expect(page.locator("#sidebar")).toHaveClass(/\bopen\b/);
+  await expect
+    .poll(
+      async () => (await page.locator("#sidebar").boundingBox())?.x ?? -9999,
+      { timeout: 15_000 },
+    )
+    .toBeGreaterThan(-1);
+}
+
 // Shared by the Tasks and Habits pages: their tab buttons both trigger an
 // async re-render (fetch, then replace the whole page). Clicking one and
 // immediately interacting with the form races the fetch - the old,
@@ -73,7 +95,7 @@ test("applications table controls, filter dialog, preview drawer, and accessibil
   page,
 }, testInfo) => {
   if (["tablet", "mobile", "small-mobile"].includes(testInfo.project.name))
-    await page.getByRole("button", { name: "Open navigation" }).click();
+    await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   const companyFilter = page.getByRole("button", { name: "Filter Company" });
   await expect(companyFilter).toBeVisible();
@@ -111,7 +133,7 @@ test("responsive visual states", async ({ page }, testInfo) => {
     animations: "disabled",
   });
   if (["tablet", "mobile", "small-mobile"].includes(project))
-    await page.getByRole("button", { name: "Open navigation" }).click();
+    await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   await expect(page).toHaveScreenshot(`applications-table-${project}.png`, {
     animations: "disabled",
@@ -148,8 +170,7 @@ test("responsive visual states", async ({ page }, testInfo) => {
       animations: "disabled",
     });
   } else {
-    await page.getByRole("button", { name: "Open navigation" }).click();
-    await expect(page.locator("#sidebar")).toHaveClass(/\bopen\b/);
+    await openMobileNav(page);
     await expect(page).toHaveScreenshot(`mobile-navigation-${project}.png`, {
       animations: "disabled",
     });
@@ -206,7 +227,7 @@ test("application checklist: grouping, completion, custom items, reorder, delete
   page,
 }, testInfo) => {
   if (["tablet", "mobile", "small-mobile"].includes(testInfo.project.name))
-    await page.getByRole("button", { name: "Open navigation" }).click();
+    await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   await page.getByText("Northstar Labs").click();
   await expect(
@@ -317,7 +338,7 @@ test("networking contacts: link to an application, edit, show on application det
   page,
 }, testInfo) => {
   if (["tablet", "mobile", "small-mobile"].includes(testInfo.project.name))
-    await page.getByRole("button", { name: "Open navigation" }).click();
+    await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   await page.getByText("Northstar Labs").click();
 
@@ -381,7 +402,7 @@ test("networking contacts: link to an application, edit, show on application det
   // end-to-end here; the underlying FK/ownership behavior has its own
   // dedicated backend test (see docs/FEATURE_UPGRADE_5.md).
   if (["tablet", "mobile", "small-mobile"].includes(testInfo.project.name))
-    await page.getByRole("button", { name: "Open navigation" }).click();
+    await openMobileNav(page);
   await page.getByRole("button", { name: "Networking", exact: true }).click();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Delete", exact: true }).click();
@@ -400,7 +421,7 @@ test("bulk import: CSV format, preview, and import; Import History reachable by 
   page,
 }, testInfo) => {
   const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Bulk Import", exact: true }).click();
 
   await page.getByLabel("Format").selectOption("csv");
@@ -423,7 +444,7 @@ test("bulk import: CSV format, preview, and import; Import History reachable by 
 
   // Import History - Round 6 fix: previously manager-only in the nav, even
   // though the API already scoped a regular user to their own batches.
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Import History", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Import History" })).toBeVisible();
   await page.getByRole("button", { name: "View Rows" }).first().click();
@@ -438,7 +459,7 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
   page,
 }, testInfo) => {
   const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Tasks", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
   await expect(page.getByText("Nothing due today.")).toBeVisible();
@@ -510,7 +531,7 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
   await page.getByRole("button", { name: "Add Task", exact: true }).click();
   await expect(page.getByText("Task added")).toBeVisible();
 
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   await page.getByText("Northstar Labs").click();
   await expect(page.getByRole("heading", { name: "Linked Tasks", exact: true })).toBeVisible();
@@ -521,7 +542,7 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
   await expect(page.getByText("No open tasks linked to this application")).toBeVisible();
 
   // Delete: remove the backlog item created earlier.
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   // Not exact: the nav-badge count ("Tasks 1 pending") is now part of this
   // button's accessible name, since a task is due today at this point in the
   // test - a plain substring match stays correct either way.
@@ -539,7 +560,7 @@ test("habits: boolean and count completion, weekly progress, streaks, archive/re
   page,
 }, testInfo) => {
   const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   // Exact and safe here: no habit exists yet, so the nav-badge count is zero
   // and this button's accessible name is still plainly "Habits" (see the
   // Round 7 lesson on nav-badge accessible names, in Tasks' own test above).
@@ -680,7 +701,7 @@ test("notes: create/edit/delete, journal entries, search, application linking, p
   page,
 }, testInfo) => {
   const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Journal & Notes", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Journal & Notes", exact: true }),
@@ -761,7 +782,7 @@ test("notes: create/edit/delete, journal entries, search, application linking, p
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Note added")).toBeVisible();
 
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   await page.getByText("Northstar Labs").click();
   await expect(page.getByRole("heading", { name: "Notes", exact: true })).toBeVisible();
@@ -830,6 +851,45 @@ test("notes: create/edit/delete, journal entries, search, application linking, p
   // every-page component's theme-token resolution is real, separate,
   // higher-risk work - documented in docs/FEATURE_UPGRADE_9.md Known Debt
   // rather than attempted here.
+  const results = await new AxeBuilder({ page }).exclude("#toast").analyze();
+  expect(results.violations).toEqual([]);
+});
+
+test("analytics: overview, pipeline, source, and resume breakdowns render with real counts and rates", async ({
+  page,
+}, testInfo) => {
+  const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
+  // The exact numerator/denominator math is already covered precisely by the
+  // dedicated backend test (real Postgres, real assertions on the computed
+  // rates) - this E2E pass verifies the page actually wires that data up and
+  // renders it, using the one application the shared fixture already seeded,
+  // via the UI rather than a second direct API call (this file's established
+  // pattern - only the shared authenticatedPage() fixture uses page.request
+  // directly, with the CSRF token it captures from registration itself).
+  if (narrow) await openMobileNav(page);
+  await page.getByRole("button", { name: "Analytics", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Analytics", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Overview", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pipeline", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "By Source", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "By Resume Version", exact: true }),
+  ).toBeVisible();
+  // The fixture's one seeded application (no source set, stage "Applied")
+  // shows up as real data, not just empty-state placeholders.
+  await expect(page.locator(".card", { hasText: "Pipeline" })).toContainText(
+    "Applied",
+  );
+  await expect(page.locator(".card", { hasText: "By Source" })).toContainText(
+    "Other",
+  );
+
+  // Date-range selector triggers a fresh, correctly-labeled reload.
+  await page.getByLabel("Analytics date range").selectOption("30");
+  await expect(
+    page.getByRole("heading", { name: "Analytics", exact: true }),
+  ).toBeVisible();
+
   const results = await new AxeBuilder({ page }).exclude("#toast").analyze();
   expect(results.violations).toEqual([]);
 });

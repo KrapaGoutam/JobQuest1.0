@@ -52,6 +52,10 @@ import {
   emptyStateMessage as notesEmptyStateMessage,
 } from "../../frontend/src/features/notes/format.js";
 import {
+  rateLabel,
+  summarizeRates,
+} from "../../frontend/src/features/analytics/format.js";
+import {
   computeStreak,
   isDueToday,
   weekRange,
@@ -718,4 +722,30 @@ test("validateNote rejects a fully blank note, unknown/forbidden fields, and ove
   const ok = validateNote({ title: "Reflection", body: "Went well." });
   assert.deepEqual(ok.errors, []);
   assert.equal(ok.data.note_type, "general");
+});
+
+test("rateLabel always shows the sample size alongside the percentage, never a bare rate", () => {
+  assert.equal(rateLabel(2, 7), "2/7 (28.6%)");
+  assert.equal(rateLabel(0, 0), "No data");
+  assert.equal(rateLabel(0, 5), "0/5 (0%)");
+  assert.equal(rateLabel(5, 5), "5/5 (100%)");
+});
+
+test("summarizeRates sums per-source rows into one overall total without a second query", () => {
+  const totals = summarizeRates([
+    { applications: 10, responses: 3, interviews: 1, offers: 0 },
+    { applications: 5, responses: 2, interviews: 2, offers: 1 },
+  ]);
+  assert.deepEqual(totals, {
+    applications: 15,
+    responses: 5,
+    interviews: 3,
+    offers: 1,
+  });
+  assert.deepEqual(summarizeRates([]), {
+    applications: 0,
+    responses: 0,
+    interviews: 0,
+    offers: 0,
+  });
 });
