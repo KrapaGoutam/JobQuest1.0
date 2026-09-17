@@ -10,8 +10,8 @@ detailed spec in the round's own `docs/FEATURE_UPGRADE_N.md` once it starts.
 | 4 | Application checklist — full CRUD (edit/delete/reorder), validation, lifecycle-phase display grouping; stage-aware *generation* deferred — see `docs/FEATURE_UPGRADE_4.md` | Merged (PR #11) |
 | 5 | Contacts/networking — fixed the broken application-linkage flow, added Edit UI, surfaced contacts on application detail; backend CRUD/security was already solid — see `docs/FEATURE_UPGRADE_5.md` | Merged (PR #12) |
 | 6 | Import/export hardening — fixed CSV formula-injection (every CSV export), job_url unsafe-protocol gap, added CSV import, batch row-detail viewing; preview/validation/duplicate/transaction logic was already solid — see `docs/FEATURE_UPGRADE_6.md` | Merged (PR #13) |
-| 7 | Task management — genuinely net-new `tasks` table, distinct from the pre-existing (and much closer than expected) `reminders` domain; Today/Upcoming/Backlog/Completed views, priority, optional due date, optional application link, simple recurrence — see `docs/FEATURE_UPGRADE_7.md` | Implemented locally; PR pending |
-| 8 | Habit tracker | Not started |
+| 7 | Task management — genuinely net-new `tasks` table, distinct from the pre-existing (and much closer than expected) `reminders` domain; Today/Upcoming/Backlog/Completed views, priority, optional due date, optional application link, simple recurrence — see `docs/FEATURE_UPGRADE_7.md` | Merged (PR #14) |
+| 8 | Habit tracker — genuinely net-new `habits`/`habit_logs`; daily/weekdays/weekly frequency, unified boolean+count completion model, idempotent progress writes, derived streaks — see `docs/FEATURE_UPGRADE_8.md` | Implemented locally; PR pending |
 | 9 | Journal / notes | Not started |
 | 10 | Analytics module | Not started |
 | 11 | Responsive/design-system capstone pass | Not started |
@@ -95,3 +95,19 @@ package, plan-only).
 - `docs/PRD.md`'s top status line was stale since Round 2 (still said "no
   implementation has started" through Round 6) — corrected in Round 7. Worth a habit:
   keep it current per round rather than letting it drift again.
+
+## Smaller items discovered during Round 8 (not yet sequenced into a round)
+
+- `habits_due_today` nav badge counts `daily`-frequency habits only — no cross-dialect
+  weekday function exists in the shared query layer for `weekdays`/`weekly` habits.
+  Minor, documented undercount in a secondary nav affordance only. See
+  `docs/FEATURE_UPGRADE_8.md` Known Debt.
+- `users.week_start` was a stored-but-unused setting before this round; Habits is the
+  first feature to actually honor it. The calendar's week view (hardcoded
+  Monday-first) and the goal-snapshot weekly walker still don't — worth a consistency
+  pass later, not done this round.
+- Habit editing uses a `prompt()`-sequence flow, matching the existing reminder-
+  category-rename pattern, rather than a richer inline form — fine for occasional
+  edits, worth revisiting if that turns out to undersell the feature.
+- Streak lookback is bounded at 365 days (a documented, currently-irrelevant trade-off
+  — see `docs/FEATURE_UPGRADE_8.md` Streak Semantics).

@@ -46,6 +46,13 @@ import {
 } from "../../frontend/src/features/import-export/format.js";
 import { nextOccurrence, classifyTaskView } from "../src/tasks.js";
 import {
+  computeStreak,
+  isDueToday,
+  weekRange,
+  validateHabit,
+  validateProgress,
+} from "../src/habits.js";
+import {
   isOverdue,
   dueDateLabel,
   emptyStateMessage,
@@ -538,4 +545,114 @@ test("emptyStateMessage and recurrenceLabel cover every view and recurrence valu
 test("priorityRank orders High before Medium before Low", () => {
   assert.ok(priorityRank("High") < priorityRank("Medium"));
   assert.ok(priorityRank("Medium") < priorityRank("Low"));
+});
+
+test("isDueToday: weekdays skips Saturday/Sunday, daily/weekly are always in play", () => {
+  assert.equal(isDueToday("weekdays", "2026-09-18"), true); // Friday
+  assert.equal(isDueToday("weekdays", "2026-09-19"), false); // Saturday
+  assert.equal(isDueToday("weekdays", "2026-09-20"), false); // Sunday
+  assert.equal(isDueToday("weekdays", "2026-09-21"), true); // Monday
+  assert.equal(isDueToday("daily", "2026-09-19"), true);
+  assert.equal(isDueToday("weekly", "2026-09-19"), true);
+});
+
+test("weekRange respects the configured week start and crosses month/year boundaries", () => {
+  // 2026-09-16 is a Wednesday.
+  assert.deepEqual(weekRange("2026-09-16", 1), ["2026-09-14", "2026-09-20"]); // Monday start
+  assert.deepEqual(weekRange("2026-09-16", 0), ["2026-09-13", "2026-09-19"]); // Sunday start
+  // 2027-01-01 is a Friday; its Monday-start week begins in the prior year.
+  assert.deepEqual(weekRange("2027-01-01", 1), ["2026-12-28", "2027-01-03"]);
+});
+
+test("computeStreak (daily): counts consecutive achieved days and stops at the first gap", () => {
+  const logs = [
+    { completion_date: "2026-09-20", value: 1 },
+    { completion_date: "2026-09-19", value: 1 },
+    { completion_date: "2026-09-18", value: 1 },
+    { completion_date: "2026-09-17", value: 0 },
+    { completion_date: "2026-09-16", value: 1 },
+  ];
+  assert.equal(
+    computeStreak({ frequency: "daily", targetCount: 1, logs, today: "2026-09-20" }),
+    3,
+  );
+});
+
+test("computeStreak (daily): today not yet logged doesn't zero the streak", () => {
+  const logs = [
+    { completion_date: "2026-09-19", value: 1 },
+    { completion_date: "2026-09-18", value: 1 },
+    { completion_date: "2026-09-17", value: 0 },
+  ];
+  // No row at all for "today" (2026-09-20) - the day may simply not be over yet.
+  assert.equal(
+    computeStreak({ frequency: "daily", targetCount: 1, logs, today: "2026-09-20" }),
+    2,
+  );
+});
+
+test("computeStreak (weekdays): a weekend does not break the streak", () => {
+  const logs = [
+    { completion_date: "2026-09-21", value: 1 }, // Monday
+    { completion_date: "2026-09-18", value: 1 }, // Friday
+    { completion_date: "2026-09-17", value: 1 }, // Thursday
+    { completion_date: "2026-09-16", value: 0 }, // Wednesday - the gap
+  ];
+  assert.equal(
+    computeStreak({
+      frequency: "weekdays",
+      targetCount: 1,
+      logs,
+      today: "2026-09-21",
+    }),
+    3,
+  );
+});
+
+test("computeStreak (weekly): sums each week and walks backward across week boundaries", () => {
+  const logs = [
+    { completion_date: "2026-09-15", value: 3 }, // current week (Mon 09-14 - Sun 09-20)
+    { completion_date: "2026-09-10", value: 3 }, // previous week (09-07 - 09-13)
+    // the week before that (08-31 - 09-06) has no logs at all - the gap
+  ];
+  assert.equal(
+    computeStreak({
+      frequency: "weekly",
+      targetCount: 3,
+      logs,
+      today: "2026-09-16",
+      weekStart: 1,
+    }),
+    2,
+  );
+});
+
+test("validateHabit rejects unknown/forbidden fields and enforces target_count bounds", () => {
+  const forbidden = validateHabit({ name: "X", frequency: "daily", user_id: 5 });
+  assert.ok(forbidden.errors.some((message) => message.includes("user_id")));
+
+  const unknown = validateHabit({ name: "X", frequency: "daily", color: "red" });
+  assert.ok(unknown.errors.some((message) => message.includes("Unknown field")));
+
+  const zero = validateHabit({ name: "X", frequency: "daily", target_count: 0 });
+  assert.ok(zero.errors.length > 0);
+
+  const ok = validateHabit({ name: "Read", frequency: "weekly", target_count: 3 });
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.data.target_count, 3);
+});
+
+test("validateProgress rejects negative/non-integer values and future dates", () => {
+  assert.ok(
+    validateProgress({ completion_date: "2026-09-14", value: -1 }).errors.length > 0,
+  );
+  assert.ok(
+    validateProgress({ completion_date: "2026-09-14", value: 1.5 }).errors.length > 0,
+  );
+  assert.ok(
+    validateProgress({ completion_date: "not-a-date", value: 1 }).errors.length > 0,
+  );
+  const ok = validateProgress({ completion_date: "2020-01-01", value: 5 });
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.data.value, 5);
 });

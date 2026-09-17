@@ -47,6 +47,12 @@ import {
   emptyStateMessage,
   recurrenceLabel,
 } from "./features/tasks/format.js";
+import {
+  frequencyLabel,
+  progressLabel,
+  streakLabel,
+  emptyStateMessage as habitEmptyStateMessage,
+} from "./features/habits/format.js";
 
 const state = {
   user: null,
@@ -63,6 +69,8 @@ const state = {
   dashboardDays: 30,
   applicationView: "table",
   taskView: "today",
+  habitView: "today",
+  habitHistoryId: "",
   navigationCounts: {},
   expandedKanbanGroups: new Set(),
   selectedApplications: new Set(),
@@ -212,6 +220,7 @@ const nav = [
   ["imports", "Import History", "history"],
   ["calendar", "Calendar", "calendar-days"],
   ["tasks", "Tasks", "check-square"],
+  ["habits", "Habits", "repeat"],
   ["reminders", "Reminder Center", "bell-ring"],
   ["interviews", "Interviews", "users"],
   ["rejections", "Rejections", "x-circle"],
@@ -256,6 +265,7 @@ function shell(content) {
       [
         "calendar",
         "tasks",
+        "habits",
         "reminders",
         "interviews",
         "rejections",
@@ -376,6 +386,7 @@ function shell(content) {
         follow_ups: counts.overdue_follow_ups,
         reminders: counts.due_reminders,
         tasks: counts.tasks_due_today,
+        habits: counts.habits_due_today,
       };
       Object.entries(mapping).forEach(([id, count]) => {
         const button = qs(`[data-page="${id}"]`),
@@ -473,6 +484,7 @@ async function go(page) {
       bulk: renderBulk,
       calendar: renderCalendar,
       tasks: renderTasks,
+      habits: renderHabits,
       reminders: renderReminders,
       resumes: renderResumes,
       goals: renderGoals,
@@ -2475,6 +2487,250 @@ function bindDetailTasks(id) {
   };
   bindTaskActions(() => go(`detail:${id}`));
 }
+function habitRowHtml(habit) {
+  const control =
+    habit.target_count === 1
+      ? `<input type="checkbox" data-habit-toggle="${habit.id}" data-value="${habit.period_value}" ${habit.completed ? "checked" : ""} aria-label="Mark '${esc(habit.name)}' ${habit.completed ? "not complete" : "complete"}">`
+      : `<div class="habit-count" role="group" aria-label="Progress for ${esc(habit.name)}"><button type="button" class="btn small secondary" data-habit-decrement="${habit.id}" data-value="${habit.period_value}" aria-label="Decrease progress for '${esc(habit.name)}'">−</button><span class="num">${habit.period_value} / ${habit.target_count}</span><button type="button" class="btn small secondary" data-habit-increment="${habit.id}" data-value="${habit.period_value}" aria-label="Increase progress for '${esc(habit.name)}'">+</button></div>`;
+  return `<li class="habit-row ${habit.active ? "" : "inactive"}" data-habit-row="${habit.id}">${control}<div class="habit-meta"><strong>${esc(habit.name)}</strong><span class="muted">${esc(frequencyLabel(habit.frequency))} · ${esc(progressLabel(habit))} · ${esc(streakLabel(habit))}${habit.active ? "" : " · Archived"}</span>${habit.description ? `<p class="muted">${esc(habit.description)}</p>` : ""}</div><div class="actions"><button type="button" class="btn small secondary" data-habit-edit="${habit.id}">Edit</button>${habit.active ? `<button type="button" class="btn small secondary" data-habit-archive="${habit.id}">Archive</button>` : `<button type="button" class="btn small secondary" data-habit-reactivate="${habit.id}">Reactivate</button>`}<button type="button" class="btn small secondary" data-habit-view-history="${habit.id}">History</button><button type="button" class="btn small danger" data-habit-delete="${habit.id}">Delete</button></div></li>`;
+}
+function bindHabitActions(after) {
+  qsa("[data-habit-toggle]").forEach(
+    (input) =>
+      (input.onchange = async () => {
+        const wasChecked = !input.checked;
+        try {
+          await api(`/api/habits/${input.dataset.habitToggle}/progress`, {
+            method: "PUT",
+            body: JSON.stringify({
+              completion_date: date(),
+              value: input.checked ? 1 : 0,
+            }),
+          });
+          await after();
+        } catch {
+          input.checked = wasChecked;
+          toast("Could not update that habit — try again");
+        }
+      }),
+  );
+  qsa("[data-habit-increment],[data-habit-decrement]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        const id = button.dataset.habitIncrement || button.dataset.habitDecrement,
+          delta = button.dataset.habitIncrement ? 1 : -1,
+          next = Math.max(0, Number(button.dataset.value) + delta);
+        try {
+          await api(`/api/habits/${id}/progress`, {
+            method: "PUT",
+            body: JSON.stringify({ completion_date: date(), value: next }),
+          });
+          await after();
+        } catch {
+          toast("Could not update that habit — try again");
+        }
+      }),
+  );
+  qsa("[data-habit-archive]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        try {
+          await api(`/api/habits/${button.dataset.habitArchive}`, {
+            method: "PATCH",
+            body: JSON.stringify({ active: false }),
+          });
+          toast("Habit archived");
+          await after();
+        } catch {
+          toast("Could not archive that habit — try again");
+        }
+      }),
+  );
+  qsa("[data-habit-reactivate]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        try {
+          await api(`/api/habits/${button.dataset.habitReactivate}`, {
+            method: "PATCH",
+            body: JSON.stringify({ active: true }),
+          });
+          toast("Habit reactivated");
+          await after();
+        } catch {
+          toast("Could not reactivate that habit — try again");
+        }
+      }),
+  );
+  qsa("[data-habit-delete]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        if (!confirm("Permanently delete this habit and its history?")) return;
+        try {
+          await api(`/api/habits/${button.dataset.habitDelete}`, {
+            method: "DELETE",
+          });
+          toast("Habit deleted");
+          await after();
+        } catch {
+          toast("Could not delete that habit — try again");
+        }
+      }),
+  );
+  qsa("[data-habit-view-history]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        state.habitView = "history";
+        state.habitHistoryId = button.dataset.habitViewHistory;
+        renderHabits();
+      }),
+  );
+  qsa("[data-habit-edit]").forEach(
+    (button) =>
+      (button.onclick = () => editHabitPrompt(button.dataset.habitEdit, after)),
+  );
+}
+async function editHabitPrompt(id, after) {
+  const habits = await api("/api/habits?active=all");
+  const habit = habits.find((item) => String(item.id) === String(id));
+  if (!habit) return;
+  const name = prompt("Habit name", habit.name);
+  if (name === null || !name.trim()) return;
+  const description = prompt("Description (optional)", habit.description || "");
+  if (description === null) return;
+  const frequency = prompt(
+    "Frequency: daily, weekdays, or weekly",
+    habit.frequency,
+  );
+  if (!frequency || !["daily", "weekdays", "weekly"].includes(frequency.trim()))
+    return toast("Frequency must be daily, weekdays, or weekly");
+  const targetInput = prompt("Target count", habit.target_count);
+  if (targetInput === null) return;
+  const target_count = Number(targetInput);
+  if (!Number.isInteger(target_count) || target_count < 1)
+    return toast("Target count must be a whole number of 1 or more");
+  try {
+    await api(`/api/habits/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: name.trim(),
+        description,
+        frequency: frequency.trim(),
+        target_count,
+      }),
+    });
+    toast("Habit updated");
+    await after();
+  } catch (error) {
+    toast(error.message);
+  }
+}
+async function renderHabits() {
+  const view = ["today", "all", "history"].includes(state.habitView)
+    ? state.habitView
+    : "today";
+  state.habitView = view;
+  const tabs = ["today", "all", "history"]
+    .map(
+      (id) =>
+        `<button class="btn small ${id === view ? "" : "secondary"}" data-habit-view="${id}" aria-pressed="${id === view}">${pretty(id === "all" ? "All Habits" : id)}</button>`,
+    )
+    .join("");
+
+  if (view === "history") {
+    const habits = await api("/api/habits?active=all");
+    if (
+      state.habitHistoryId &&
+      !habits.some((item) => String(item.id) === String(state.habitHistoryId))
+    )
+      state.habitHistoryId = "";
+    const logs = state.habitHistoryId
+      ? await api(`/api/habits/${state.habitHistoryId}/history?days=30`)
+      : [];
+    const options = habits.map((item) => ({
+      value: item.id,
+      label: `${item.name}${item.active ? "" : " (archived)"}`,
+    }));
+    shell(
+      pageHead(
+        "Habits",
+        "A fast, simple tracker for recurring behaviors",
+        `<div class="actions">${tabs}</div>`,
+      ) +
+        `<div class="grid"><section class="card wide"><h2>History</h2>${
+          habits.length
+            ? select(
+                "habit_id",
+                "Habit",
+                options,
+                state.habitHistoryId,
+                'id="habit-history-select"',
+              )
+            : empty("Create a habit first")
+        }<div id="habit-history-list">${
+          !state.habitHistoryId
+            ? ""
+            : logs.length
+              ? `<ul class="habit-history-list">${logs
+                  .map(
+                    (log) =>
+                      `<li>${esc(log.completion_date)} — ${log.value}</li>`,
+                  )
+                  .join("")}</ul>`
+              : empty(habitEmptyStateMessage("history"))
+        }</div></section></div>`,
+    );
+    qsa("[data-habit-view]").forEach(
+      (button) =>
+        (button.onclick = () => {
+          state.habitView = button.dataset.habitView;
+          renderHabits();
+        }),
+    );
+    if (habits.length)
+      qs("#habit-history-select").onchange = (event) => {
+        state.habitHistoryId = event.target.value;
+        renderHabits();
+      };
+    return;
+  }
+
+  const habits = await api(
+    view === "today" ? "/api/habits?view=today" : "/api/habits?active=all",
+  );
+  shell(
+    pageHead(
+      "Habits",
+      "A fast, simple tracker for recurring behaviors",
+      `<div class="actions">${tabs}</div>`,
+    ) +
+      `<div class="grid"><section class="card wide"><div id="habit-list">${
+        habits.length
+          ? `<ul class="habit-list">${habits.map(habitRowHtml).join("")}</ul>`
+          : empty(habitEmptyStateMessage(view))
+      }</div></section><section class="card"><h2>Add habit</h2><form id="habit-form" class="form-grid">${field("name", "Name", "text", "", "required maxlength='120'")}${select("frequency", "Frequency", [{ value: "daily", label: "Daily" }, { value: "weekdays", label: "Weekdays" }, { value: "weekly", label: "Weekly" }], "daily")}${field("target_count", "Target count", "number", "1", "min='1' max='1000' required")}<label class="full">Description<textarea name="description" maxlength="1000"></textarea></label><button class="btn full">Add Habit</button></form></section></div>`,
+  );
+  qsa("[data-habit-view]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        state.habitView = button.dataset.habitView;
+        renderHabits();
+      }),
+  );
+  qs("#habit-form").onsubmit = async (event) => {
+    event.preventDefault();
+    const input = Object.fromEntries(new FormData(event.currentTarget));
+    if (!input.description) delete input.description;
+    input.target_count = Number(input.target_count);
+    try {
+      await api("/api/habits", { method: "POST", body: JSON.stringify(input) });
+      toast("Habit added");
+      renderHabits();
+    } catch (error) {
+      toast(error.message);
+    }
+  };
+  bindHabitActions(renderHabits);
+}
 async function renderReminders() {
   const [items, categories] = await Promise.all([
     api("/api/reminders"),
@@ -2796,6 +3052,7 @@ function renderExports() {
         ["networking", "Networking CSV"],
         ["reminders", "Reminders CSV"],
         ["tasks", "Tasks CSV"],
+        ["habits", "Habits CSV"],
         ["resume-analytics", "Resume Analytics CSV"],
         ["goals", "Goal History CSV"],
         ["aging", "Aging Report CSV"],

@@ -1804,3 +1804,279 @@ test("Round 7: recurrence generates exactly one idempotent next occurrence, and 
     "only the surviving open next-occurrence should remain open",
   );
 });
+
+test("Round 8: habit CRUD, validation, archive/reactivate, ownership/IDOR, and cascade delete", async () => {
+  const user = await register("habitsowner"),
+    other = await register("habitsother");
+
+  // Invalid frequency/target_count rejected.
+  assert.equal(
+    (
+      await request("/api/habits", {
+        method: "POST",
+        auth: user,
+        input: { name: "Bad frequency", frequency: "monthly" },
+      })
+    ).status,
+    400,
+  );
+  for (const target_count of [0, -1, 1.5, 5000]) {
+    assert.equal(
+      (
+        await request("/api/habits", {
+          method: "POST",
+          auth: user,
+          input: { name: "Bad target", frequency: "daily", target_count },
+        })
+      ).status,
+      400,
+      `target_count ${target_count} must be rejected`,
+    );
+  }
+  // Mass assignment: user_id/status-adjacent fields are not writable via create.
+  assert.equal(
+    (
+      await request("/api/habits", {
+        method: "POST",
+        auth: user,
+        input: { name: "Sneaky", frequency: "daily", user_id: other.user.id },
+      })
+    ).status,
+    400,
+  );
+
+  const habit = await request("/api/habits", {
+    method: "POST",
+    auth: user,
+    input: { name: "Practice coding", frequency: "daily", target_count: 1 },
+  });
+  assert.equal(habit.status, 201);
+  assert.equal(habit.data.target_count, 1);
+  assert.equal(habit.data.active, 1);
+
+  // Edit: name, target_count.
+  const edited = await request(`/api/habits/${habit.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { name: "Practice coding daily", target_count: 2 },
+  });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.data.name, "Practice coding daily");
+  assert.equal(edited.data.target_count, 2);
+
+  // Ownership cannot be changed via update.
+  assert.equal(
+    (
+      await request(`/api/habits/${habit.data.id}`, {
+        method: "PATCH",
+        auth: user,
+        input: { user_id: other.user.id },
+      })
+    ).status,
+    400,
+  );
+
+  // Archive: leaves the active list, remains listable via active=all.
+  const archived = await request(`/api/habits/${habit.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { active: false },
+  });
+  assert.equal(archived.status, 200);
+  assert.equal(archived.data.active, 0);
+  assert.equal(
+    (await request("/api/habits?active=true", { auth: user })).data.some(
+      (item) => item.id === habit.data.id,
+    ),
+    false,
+  );
+  assert.equal(
+    (await request("/api/habits?active=all", { auth: user })).data.some(
+      (item) => item.id === habit.data.id,
+    ),
+    true,
+  );
+
+  // Reactivate.
+  const reactivated = await request(`/api/habits/${habit.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { active: true },
+  });
+  assert.equal(reactivated.data.active, 1);
+
+  // IDOR: another user cannot list, update, or delete this user's habit.
+  assert.equal(
+    (await request("/api/habits?active=all", { auth: other })).data.some(
+      (item) => item.id === habit.data.id,
+    ),
+    false,
+  );
+  assert.equal(
+    (
+      await request(`/api/habits/${habit.data.id}`, {
+        method: "PATCH",
+        auth: other,
+        input: { name: "hijacked" },
+      })
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await request(`/api/habits/${habit.data.id}`, {
+        method: "DELETE",
+        auth: other,
+      })
+    ).status,
+    404,
+  );
+
+  // Cascade delete: log a completion, then delete the habit; the log must go
+  // with it (verified in real PostgreSQL too - see the dedicated FK test file).
+  await request(`/api/habits/${habit.data.id}/progress`, {
+    method: "PUT",
+    auth: user,
+    input: { completion_date: isoDate(0), value: 1 },
+  });
+  assert.equal(
+    (await request(`/api/habits/${habit.data.id}/history`, { auth: user }))
+      .data.length,
+    1,
+  );
+  assert.equal(
+    (
+      await request(`/api/habits/${habit.data.id}`, {
+        method: "DELETE",
+        auth: user,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await request(`/api/habits/${habit.data.id}/history`, { auth: user }))
+      .status,
+    404,
+  );
+});
+
+test("Round 8: progress is idempotent/retry-safe, target-count aware, and rejects malformed input", async () => {
+  const user = await register("habitsprogress");
+
+  const boolHabit = await request("/api/habits", {
+    method: "POST",
+    auth: user,
+    input: { name: "Read", frequency: "daily", target_count: 1 },
+  });
+  const countHabit = await request("/api/habits", {
+    method: "POST",
+    auth: user,
+    input: { name: "Apply to jobs", frequency: "daily", target_count: 5 },
+  });
+
+  // Boolean habit: checking it twice (retry) must not create a duplicate row
+  // or double-count - the same PUT is idempotent by construction (absolute
+  // value + upsert on the habit_id+completion_date unique constraint).
+  for (let i = 0; i < 2; i++) {
+    const result = await request(`/api/habits/${boolHabit.data.id}/progress`, {
+      method: "PUT",
+      auth: user,
+      input: { completion_date: isoDate(0), value: 1 },
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.data.period_value, 1);
+    assert.equal(result.data.completed, true);
+  }
+  assert.equal(
+    (
+      await request(`/api/habits/${boolHabit.data.id}/history`, { auth: user })
+    ).data.length,
+    1,
+    "retrying the same progress write must not create a second row",
+  );
+
+  // Count habit: below target, at target, and over target (over-achievement
+  // still counts as completed, per docs/FEATURE_UPGRADE_8.md).
+  const below = await request(`/api/habits/${countHabit.data.id}/progress`, {
+    method: "PUT",
+    auth: user,
+    input: { completion_date: isoDate(0), value: 3 },
+  });
+  assert.equal(below.data.completed, false);
+  assert.equal(below.data.period_value, 3);
+  const atTarget = await request(`/api/habits/${countHabit.data.id}/progress`, {
+    method: "PUT",
+    auth: user,
+    input: { completion_date: isoDate(0), value: 5 },
+  });
+  assert.equal(atTarget.data.completed, true);
+  const over = await request(`/api/habits/${countHabit.data.id}/progress`, {
+    method: "PUT",
+    auth: user,
+    input: { completion_date: isoDate(0), value: 6 },
+  });
+  assert.equal(over.data.completed, true);
+  assert.equal(over.data.period_value, 6);
+
+  // Malformed input rejected: negative value, non-integer, future date.
+  for (const value of [-1, 1.5, 200_000]) {
+    assert.equal(
+      (
+        await request(`/api/habits/${countHabit.data.id}/progress`, {
+          method: "PUT",
+          auth: user,
+          input: { completion_date: isoDate(0), value },
+        })
+      ).status,
+      400,
+      `value ${value} must be rejected`,
+    );
+  }
+  assert.equal(
+    (
+      await request(`/api/habits/${countHabit.data.id}/progress`, {
+        method: "PUT",
+        auth: user,
+        input: { completion_date: isoDate(5), value: 1 },
+      })
+    ).status,
+    400,
+    "a future completion_date must be rejected",
+  );
+});
+
+test("Round 8: weekly habits sum progress across the whole week, not one calendar day", async () => {
+  const user = await register("habitsweekly");
+  const habit = await request("/api/habits", {
+    method: "POST",
+    auth: user,
+    input: { name: "Networking outreach", frequency: "weekly", target_count: 3 },
+  });
+  assert.equal(habit.status, 201);
+
+  // Log three separate days within the current week (whatever "today" is at
+  // test time) - never assume a specific weekday, since the test may run any
+  // day. Logging today plus two prior days stays within the same week for
+  // any day-of-week except very early in the week, which is exactly why the
+  // period-sum (not single-day) semantics matter here.
+  await request(`/api/habits/${habit.data.id}/progress`, {
+    method: "PUT",
+    auth: user,
+    input: { completion_date: isoDate(0), value: 1 },
+  });
+  const midway = await request(`/api/habits/${habit.data.id}/progress`, {
+    method: "PUT",
+    auth: user,
+    input: { completion_date: isoDate(0), value: 2 },
+  });
+  assert.equal(midway.data.period_value, 2);
+  assert.equal(midway.data.completed, false);
+  assert.ok(midway.data.period_start <= isoDate(0));
+  assert.ok(midway.data.period_end >= isoDate(0));
+
+  const summary = (await request("/api/habits?view=all", { auth: user })).data.find(
+    (item) => item.id === habit.data.id,
+  );
+  assert.equal(summary.period_value, 2);
+  assert.equal(summary.completed, false);
+});

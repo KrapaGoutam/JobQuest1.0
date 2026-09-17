@@ -599,7 +599,13 @@ export async function handleFeatureUpgrade(context, helpers) {
       today = new Date().toISOString().slice(0, 10);
     const counts = db
       .prepare(
-        "SELECT (SELECT count(*) FROM reminders WHERE user_id=? AND due_date<=? AND status NOT IN ('Completed','Cancelled')) due_reminders,(SELECT count(*) FROM follow_ups WHERE user_id=? AND due_date<? AND status NOT IN ('Completed','Cancelled')) overdue_follow_ups,(SELECT count(*) FROM interviews WHERE user_id=? AND substr(scheduled_at,1,10) BETWEEN ? AND ?) upcoming_interviews,(SELECT count(*) FROM tasks WHERE user_id=? AND status='open' AND due_date IS NOT NULL AND due_date<=?) tasks_due_today",
+        // habits_due_today is deliberately daily-only (not weekdays/weekly) -
+        // weekend eligibility for weekdays habits needs a dialect-specific
+        // weekday function (SQLite strftime vs Postgres EXTRACT), which this
+        // shared query layer has no safe cross-dialect equivalent for. The
+        // Habits page itself computes due-today correctly in JS; this badge
+        // is a secondary nav affordance, not the source of truth.
+        "SELECT (SELECT count(*) FROM reminders WHERE user_id=? AND due_date<=? AND status NOT IN ('Completed','Cancelled')) due_reminders,(SELECT count(*) FROM follow_ups WHERE user_id=? AND due_date<? AND status NOT IN ('Completed','Cancelled')) overdue_follow_ups,(SELECT count(*) FROM interviews WHERE user_id=? AND substr(scheduled_at,1,10) BETWEEN ? AND ?) upcoming_interviews,(SELECT count(*) FROM tasks WHERE user_id=? AND status='open' AND due_date IS NOT NULL AND due_date<=?) tasks_due_today,(SELECT count(*) FROM habits h WHERE h.user_id=? AND h.active=1 AND h.frequency='daily' AND NOT EXISTS (SELECT 1 FROM habit_logs hl WHERE hl.habit_id=h.id AND hl.completion_date=? AND hl.value>=h.target_count)) habits_due_today",
       )
       .get(
         id,
@@ -609,6 +615,8 @@ export async function handleFeatureUpgrade(context, helpers) {
         id,
         today,
         new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+        id,
+        today,
         id,
         today,
       );
