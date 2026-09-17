@@ -44,6 +44,14 @@ import {
   summarizeImportResult,
   previewRowMessage,
 } from "../../frontend/src/features/import-export/format.js";
+import { nextOccurrence, classifyTaskView } from "../src/tasks.js";
+import {
+  isOverdue,
+  dueDateLabel,
+  emptyStateMessage,
+  recurrenceLabel,
+  priorityRank,
+} from "../../frontend/src/features/tasks/format.js";
 
 test("dashboard registry preserves the complete unique widget contract", () => {
   assert.equal(DASHBOARD_WIDGETS.length, 30);
@@ -465,4 +473,69 @@ test("previewRowMessage reflects errors, then duplicate, then ready - in that pr
     "Matches #42",
   );
   assert.equal(previewRowMessage({ errors: [], duplicate: false }), "Ready");
+});
+
+test("nextOccurrence advances daily/weekly/monthly/weekdays without drifting or throwing", () => {
+  assert.equal(nextOccurrence("2026-09-14", "daily"), "2026-09-15");
+  assert.equal(nextOccurrence("2026-09-14", "weekly"), "2026-09-21");
+  // Month-end clamping: Jan 31 + 1 month must land on Feb 28 (2026 is not a
+  // leap year), never roll over into March via native Date overflow.
+  assert.equal(nextOccurrence("2026-01-31", "monthly"), "2026-02-28");
+  assert.equal(nextOccurrence("2024-01-31", "monthly"), "2024-02-29"); // 2024 is a leap year
+  assert.equal(nextOccurrence("2026-09-14", "monthly"), "2026-10-14");
+  // Weekdays: Friday 2026-09-18 skips the weekend to Monday.
+  assert.equal(nextOccurrence("2026-09-18", "weekdays"), "2026-09-21");
+  assert.equal(nextOccurrence("2026-09-14", "weekdays"), "2026-09-15");
+  assert.equal(nextOccurrence(null, "daily"), null);
+  assert.equal(nextOccurrence("2026-09-14", "yearly"), null);
+  assert.equal(nextOccurrence("2026-09-14", null), null);
+});
+
+test("classifyTaskView matches the today/upcoming/backlog/completed SQL predicates", () => {
+  const today = "2026-09-14";
+  assert.equal(classifyTaskView({ status: "completed", due_date: "2026-09-01" }, today), "completed");
+  assert.equal(classifyTaskView({ status: "open", due_date: null }, today), "backlog");
+  assert.equal(classifyTaskView({ status: "open", due_date: "2026-09-01" }, today), "today"); // overdue
+  assert.equal(classifyTaskView({ status: "open", due_date: today }, today), "today");
+  assert.equal(classifyTaskView({ status: "open", due_date: "2026-09-30" }, today), "upcoming");
+});
+
+test("isOverdue and dueDateLabel are date-safe and never flag completed tasks", () => {
+  const today = "2026-09-14";
+  assert.equal(isOverdue({ status: "open", due_date: "2026-09-01" }, today), true);
+  assert.equal(isOverdue({ status: "open", due_date: today }, today), false);
+  assert.equal(isOverdue({ status: "open", due_date: null }, today), false);
+  assert.equal(isOverdue({ status: "completed", due_date: "2026-09-01" }, today), false);
+
+  assert.equal(dueDateLabel({ status: "open", due_date: null }, today), "No due date");
+  assert.equal(dueDateLabel({ status: "open", due_date: today }, today), "Due today");
+  assert.equal(
+    dueDateLabel({ status: "open", due_date: "2026-09-01" }, today),
+    "Overdue — was due 2026-09-01",
+  );
+  assert.equal(
+    dueDateLabel({ status: "open", due_date: "2026-09-30" }, today),
+    "Due 2026-09-30",
+  );
+  assert.equal(
+    dueDateLabel({ status: "completed", due_date: "2026-09-01" }, today),
+    "Was due 2026-09-01",
+  );
+});
+
+test("emptyStateMessage and recurrenceLabel cover every view and recurrence value", () => {
+  assert.equal(emptyStateMessage("today"), "Nothing due today.");
+  assert.equal(emptyStateMessage("upcoming"), "No upcoming tasks scheduled.");
+  assert.equal(emptyStateMessage("backlog"), "Your backlog is empty.");
+  assert.equal(emptyStateMessage("completed"), "No completed tasks yet.");
+  assert.equal(recurrenceLabel("daily"), "Repeats daily");
+  assert.equal(recurrenceLabel("weekdays"), "Repeats on weekdays");
+  assert.equal(recurrenceLabel("weekly"), "Repeats weekly");
+  assert.equal(recurrenceLabel("monthly"), "Repeats monthly");
+  assert.equal(recurrenceLabel(null), "");
+});
+
+test("priorityRank orders High before Medium before Low", () => {
+  assert.ok(priorityRank("High") < priorityRank("Medium"));
+  assert.ok(priorityRank("Medium") < priorityRank("Low"));
 });

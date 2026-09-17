@@ -45,6 +45,25 @@ async function stabilizeVisuals(page) {
   });
 }
 
+function isoDate(offsetDays = 0) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
+}
+
+// The tab buttons trigger an async re-render (they fetch, then replace the
+// whole page). Clicking one and immediately interacting with the form races
+// the fetch - the old, about-to-be-replaced form can still be "actionable"
+// for a moment. aria-pressed flips only once the new render has actually
+// landed, so waiting on it is a real settle point, not an arbitrary sleep.
+async function selectTaskView(page, name) {
+  await page.getByRole("button", { name, exact: true }).click();
+  await expect(page.getByRole("button", { name, exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+}
+
 test.beforeEach(async ({ page }, testInfo) => {
   await authenticatedPage(page, testInfo);
 });
@@ -409,6 +428,107 @@ test("bulk import: CSV format, preview, and import; Import History reachable by 
   await page.getByRole("button", { name: "View Rows" }).first().click();
   await expect(page.getByText(/Batch #\d+ rows/)).toBeVisible();
   await expect(page.locator("tbody").getByText("created")).toBeVisible();
+
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+});
+
+test("tasks: backlog/today/upcoming/completed views, application linking, and recurrence", async ({
+  page,
+}, testInfo) => {
+  const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
+  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.getByRole("button", { name: "Tasks", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
+  await expect(page.getByText("Nothing due today.")).toBeVisible();
+
+  // Backlog: a task with no due date.
+  await page.getByLabel("Title").fill("Update resume project section");
+  await page.getByRole("button", { name: "Add Task", exact: true }).click();
+  await expect(page.getByText("Task added")).toBeVisible();
+  await selectTaskView(page, "Backlog");
+  await expect(page.getByText("Update resume project section")).toBeVisible();
+
+  // Today: due today, high priority.
+  await selectTaskView(page, "Today");
+  await page.getByLabel("Title").fill("Apply to five QA roles today");
+  await page.getByLabel("Due date").fill(isoDate(0));
+  await page.getByLabel("Priority").selectOption("High");
+  await page.getByRole("button", { name: "Add Task", exact: true }).click();
+  await expect(page.getByText("Task added")).toBeVisible();
+  await expect(page.getByText("Apply to five QA roles today")).toBeVisible();
+  await expect(page.getByText("Due today")).toBeVisible();
+
+  // Upcoming: due in the future - must not appear in Today.
+  await page.getByLabel("Title").fill("Practice SQL interview questions");
+  await page.getByLabel("Due date").fill(isoDate(10));
+  await page.getByRole("button", { name: "Add Task", exact: true }).click();
+  await expect(page.getByText("Task added")).toBeVisible();
+  await expect(page.getByText("Practice SQL interview questions")).toHaveCount(0);
+  await selectTaskView(page, "Upcoming");
+  await expect(page.getByText("Practice SQL interview questions")).toBeVisible();
+
+  // Complete/reopen round-trips through Completed and back to Today.
+  await selectTaskView(page, "Today");
+  await page
+    .getByRole("checkbox", { name: "Mark 'Apply to five QA roles today' complete" })
+    .check();
+  await expect(page.getByText("Apply to five QA roles today")).toHaveCount(0);
+  await selectTaskView(page, "Completed");
+  await expect(page.getByText("Apply to five QA roles today")).toBeVisible();
+  await page
+    .getByRole("checkbox", { name: "Mark 'Apply to five QA roles today' not complete" })
+    .uncheck();
+  await expect(page.getByText("Apply to five QA roles today")).toHaveCount(0);
+  await selectTaskView(page, "Today");
+  await expect(page.getByText("Apply to five QA roles today")).toBeVisible();
+
+  // Recurrence: complete a weekly task and verify exactly one next occurrence.
+  await page.getByLabel("Title").fill("Weekly recruiter check-in");
+  await page.getByLabel("Due date").fill(isoDate(0));
+  await page.getByLabel("Repeat").selectOption({ label: "Repeats weekly" });
+  await page.getByRole("button", { name: "Add Task", exact: true }).click();
+  await expect(page.getByText("Task added")).toBeVisible();
+  await page
+    .getByRole("checkbox", { name: "Mark 'Weekly recruiter check-in' complete" })
+    .check();
+  await expect(page.getByText("Weekly recruiter check-in")).toHaveCount(0);
+  await selectTaskView(page, "Upcoming");
+  await expect(page.getByText("Weekly recruiter check-in")).toBeVisible();
+  // Scoped to the list, not the whole page - the create form's own "Repeat"
+  // select also has a "Repeats weekly" option (Round 6 lesson: an unscoped
+  // text match can resolve to more than one element).
+  await expect(page.locator("#task-list").getByText("Repeats weekly")).toBeVisible();
+
+  // Application linking: create a task tied to the seeded application, then
+  // verify it appears on the application's own detail page.
+  await page.getByLabel("Title").fill("Send thank-you note");
+  await page
+    .getByLabel("Link to application")
+    .selectOption({ label: "Northstar Labs — Product Engineer" });
+  await page.getByRole("button", { name: "Add Task", exact: true }).click();
+  await expect(page.getByText("Task added")).toBeVisible();
+
+  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.getByRole("button", { name: "Applications", exact: true }).click();
+  await page.getByText("Northstar Labs").click();
+  await expect(page.getByRole("heading", { name: "Linked Tasks", exact: true })).toBeVisible();
+  await expect(page.getByText("Send thank-you note")).toBeVisible();
+  await page
+    .getByRole("checkbox", { name: "Mark 'Send thank-you note' complete" })
+    .check();
+  await expect(page.getByText("No open tasks linked to this application")).toBeVisible();
+
+  // Delete: remove the backlog item created earlier.
+  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  // Not exact: the nav-badge count ("Tasks 1 pending") is now part of this
+  // button's accessible name, since a task is due today at this point in the
+  // test - a plain substring match stays correct either way.
+  await page.getByRole("button", { name: "Tasks" }).click();
+  await selectTaskView(page, "Backlog");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByText("Update resume project section")).toHaveCount(0);
 
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);

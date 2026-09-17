@@ -1514,3 +1514,293 @@ test("Round 5: networking contact CRUD, application linkage, ownership/IDOR, and
   assert.ok(survivor, "contact must survive its application being deleted");
   assert.equal(survivor.application_id, null);
 });
+
+function isoDate(offsetDays = 0) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
+}
+
+test("Round 7: task views (backlog/today/upcoming/completed) are deterministic and date-safe", async () => {
+  const user = await register("tasksviews");
+  const backlog = await request("/api/tasks", {
+    method: "POST",
+    auth: user,
+    input: { title: "Undated task" },
+  });
+  assert.equal(backlog.status, 201);
+  assert.equal(backlog.data.status, "open");
+  assert.equal(backlog.data.priority, "Medium");
+  assert.equal(backlog.data.due_date, null);
+
+  const overdue = await request("/api/tasks", {
+    method: "POST",
+    auth: user,
+    input: { title: "Overdue task", due_date: isoDate(-3) },
+  });
+  const dueToday = await request("/api/tasks", {
+    method: "POST",
+    auth: user,
+    input: { title: "Due today task", due_date: isoDate(0) },
+  });
+  const future = await request("/api/tasks", {
+    method: "POST",
+    auth: user,
+    input: { title: "Future task", due_date: isoDate(10) },
+  });
+  assert.equal(overdue.status, 201);
+  assert.equal(dueToday.status, 201);
+  assert.equal(future.status, 201);
+
+  const backlogView = (await request("/api/tasks?view=backlog", { auth: user }))
+    .data;
+  assert.deepEqual(
+    backlogView.map((item) => item.id),
+    [backlog.data.id],
+  );
+
+  // "Today" includes overdue and due-today, ordered by due_date ascending -
+  // so overdue (older date) sorts first.
+  const todayView = (await request("/api/tasks?view=today", { auth: user }))
+    .data;
+  assert.deepEqual(
+    todayView.map((item) => item.id),
+    [overdue.data.id, dueToday.data.id],
+  );
+
+  const upcomingView = (
+    await request("/api/tasks?view=upcoming", { auth: user })
+  ).data;
+  assert.deepEqual(
+    upcomingView.map((item) => item.id),
+    [future.data.id],
+  );
+
+  const completedView = (
+    await request("/api/tasks?view=completed", { auth: user })
+  ).data;
+  assert.equal(completedView.length, 0);
+});
+
+test("Round 7: complete/reopen persists completed_at, and application linking is ownership-checked", async () => {
+  const user = await register("tasksowner"),
+    other = await register("tasksother");
+  const app = await request("/api/applications", {
+    method: "POST",
+    auth: user,
+    input: {
+      company: "Acme",
+      job_title: "QA Engineer",
+      date_applied: "2026-09-01",
+    },
+  });
+  assert.equal(app.status, 201);
+  const otherApp = await request("/api/applications", {
+    method: "POST",
+    auth: other,
+    input: { company: "Other Co", job_title: "Role", date_applied: "2026-09-01" },
+  });
+
+  // Cannot link a task to another user's application.
+  assert.equal(
+    (
+      await request("/api/tasks", {
+        method: "POST",
+        auth: user,
+        input: { title: "Bad link", application_id: otherApp.data.id },
+      })
+    ).status,
+    400,
+  );
+
+  const linked = await request("/api/tasks", {
+    method: "POST",
+    auth: user,
+    input: {
+      title: "Follow up with Acme",
+      application_id: app.data.id,
+      priority: "High",
+      due_date: isoDate(1),
+    },
+  });
+  assert.equal(linked.status, 201);
+
+  // Surfaces on the application detail endpoint's linked-tasks section.
+  const detail = await request(`/api/applications/${app.data.id}/detail`, {
+    auth: user,
+  });
+  assert.equal(detail.data.tasks.length, 1);
+  assert.equal(detail.data.tasks[0].id, linked.data.id);
+
+  const completed = await request(`/api/tasks/${linked.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { status: "completed" },
+  });
+  assert.equal(completed.status, 200);
+  assert.equal(completed.data.status, "completed");
+  assert.ok(completed.data.completed_at);
+
+  // No longer counts as an open linked task on the application.
+  const detailAfter = await request(`/api/applications/${app.data.id}/detail`, {
+    auth: user,
+  });
+  assert.equal(detailAfter.data.tasks.length, 0);
+
+  const reopened = await request(`/api/tasks/${linked.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { status: "open" },
+  });
+  assert.equal(reopened.status, 200);
+  assert.equal(reopened.data.status, "open");
+  assert.equal(reopened.data.completed_at, null);
+
+  // Ownership cannot be changed via update.
+  assert.equal(
+    (
+      await request(`/api/tasks/${linked.data.id}`, {
+        method: "PATCH",
+        auth: user,
+        input: { user_id: other.user.id },
+      })
+    ).status,
+    400,
+  );
+
+  // Deleting the linked application unlinks (SET NULL), does not delete the task.
+  assert.equal(
+    (await request(`/api/applications/${app.data.id}`, { method: "DELETE", auth: user }))
+      .status,
+    200,
+  );
+  const survivor = (await request("/api/tasks?view=upcoming", { auth: user }))
+    .data.find((item) => item.id === linked.data.id);
+  assert.ok(survivor, "task must survive its application being deleted");
+  assert.equal(survivor.application_id, null);
+
+  // IDOR: another user cannot list, update, or delete this user's tasks.
+  assert.equal(
+    (await request("/api/tasks?view=upcoming", { auth: other })).data.some(
+      (item) => item.id === linked.data.id,
+    ),
+    false,
+  );
+  assert.equal(
+    (
+      await request(`/api/tasks/${linked.data.id}`, {
+        method: "PATCH",
+        auth: other,
+        input: { title: "hijacked" },
+      })
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await request(`/api/tasks/${linked.data.id}`, {
+        method: "DELETE",
+        auth: other,
+      })
+    ).status,
+    404,
+  );
+
+  assert.equal(
+    (await request(`/api/tasks/${linked.data.id}`, { method: "DELETE", auth: user }))
+      .status,
+    200,
+  );
+  assert.equal(
+    (await request("/api/tasks?view=upcoming", { auth: user })).data.some(
+      (item) => item.id === linked.data.id,
+    ),
+    false,
+  );
+});
+
+test("Round 7: recurrence generates exactly one idempotent next occurrence, and rejects invalid input", async () => {
+  const user = await register("tasksrecur");
+
+  // Recurrence without a due date is rejected - there is no "next" to compute.
+  assert.equal(
+    (
+      await request("/api/tasks", {
+        method: "POST",
+        auth: user,
+        input: { title: "No due date", recurrence: "daily" },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request("/api/tasks", {
+        method: "POST",
+        auth: user,
+        input: { title: "Bad enum", priority: "Urgent" },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request("/api/tasks", {
+        method: "POST",
+        auth: user,
+        input: { title: "Bad recurrence", due_date: isoDate(1), recurrence: "yearly" },
+      })
+    ).status,
+    400,
+  );
+  // Mass-assignment: status/user_id are not writable via create.
+  assert.equal(
+    (
+      await request("/api/tasks", {
+        method: "POST",
+        auth: user,
+        input: { title: "Sneaky", status: "completed" },
+      })
+    ).status,
+    400,
+  );
+
+  const created = await request("/api/tasks", {
+    method: "POST",
+    auth: user,
+    input: { title: "Weekly standup notes", due_date: "2026-09-14", recurrence: "weekly" },
+  });
+  assert.equal(created.status, 201);
+
+  const firstComplete = await request(`/api/tasks/${created.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { status: "completed" },
+  });
+  assert.equal(firstComplete.status, 200);
+  assert.ok(firstComplete.data.created_next_task_id, "must create the next occurrence");
+
+  const nextTask = (await request("/api/tasks?view=upcoming", { auth: user }))
+    .data.find((item) => item.id === firstComplete.data.created_next_task_id);
+  assert.ok(nextTask, "next occurrence must be visible");
+  assert.equal(nextTask.due_date, "2026-09-21");
+  assert.equal(nextTask.recurrence, "weekly");
+  assert.equal(nextTask.title, "Weekly standup notes");
+  assert.equal(nextTask.status, "open");
+
+  // Idempotency: completing the same (already-completed) task again must not
+  // create a second next occurrence.
+  const secondComplete = await request(`/api/tasks/${created.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { status: "completed" },
+  });
+  assert.equal(secondComplete.status, 200);
+  assert.equal(secondComplete.data.created_next_task_id, null);
+  const allTasks = (await request("/api/tasks?view=all", { auth: user })).data;
+  assert.equal(
+    allTasks.filter((item) => item.title === "Weekly standup notes").length,
+    1,
+    "only the surviving open next-occurrence should remain open",
+  );
+});
