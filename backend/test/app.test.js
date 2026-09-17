@@ -2080,3 +2080,254 @@ test("Round 8: weekly habits sum progress across the whole week, not one calenda
   assert.equal(summary.period_value, 2);
   assert.equal(summary.completed, false);
 });
+
+test("Round 9: note CRUD, validation, IDOR, mass-assignment protection, and application linking", async () => {
+  const user = await register("notesowner"),
+    other = await register("notesother");
+  const app = await request("/api/applications", {
+    method: "POST",
+    auth: user,
+    input: { company: "Acme", job_title: "QA Engineer", date_applied: "2026-09-01" },
+  });
+  const otherApp = await request("/api/applications", {
+    method: "POST",
+    auth: other,
+    input: { company: "Other Co", job_title: "Role", date_applied: "2026-09-01" },
+  });
+
+  // A completely blank note (no title, no body) is rejected.
+  assert.equal(
+    (await request("/api/notes", { method: "POST", auth: user, input: {} })).status,
+    400,
+  );
+  // Invalid note_type rejected.
+  assert.equal(
+    (
+      await request("/api/notes", {
+        method: "POST",
+        auth: user,
+        input: { title: "X", note_type: "diary" },
+      })
+    ).status,
+    400,
+  );
+  // Cannot link to another user's application.
+  assert.equal(
+    (
+      await request("/api/notes", {
+        method: "POST",
+        auth: user,
+        input: { title: "Bad link", application_id: otherApp.data.id },
+      })
+    ).status,
+    400,
+  );
+  // Mass assignment: user_id is not writable via create.
+  assert.equal(
+    (
+      await request("/api/notes", {
+        method: "POST",
+        auth: user,
+        input: { title: "Sneaky", user_id: other.user.id },
+      })
+    ).status,
+    400,
+  );
+  // A note with only a body (no title) is valid.
+  const bodyOnly = await request("/api/notes", {
+    method: "POST",
+    auth: user,
+    input: { body: "Just some thoughts, no title." },
+  });
+  assert.equal(bodyOnly.status, 201);
+  assert.equal(bodyOnly.data.title, null);
+
+  const note = await request("/api/notes", {
+    method: "POST",
+    auth: user,
+    input: {
+      title: "Acme interview reflection",
+      body: "Went well overall.",
+      note_type: "interview",
+      application_id: app.data.id,
+      pinned: true,
+    },
+  });
+  assert.equal(note.status, 201);
+  assert.equal(note.data.note_type, "interview");
+  assert.equal(note.data.pinned, 1);
+  assert.equal(note.data.application_company, "Acme");
+
+  // Surfaces on the application detail endpoint.
+  const detail = await request(`/api/applications/${app.data.id}/detail`, {
+    auth: user,
+  });
+  assert.equal(detail.data.notes.length, 1);
+  assert.equal(detail.data.notes[0].id, note.data.id);
+
+  // Edit.
+  const edited = await request(`/api/notes/${note.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { body: "Went well overall. Sent a thank-you note." },
+  });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.data.title, "Acme interview reflection"); // unchanged
+  assert.match(edited.data.body, /thank-you/);
+
+  // Clearing both title and body via update is rejected (merged-record check).
+  assert.equal(
+    (
+      await request(`/api/notes/${note.data.id}`, {
+        method: "PATCH",
+        auth: user,
+        input: { title: "", body: "" },
+      })
+    ).status,
+    400,
+  );
+
+  // Ownership cannot be changed via update.
+  assert.equal(
+    (
+      await request(`/api/notes/${note.data.id}`, {
+        method: "PATCH",
+        auth: user,
+        input: { user_id: other.user.id },
+      })
+    ).status,
+    400,
+  );
+
+  // IDOR: another user cannot fetch, list, update, or delete this user's note.
+  assert.equal((await request(`/api/notes/${note.data.id}`, { auth: other })).status, 404);
+  assert.equal(
+    (await request("/api/notes", { auth: other })).data.some(
+      (item) => item.id === note.data.id,
+    ),
+    false,
+  );
+  assert.equal(
+    (
+      await request(`/api/notes/${note.data.id}`, {
+        method: "PATCH",
+        auth: other,
+        input: { title: "hijacked" },
+      })
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await request(`/api/notes/${note.data.id}`, { method: "DELETE", auth: other })
+    ).status,
+    404,
+  );
+
+  // Deleting the linked application unlinks (SET NULL), does not delete the note.
+  assert.equal(
+    (await request(`/api/applications/${app.data.id}`, { method: "DELETE", auth: user }))
+      .status,
+    200,
+  );
+  const survivor = (await request(`/api/notes/${note.data.id}`, { auth: user })).data;
+  assert.equal(survivor.application_id, null);
+
+  // Delete.
+  assert.equal(
+    (await request(`/api/notes/${note.data.id}`, { method: "DELETE", auth: user }))
+      .status,
+    200,
+  );
+  assert.equal((await request(`/api/notes/${note.data.id}`, { auth: user })).status, 404);
+});
+
+test("Round 9: search, type/pinned/application filters, previews, and stored XSS-shaped content is inert", async () => {
+  const user = await register("notessearch");
+  const app = await request("/api/applications", {
+    method: "POST",
+    auth: user,
+    input: { company: "Globex", job_title: "Engineer", date_applied: "2026-09-01" },
+  });
+
+  const longBody = "Sunny weather. ".repeat(20) + "The interview covered system design.";
+  const journal = await request("/api/notes", {
+    method: "POST",
+    auth: user,
+    input: { note_type: "daily_journal", entry_date: "2026-09-14", body: longBody },
+  });
+  assert.equal(journal.status, 201);
+  // List responses return a bounded preview, not the full body.
+  const listed = (await request("/api/notes", { auth: user })).data.find(
+    (item) => item.id === journal.data.id,
+  );
+  assert.equal(listed.body, undefined);
+  assert.ok(listed.body_preview.length <= 161); // 160 chars + ellipsis
+  assert.ok(listed.body_preview.endsWith("…"));
+  // The full body is still available via the single-note endpoint.
+  assert.equal(
+    (await request(`/api/notes/${journal.data.id}`, { auth: user })).data.body,
+    longBody,
+  );
+
+  const research = await request("/api/notes", {
+    method: "POST",
+    auth: user,
+    input: {
+      title: "Globex company research",
+      body: "Series B, remote-friendly.",
+      note_type: "company_research",
+      application_id: app.data.id,
+      pinned: true,
+    },
+  });
+  assert.equal(research.status, 201);
+
+  const xssTitle = "<script>alert(1)</script>";
+  const xssBody = "<img src=x onerror=alert(1)> and \"quotes\" and 'ticks'";
+  const malicious = await request("/api/notes", {
+    method: "POST",
+    auth: user,
+    input: { title: xssTitle, body: xssBody },
+  });
+  assert.equal(malicious.status, 201);
+  // Stored and returned exactly as text - the API never interprets it.
+  assert.equal(malicious.data.title, xssTitle);
+  assert.equal(malicious.data.body, xssBody);
+
+  // Search matches title OR body, case-insensitively.
+  const byTitle = (await request("/api/notes?search=globex", { auth: user })).data;
+  assert.ok(byTitle.some((item) => item.id === research.data.id));
+  const byBody = (await request("/api/notes?search=system+design", { auth: user }))
+    .data;
+  assert.ok(byBody.some((item) => item.id === journal.data.id));
+
+  // Type filter.
+  const journalOnly = (
+    await request("/api/notes?type=daily_journal", { auth: user })
+  ).data;
+  assert.ok(journalOnly.every((item) => item.note_type === "daily_journal"));
+  assert.ok(journalOnly.some((item) => item.id === journal.data.id));
+
+  // Pinned filter.
+  const pinnedOnly = (await request("/api/notes?pinned=true", { auth: user })).data;
+  assert.ok(pinnedOnly.every((item) => item.pinned === 1));
+  assert.ok(pinnedOnly.some((item) => item.id === research.data.id));
+
+  // Application filter.
+  const forApp = (
+    await request(`/api/notes?application_id=${app.data.id}`, { auth: user })
+  ).data;
+  assert.deepEqual(
+    forApp.map((item) => item.id),
+    [research.data.id],
+  );
+
+  // Unpin.
+  const unpinned = await request(`/api/notes/${research.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { pinned: false },
+  });
+  assert.equal(unpinned.data.pinned, 0);
+});
