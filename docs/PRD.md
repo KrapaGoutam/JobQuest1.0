@@ -1,6 +1,9 @@
 # JobQuest — Product Requirements & Phased Roadmap
 
-Status: **draft, awaiting review** — no implementation has started against this roadmap.
+Status: Rounds 2–7 implemented (see `docs/FEATURE_UPGRADE_N.md` per round and
+[brain/PROJECT_STATE.md](../brain/PROJECT_STATE.md) for current state); Round 8 onward
+not started. This status line and the "nothing implemented" note below went stale for
+several rounds before being corrected in Round 7 — worth keeping current going forward.
 See [CURRENT_STATE_AUDIT.md](../CURRENT_STATE_AUDIT.md) for the discovery this is based
 on, and [brain/DECISIONS.md](../brain/DECISIONS.md) for the decisions behind it.
 
@@ -148,6 +151,6 @@ candidates) as a trial, before deciding whether it earns a permanent place here.
 
 ## 6. Next safe action
 
-Nothing below this line has been implemented. Pick a starting round (Round 2 is the
-recommended first move — it's low-risk, infra-only, and unblocks every product round
-after it) and confirm before a feature branch is created or any code changes begin.
+Rounds 2–7 are implemented (see [brain/AGENT_HANDOFF_LOG.md](../brain/AGENT_HANDOFF_LOG.md)
+for the round-by-round history). Round 8 (habit tracker) is next up per the table above,
+pending the user's explicit go-ahead — no round starts automatically.

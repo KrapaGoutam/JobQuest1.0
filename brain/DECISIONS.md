@@ -132,3 +132,28 @@ preferable to drag-and-drop for this feature, and a server-side adjacent swap ca
 produce a colliding/duplicate position value (a client-sent arbitrary position could).
 No new dependency, no new interaction pattern to learn — reuses one already in the
 codebase.
+
+## 2026-09-17 — Round 7: Tasks is a distinct domain from the pre-existing Reminders, not an extension of it
+
+**Decision**: build a genuinely new `tasks` table/API/UI rather than extending the
+existing `reminders`/`reminder_categories` feature (Feature Upgrade 1) to also cover
+undated backlog work. Made with the user's explicit input mid-round, after the audit
+surfaced the overlap (see `docs/FEATURE_UPGRADE_7.md` "Domain Boundaries" and "Existing
+Related Functionality" for the full reconciliation).
+
+**Why**: the Round 7 brief's premise ("genuinely net-new, no `tasks` table exists") was
+correct about the table, but the brief was written without visibility into `reminders`,
+which already covers most of the same surface — due date, priority, status, completion,
+a derived Overdue/Due Today/Upcoming state, and even automatic application-linking (a
+follow-up's creation already auto-creates a reminder). The one thing `reminders`
+structurally cannot do is represent an undated task: its `due_date` column is `NOT
+NULL`, by design, because reminders exist to notify you of something at a specific
+time — extending that column to nullable and bolting Backlog/Inbox semantics onto a
+mature, tested, nav-visible, dashboard-integrated feature would have been a riskier,
+larger change than standing up one new table, for a smaller net simplification. Two
+small, single-purpose features stay easier to reason about than one feature doing two
+jobs. No data migrates between the two; they remain independent going forward unless a
+future round finds a concrete reason to unify them.
+
+**Rejected alternative**: extend `reminders` (nullable `due_date`, dual-purpose
+"Reminder Center" as the Tasks workspace) — considered, rejected for the reasons above.
