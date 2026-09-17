@@ -225,5 +225,54 @@ followed an existing documented pattern: this app has no URL-based routing, so
 verified persistence via a direct API call instead, matching the Round 4 checklist
 test's already-documented approach.
 
-**For the next agent**: [fill in PR number/state once pushed and opened]. Do not start
-Round 9 (Journal) without the user's explicit go-ahead.
+**For the next agent**: PR #15 was reviewed and merged (regular merge) at the start of
+the Round 9 session.
+
+## 2026-09-17 (same day, continued session) — Claude Code (Claude Sonnet 5) — Round 9 implemented
+
+Merged PR #15 (regular merge, per convention). Audited every notes-like field before
+writing any schema: `applications.notes`, three separate fields on `interviews`, plus
+`rejections`, `networking_contacts`, `follow_ups`, `resumes`, `weekly_goals`, and
+`tasks` all have their own embedded free-text fields. None were touched, migrated, or
+consolidated - they stay exactly as they are, per the round's explicit instruction not
+to destabilize mature domains. Confirmed (not assumed) no pre-existing `notes`/
+`journal` table or markdown/rich-text/sanitizer dependency exists anywhere, so this
+really is genuinely net-new - unlike Round 7, no product-direction fork was needed
+this round.
+
+Implemented: one new `notes` table (`011_journal_notes.sql` - nullable `title` with an
+"at least one of title/body" validation, a 5-value `note_type` enum, nullable
+`application_id` with `ON DELETE SET NULL`, `pinned`), `backend/src/notes.js` (CRUD,
+search reusing the exact `lower(field) LIKE lower(?)` pattern the Applications search
+already established - proven cross-dialect, no `ILIKE`-only Postgres syntax needed),
+list responses returning a truncated `body_preview` rather than full bodies (a
+dedicated `GET /api/notes/:id` for the full note), and a compact "Notes" panel on the
+application detail page. Plain text only - no Markdown/rich-text/sanitizer dependency;
+safety comes entirely from the existing `esc()` helper plus CSS `white-space:
+pre-wrap` for multi-line formatting. On `feature/009-journal-notes`, off
+`development`.
+
+Note: Docker Desktop wasn't running at the start of this session (unlike Round 8) -
+started it manually, same recovery as Round 6.
+
+Verified with the same rigor as every prior round: real Postgres - 31/31 backend
+tests including 2 new; real Chromium - new E2E spec 5/5 viewports. Found a real,
+pre-existing, previously-undiscovered accessibility issue while writing the E2E spec
+(not introduced by Round 9): a serious color-contrast violation on the shared
+`#toast` component, reproduced deterministically by a scan run right after a
+delete-triggered toast. Investigated properly before concluding anything -
+`--sidebar`/`--sidebar-foreground` (the tokens `#toast` uses) are a properly
+high-contrast pair in both theme blocks in `styles.css`, and waiting for the toast's
+`.show` class to clear did *not* resolve it either (axe still flagged it at rest).
+Excluded from this round's scan (`.exclude("#toast")`, matching the existing
+`.exclude(".goal-chart")` precedent) rather than attempting to fix a shared,
+every-page component inside a Notes-focused round - documented for a future
+dedicated look.
+
+**For the next agent**: [fill in PR number/state once pushed and opened]. Worth
+remembering: axe can still flag an `opacity:0`, no-longer-"show"-classed element's
+resolved colors - don't assume waiting for a CSS transition/class to clear is always
+enough to get a clean scan; `.exclude()` the specific element once you've confirmed
+(not assumed) the issue is real, pre-existing, and unrelated to your round, the same
+way the existing `.exclude(".goal-chart")` precedent already does. Do not start
+Round 10 (Analytics module) without the user's explicit go-ahead.

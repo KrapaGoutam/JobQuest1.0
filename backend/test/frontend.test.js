@@ -45,6 +45,12 @@ import {
   previewRowMessage,
 } from "../../frontend/src/features/import-export/format.js";
 import { nextOccurrence, classifyTaskView } from "../src/tasks.js";
+import { notePreview, validateNote } from "../src/notes.js";
+import {
+  typeLabel,
+  displayTitle,
+  emptyStateMessage as notesEmptyStateMessage,
+} from "../../frontend/src/features/notes/format.js";
 import {
   computeStreak,
   isDueToday,
@@ -655,4 +661,61 @@ test("validateProgress rejects negative/non-integer values and future dates", ()
   const ok = validateProgress({ completion_date: "2020-01-01", value: 5 });
   assert.deepEqual(ok.errors, []);
   assert.equal(ok.data.value, 5);
+});
+
+test("notePreview truncates long bodies with an ellipsis and passes short ones through", () => {
+  assert.equal(notePreview("Short note."), "Short note.");
+  assert.equal(notePreview(""), "");
+  assert.equal(notePreview(null), "");
+  const long = "a".repeat(200);
+  const preview = notePreview(long, 160);
+  assert.equal(preview.length, 161); // 160 chars + the ellipsis character
+  assert.ok(preview.endsWith("…"));
+});
+
+test("displayTitle falls back to entry_date, then 'Untitled note', never leaving a note unlabeled", () => {
+  assert.equal(displayTitle({ title: "Acme reflection" }), "Acme reflection");
+  assert.equal(displayTitle({ title: null, entry_date: "2026-09-14" }), "2026-09-14");
+  assert.equal(displayTitle({ title: null, entry_date: null }), "Untitled note");
+  assert.equal(displayTitle({ title: "", entry_date: "" }), "Untitled note");
+});
+
+test("typeLabel and emptyStateMessage cover every note type and view", () => {
+  assert.equal(typeLabel("daily_journal"), "Daily Journal");
+  assert.equal(typeLabel("company_research"), "Company Research");
+  assert.equal(typeLabel("unknown_type"), "unknown_type");
+  assert.equal(notesEmptyStateMessage("all"), "No notes yet.");
+  assert.equal(notesEmptyStateMessage("daily_journal"), "No journal entries yet.");
+  assert.equal(
+    notesEmptyStateMessage("application"),
+    "No linked notes for this application.",
+  );
+});
+
+test("validateNote rejects a fully blank note, unknown/forbidden fields, and oversized input", () => {
+  const blank = validateNote({});
+  assert.ok(blank.errors.length > 0);
+
+  const forbidden = validateNote({ title: "X", user_id: 5 });
+  assert.ok(forbidden.errors.some((message) => message.includes("user_id")));
+
+  const unknown = validateNote({ title: "X", color: "red" });
+  assert.ok(unknown.errors.some((message) => message.includes("Unknown field")));
+
+  const oversizedTitle = validateNote({ title: "x".repeat(201) });
+  assert.ok(oversizedTitle.errors.length > 0);
+
+  const oversizedBody = validateNote({ body: "x".repeat(20_001) });
+  assert.ok(oversizedBody.errors.length > 0);
+
+  const badType = validateNote({ title: "X", note_type: "diary" });
+  assert.ok(badType.errors.length > 0);
+
+  const bodyOnly = validateNote({ body: "Just a body, no title." });
+  assert.deepEqual(bodyOnly.errors, []);
+  assert.equal(bodyOnly.data.title, undefined);
+
+  const ok = validateNote({ title: "Reflection", body: "Went well." });
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.data.note_type, "general");
 });
