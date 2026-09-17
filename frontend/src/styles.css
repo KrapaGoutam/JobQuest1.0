@@ -922,12 +922,32 @@ a {
   box-shadow: var(--shadow);
   opacity: 0;
   transform: translateY(1rem);
-  transition: 0.2s;
+  /* visibility stays hidden while at rest - its own colors are already a
+     correctly high-contrast pair (verified: computed color/background are
+     the theme's real --sidebar/--sidebar-foreground tokens, not degraded
+     ones), but role="status"/aria-live="polite" (see the markup this rule
+     applies to) keeps a live region in the accessibility tree even at
+     opacity:0, so an unscoped contrast scan still evaluates it - a false
+     positive for an element that's genuinely not meant to be perceived at
+     rest. The delayed visibility transition is the standard fix: it goes
+     visible immediately on show (0s delay) and stays visible for the full
+     fade-out before switching back to hidden, so the animation is
+     unaffected but the resting state is now genuinely non-perceivable. */
+  visibility: hidden;
+  transition:
+    opacity 0.2s,
+    transform 0.2s,
+    visibility 0s linear 0.2s;
   pointer-events: none;
 }
 #toast.show {
   opacity: 1;
   transform: none;
+  visibility: visible;
+  transition:
+    opacity 0.2s,
+    transform 0.2s,
+    visibility 0s linear 0s;
 }
 pre.example {
   white-space: pre-wrap;
@@ -2047,7 +2067,14 @@ tbody td.num {
   border-bottom: 1px solid var(--line);
 }
 .calendar-day.outside {
-  opacity: 0.45;
+  /* Not opacity: an out-of-month day still needs to be legible (it's real,
+     readable content - just de-emphasized relative to the current month),
+     and opacity-based fading of real text is exactly what produced a real,
+     previously-undiscovered AA color-contrast failure here (2.88:1 against
+     white, needs 4.5:1) - found by the final round's broader accessibility
+     sweep. --muted-foreground is the same already-vetted de-emphasis color
+     the rest of the app uses (see .muted) - solid, not blended-to-fade. */
+  color: var(--muted-foreground);
 }
 .calendar-day time {
   display: block;

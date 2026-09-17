@@ -135,15 +135,101 @@ implemented reflexively.
 
 ## UI/UX Audit
 
-_Filled in during Phase 10C._
+Reviewed the design-token architecture (`styles.css`'s header comment: "Canonical
+tokens are defined once... every rule in this file should read colors through these
+custom properties") and found it already well-normalized — this app is **dark-themed
+by default** (`:root` is the dark palette; `:root[data-theme="light"]` is the
+override, the reverse of the more common light-first pattern), with a real oklch
+`@supports` fallback layer and a persistent-dark sidebar token set deliberately kept
+outside the per-theme overrides. No raw hard-coded hex colors were found scattered
+outside the token system during this pass. Given the round's explicit instruction not
+to redesign into a different application, and that the existing system is already
+coherent, this phase focused on **finding and fixing real, evidence-based
+inconsistencies** rather than a cosmetic pass — see the two findings below, both
+uncovered by the broader accessibility sweep (Phase 10D), not guessed at.
 
-## Design-System Audit
+`users.week_start` (stored since Round 3, first actually *consumed* by Habits in
+Round 8) is still not honored by the calendar's week view (hardcoded Monday-first via
+`(current.getDay() + 6) % 7`) or the goal-snapshot weekly period walker. Evaluated
+fixing this here; deliberately **not changed this round** — both of those are mature,
+independently-tested features, and wiring a third caller sight-unseen this late in an
+already-large round is exactly the "risky global replacement without visual review"
+the round's own instructions warn against. Left as documented, prioritized debt (see
+Remaining PRD Gap Audit).
 
-_Filled in during Phase 10C._
+## Design-System Findings (fixed)
+
+- **`.calendar-day.outside` used `opacity: 0.45` to de-emphasize out-of-month days** —
+  this fades *real, readable text* rather than hiding decorative content, and
+  produced a genuine AA color-contrast failure (2.88:1 against white, needs 4.5:1),
+  found by the accessibility sweep below. Fixed by switching to
+  `color: var(--muted-foreground)` — the same already-vetted, solid de-emphasis color
+  `.muted` uses everywhere else in the app, rather than an opacity blend.
+- **`#toast` used `opacity`/`transform` alone to hide itself at rest** — its
+  `role="status" aria-live="polite"` live region never left the accessibility tree,
+  so an axe contrast scan evaluated its resting-state colors even though a sighted
+  user would never perceive them (this was the Round 9 finding, resolved this round —
+  see Accessibility Audit below for the full diagnosis).
 
 ## Accessibility Audit
 
-_Filled in during Phase 10D._
+Every existing `.exclude(...)` pattern in the E2E suite was re-investigated, per the
+round's explicit instruction not to carry an exclusion forward without re-justifying
+it:
+
+| Exclusion | Origin | Investigation | Disposition |
+|---|---|---|---|
+| `.exclude(".goal-chart")` (Applications test) | Unknown/historical | Removed and re-ran unscoped: **zero violations**. The scan runs on the Applications page, where the Dashboard's `daily-goal-chart` widget was never present in the DOM being scanned. | **Removed** — was already obsolete. |
+| `.exclude(".goal-chart")` (Networking test) | Unknown/historical | Same investigation, same result (scan runs on the Networking page). | **Removed** — was already obsolete. |
+| `.exclude("#toast")` (Notes/Analytics/Rejections tests, added in Round 9) | Round 9's own investigation, left unresolved on purpose | Root-caused this round (see below) and fixed. | **Removed** — fix verified by re-running all three scans unscoped. |
+
+### The required `#toast` fix
+
+Diagnosed properly rather than guessed at: a direct runtime check
+(`getComputedStyle` on the live element) showed `#toast`'s actual `color`/
+`background-color` were always the correct, high-contrast `--sidebar-foreground`/
+`--sidebar` pair (`oklch(0.88 ...)` on `oklch(0.175 ...)`, a large lightness gap) —
+**the colors were never the problem**. The real defect: `#toast` relied on
+`opacity: 0` (plus `transform`/`pointer-events: none`) alone to hide itself at rest,
+with no `visibility: hidden`/`display: none`. Because it carries
+`role="status" aria-live="polite"`, it must stay in the DOM to be announced by screen
+readers when it changes — which also means axe correctly keeps evaluating its
+contrast even while it's meant to be visually imperceptible, since nothing marks it
+as such to assistive tech. Fixed with the standard delayed-`visibility` transition
+idiom: `visibility` switches to `visible` with **zero delay** on show (so the fade-in
+animation is unaffected) and back to `hidden` only **after** the fade-out transition
+finishes (`transition: visibility 0s linear 0.2s` on the resting rule) — the toast is
+now genuinely non-perceivable at rest, and fully readable while shown. Verified both
+states directly: a dedicated regression test asserts `visibility: hidden` at rest
+(scan clean) and `visibility: visible` / `opacity: 1` while a real toast is showing
+(scan still clean) — not just proving the rest of the page is unaffected.
+
+### `#detail-stage` (Round 4 debt, still open)
+
+The application detail page's stage-change `<select>` had no accessible name at all
+(no wrapped `<label>`, no `aria-label`) — a real, previously-flagged-but-unfixed
+WCAG 4.1.2 violation. Fixed with `aria-label="Change application stage"`.
+
+### Broader accessibility sweep
+
+Every prior round's accessibility scan was feature-scoped (Applications, Checklist,
+Networking, Import, Tasks, Habits, Notes, Analytics, the new Rejections-edit test).
+This round added a sweep across every remaining top-level page that had never been
+scanned at all: Calendar, Reminder Center, Resumes, Goal History, Aging Report,
+Stage Analytics, Exports, Settings. It found one more real, previously-undiscovered
+issue beyond the calendar contrast fix already covered above:
+
+- **`#reminder-filter` (the Reminder Center's category filter `<select>`) had no
+  accessible label whatsoever** — critical severity (no label, no `aria-label`, no
+  `aria-labelledby`, no title). Fixed with `aria-label="Filter by category"`.
+
+After both fixes, the full sweep — 8 pages, all 5 viewport projects — reports **zero
+violations**.
+
+### Remaining exclusions
+
+None. Every accessibility-test exclusion in the suite was either removed as obsolete
+or resolved at the root this round.
 
 ## Security Audit
 

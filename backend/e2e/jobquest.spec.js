@@ -120,9 +120,11 @@ test("applications table controls, filter dialog, preview drawer, and accessibil
       .getByText("Product v3"),
   ).toBeVisible();
   await page.keyboard.press("Escape");
-  const results = await new AxeBuilder({ page })
-    .exclude(".goal-chart")
-    .analyze();
+  // The .goal-chart exclusion this scan used to carry was audited and found
+  // obsolete: this scan runs on the Applications page, where that Dashboard
+  // widget was never even present in the DOM being scanned - confirmed by
+  // running unscoped (zero violations either way).
+  const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
 
@@ -413,7 +415,9 @@ test("networking contacts: link to an application, edit, show on application det
     page.locator("tbody").getByText("Northstar Labs — Product Engineer"),
   ).toHaveCount(0);
 
-  const results = await new AxeBuilder({ page }).exclude(".goal-chart").analyze();
+  // Same .goal-chart audit as the Applications test above - obsolete on
+  // this (Networking) page too.
+  const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
 
@@ -835,23 +839,9 @@ test("notes: create/edit/delete, journal entries, search, application linking, p
   ).toBeVisible();
   await expect(page.getByText("Resume ideas")).toHaveCount(0);
 
-  // #toast is excluded here (same precedent as the existing .goal-chart
-  // exclusion in the Applications test above) - a real, pre-existing,
-  // previously-undiscovered color-contrast issue on the shared toast
-  // component, reproduced deterministically and confirmed unrelated to this
-  // round: styles.css defines --sidebar/--sidebar-foreground (the colors
-  // #toast uses) as a properly high-contrast dark-navy/light-gray pair in
-  // both the light and dark theme blocks, so the near-white-on-near-white
-  // colors axe reports here are not that pair at all - axe still evaluates
-  // #toast's contrast even at rest (opacity:0, no "show" class - confirmed
-  // by re-testing after explicitly waiting for "show" to clear), which
-  // points to a CSS custom-property resolution quirk in how this specific
-  // headless-browser context resolves the toast's theme tokens, not
-  // something introduced by Round 9's own markup or CSS. Fixing a shared,
-  // every-page component's theme-token resolution is real, separate,
-  // higher-risk work - documented in docs/FEATURE_UPGRADE_9.md Known Debt
-  // rather than attempted here.
-  const results = await new AxeBuilder({ page }).exclude("#toast").analyze();
+  // #toast's Round 9 color-contrast finding is fixed as of the final round
+  // (see styles.css) - no exclusion needed here anymore.
+  const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
 
@@ -890,7 +880,7 @@ test("analytics: overview, pipeline, source, and resume breakdowns render with r
     page.getByRole("heading", { name: "Analytics", exact: true }),
   ).toBeVisible();
 
-  const results = await new AxeBuilder({ page }).exclude("#toast").analyze();
+  const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
 
@@ -929,6 +919,69 @@ test("rejections: edit was a Round 5 known gap (backend already supported PATCH,
   expect(saved).toBeTruthy();
   expect(saved.eligible_for_reapplication).toBe(0);
 
-  const results = await new AxeBuilder({ page }).exclude("#toast").analyze();
+  const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
+});
+
+test("toast: readable while visible, and genuinely non-perceivable at rest (Round 9 contrast finding, fixed)", async ({
+  page,
+}, testInfo) => {
+  const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
+  // Round 9 found a real color-contrast violation on #toast; investigation
+  // during the final round showed the toast's own colors were always a
+  // correctly high-contrast pair - the real defect was that #toast relied
+  // on opacity alone to hide itself, so its role="status"/aria-live="polite"
+  // live region stayed in the accessibility tree (and subject to contrast
+  // scanning) even while resting at opacity:0. Fixed with a visibility
+  // transition (styles.css). This test scans the toast in both states
+  // directly, rather than only proving the rest of the page is clean.
+  await expect(page.locator("#toast")).toHaveCSS("visibility", "hidden");
+  let results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations.filter((item) => item.id === "color-contrast")).toEqual(
+    [],
+  );
+
+  // The sidebar's own theme-cycle button is the simplest reliable toast
+  // trigger anywhere in the app (saveTheme() calls toast() directly).
+  if (narrow) await openMobileNav(page);
+  await page.getByRole("button", { name: "Change color theme" }).click();
+  await expect(page.locator("#toast")).toHaveCSS("visibility", "visible");
+  await expect(page.locator("#toast")).toHaveCSS("opacity", "1");
+  results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations.filter((item) => item.id === "color-contrast")).toEqual(
+    [],
+  );
+});
+
+test("accessibility sweep: pages with no prior dedicated scan", async ({
+  page,
+}, testInfo) => {
+  // Prior rounds' accessibility scans are all feature-scoped (Applications,
+  // Checklist, Networking, Import, Tasks, Habits, Notes, Analytics,
+  // Rejections). This is the broader pass the final round asks for: every
+  // remaining top-level page that has never been scanned at all. Waiting on
+  // the clicked nav button's own "active" class (set by app.js's navButton
+  // template once state.page actually matches) is a real settle signal for
+  // any of these pages, without needing to know each one's exact heading
+  // text up front.
+  const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
+  const pages = [
+    "Calendar",
+    "Reminder Center",
+    "Resumes",
+    "Goal History",
+    "Aging Report",
+    "Stage Analytics",
+    "Exports",
+    "Settings",
+  ];
+  for (const label of pages) {
+    if (narrow) await openMobileNav(page);
+    await page.getByRole("button", { name: label, exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: label, exact: true }),
+    ).toHaveClass(/\bactive\b/);
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations, `violations on "${label}"`).toEqual([]);
+  }
 });
