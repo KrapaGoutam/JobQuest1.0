@@ -435,6 +435,12 @@ export async function handleAdvanced(context, helpers) {
         ),
         [app.id],
       ),
+      tasks: rows(
+        db.prepare(
+          "SELECT * FROM tasks WHERE application_id=? AND status='open' ORDER BY due_date IS NULL,due_date,id DESC",
+        ),
+        [app.id],
+      ),
       related,
       previous:
         db
@@ -1480,6 +1486,9 @@ export async function handleAdvanced(context, helpers) {
           [userId],
         ),
         tags: rows(db.prepare("SELECT * FROM tags WHERE user_id=?"), [userId]),
+        tasks: rows(db.prepare("SELECT * FROM tasks WHERE user_id=?"), [
+          userId,
+        ]),
       };
       return (
         sendDownload(
@@ -1503,6 +1512,7 @@ export async function handleAdvanced(context, helpers) {
       networking: "networking_contacts",
       reminders: "reminders",
       goals: "goal_snapshots",
+      tasks: "tasks",
     };
     let items;
     if (tables[type])

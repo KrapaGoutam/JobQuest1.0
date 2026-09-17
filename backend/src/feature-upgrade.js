@@ -599,7 +599,7 @@ export async function handleFeatureUpgrade(context, helpers) {
       today = new Date().toISOString().slice(0, 10);
     const counts = db
       .prepare(
-        "SELECT (SELECT count(*) FROM reminders WHERE user_id=? AND due_date<=? AND status NOT IN ('Completed','Cancelled')) due_reminders,(SELECT count(*) FROM follow_ups WHERE user_id=? AND due_date<? AND status NOT IN ('Completed','Cancelled')) overdue_follow_ups,(SELECT count(*) FROM interviews WHERE user_id=? AND substr(scheduled_at,1,10) BETWEEN ? AND ?) upcoming_interviews",
+        "SELECT (SELECT count(*) FROM reminders WHERE user_id=? AND due_date<=? AND status NOT IN ('Completed','Cancelled')) due_reminders,(SELECT count(*) FROM follow_ups WHERE user_id=? AND due_date<? AND status NOT IN ('Completed','Cancelled')) overdue_follow_ups,(SELECT count(*) FROM interviews WHERE user_id=? AND substr(scheduled_at,1,10) BETWEEN ? AND ?) upcoming_interviews,(SELECT count(*) FROM tasks WHERE user_id=? AND status='open' AND due_date IS NOT NULL AND due_date<=?) tasks_due_today",
       )
       .get(
         id,
@@ -609,6 +609,8 @@ export async function handleFeatureUpgrade(context, helpers) {
         id,
         today,
         new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+        id,
+        today,
       );
     return (json(response, 200, counts), true);
   }
