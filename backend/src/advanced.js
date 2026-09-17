@@ -441,6 +441,12 @@ export async function handleAdvanced(context, helpers) {
         ),
         [app.id],
       ),
+      notes: rows(
+        db.prepare(
+          "SELECT * FROM notes WHERE application_id=? ORDER BY pinned DESC,updated_at DESC",
+        ),
+        [app.id],
+      ),
       related,
       previous:
         db
@@ -1496,6 +1502,9 @@ export async function handleAdvanced(context, helpers) {
           db.prepare("SELECT * FROM habit_logs WHERE user_id=?"),
           [userId],
         ),
+        notes: rows(db.prepare("SELECT * FROM notes WHERE user_id=?"), [
+          userId,
+        ]),
       };
       return (
         sendDownload(
@@ -1521,6 +1530,7 @@ export async function handleAdvanced(context, helpers) {
       goals: "goal_snapshots",
       tasks: "tasks",
       habits: "habits",
+      notes: "notes",
     };
     let items;
     if (tables[type])
