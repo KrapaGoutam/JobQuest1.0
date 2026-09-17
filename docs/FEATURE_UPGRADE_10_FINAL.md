@@ -299,7 +299,50 @@ No CRITICAL or HIGH findings. Two INFORMATIONAL notes, neither blocking:
 
 ## Performance Audit
 
-_Filled in during Phase 10F._
+**N+1 audit**: traced every list-returning query path added or touched this revamp
+(Tasks, Habits, Notes, Analytics, plus the pre-existing Dashboard/Applications
+aggregation). None issue a query per row — every one is a single query with a `JOIN`
+where related data is needed (e.g. Notes' application name, Tasks' application join)
+or a small, fixed number of aggregate queries (the Dashboard's `dashboard()` function
+in `service.js` is 4 queries total regardless of how many applications/activities
+exist — counts, pipeline-by-stage, 10 most recent activities, follow-up due/overdue
+counts — no per-application loop). No N+1 pattern found.
+
+**Missing index (Round 6 debt, closed)**: `import_rows` had no index at all since
+introduced in migration 001 — `GET /api/import/history/:id/rows` (Round 6) queries
+`WHERE batch_id=? ORDER BY row_number`. Added
+`idx_import_rows_batch_row(batch_id, row_number)` (migration
+`012_final_performance_indexes.sql`), a composite index covering both the filter and
+the sort in one pass. Verified against real PostgreSQL alongside the full backend
+suite (33/33 pass).
+
+**Pagination caps reviewed**: Notes (100 rows), Tasks Completed view (100 rows), Habit
+history (365 days) — all server-capped, no "load more" UI. Confirmed acceptable for
+V2 at current expected usage; each is already documented Known Debt in its own
+round's feature doc, re-confirmed here rather than silently accepted.
+
+**Bundle/build output**: Vite's production build already minifies and tree-shakes;
+verified the actual output (`npm run build:frontend`): a single ~136 KB JS bundle
+(~38 KB gzipped) and ~42 KB CSS (~9 KB gzipped) across 19 modules — no source maps
+shipped to `dist/`. This is small enough that code-splitting/lazy-loading feature
+modules was evaluated and **not pursued** — the round's own instruction is to measure
+before changing architecture, and there is no measured bundle-size problem to solve.
+
+**Infrastructure additions — evaluated, none justified at current scale**:
+- **CDN**: NOT JUSTIFIED. Render already serves `frontend/dist` directly; the total
+  asset payload (~47 KB gzipped) does not exhibit any symptom a CDN would address.
+- **Load balancer**: NOT JUSTIFIED. Single Render service, no evidence of a
+  throughput ceiling.
+- **Server-side cache (Redis or similar)**: NOT JUSTIFIED. No measured slow endpoint;
+  the Analytics page's own queries are simple, indexed aggregates over one user's
+  data, not expensive enough to warrant caching infrastructure.
+- **API response caching**: evaluated for the Analytics endpoints specifically (the
+  most cacheable candidates — stable aggregates over a date range) and not added —
+  no measured repeated-request pattern, and correctness (a cache serving stale rates
+  right after a new application is logged) outweighs an unmeasured performance gain.
+
+**Neon connection handling**: inspected `postgres-db.js`/`postgres-worker.js` — no
+connection-lifecycle issue found; unchanged this round.
 
 ## Refactoring Audit
 
