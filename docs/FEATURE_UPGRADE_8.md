@@ -4,10 +4,11 @@
 
 Implemented. Branch `feature/008-habit-tracker`, off `development` (which now includes
 the merged Round 7 PR #14). Locally verified against real PostgreSQL and real Chromium
-across all 5 viewport projects. About to push and open a PR into `development` — not
-yet merged, per the Round 8 stop condition. The Data Model/Frequency/Completion/
-Streak sections below were written before any schema work, per the round's own
-instruction, and match what was actually implemented without revision.
+across all 5 viewport projects. PR #15 into `development` is open with all 8 CI checks
+green on the first push — not yet merged, per the Round 8 stop condition. The Data
+Model/Frequency/Completion/Streak sections below were written before any schema work,
+per the round's own instruction, and match what was actually implemented without
+revision.
 
 ## Goal
 
@@ -352,8 +353,11 @@ Scoped, in order: domain audit + this document; schema migration + backend `habi
 
 ## CI Status
 
-Pending — about to push and open the PR. See `brain/PROJECT_STATE.md` for the
-authoritative current status once CI has run.
+All 8 CI jobs green on the first push (PR #15 into `development`) — no fix round
+needed. `browser-and-visual`: 38 passed / 7 skipped / 0 failed across 45 browser
+tests (up from 33 passed in Round 7's final state; the +5 is exactly the new Habits
+spec across the 5 viewport projects), including zero visual-regression diffs against
+the existing baselines.
 
 ## Known Debt
 
