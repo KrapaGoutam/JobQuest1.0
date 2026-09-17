@@ -172,12 +172,58 @@ buttons, used as a real settle point - a genuine accessibility improvement, not 
 test hook. Also fixed, in passing: `docs/PRD.md`'s top status line had been stale
 since Round 2 (still said "no implementation has started" through Round 6).
 
-**For the next agent**: [fill in PR number/state once pushed and opened]. Worth
-remembering: a locator that resolves without a strict-mode error still isn't
-automatically safe if it can resolve to a *stale* element from an async-render race,
-not just an *ambiguous* one (the Round 6 lesson was specifically about ambiguity) -
-wait for a real signal the new render landed, e.g. `aria-pressed`. Also: nav buttons
-with a pending-count badge change their accessible name once the badge appears
-("Tasks" -> "Tasks 1 pending") - don't use `exact: true` on one after triggering its
-badge condition. Do not start Round 8 (Habit tracker) without the user's explicit
-go-ahead.
+**For the next agent**: PR #14 was reviewed and merged (regular merge) at the start of
+the Round 8 session. Worth remembering: a locator that resolves without a strict-mode
+error still isn't automatically safe if it can resolve to a *stale* element from an
+async-render race, not just an *ambiguous* one (the Round 6 lesson was specifically
+about ambiguity) - wait for a real signal the new render landed, e.g. `aria-pressed`.
+Also: nav buttons with a pending-count badge change their accessible name once the
+badge appears ("Tasks" -> "Tasks 1 pending") - don't use `exact: true` on one after
+triggering its badge condition.
+
+## 2026-09-17 (same day, continued session) — Claude Code (Claude Sonnet 5) — Round 8 implemented
+
+Merged PR #14 (regular merge, per convention). Audited Goals (`goal_settings`/
+`goal_snapshots`), Tasks' recurrence, and Reminders before writing any schema, per the
+round's own instruction. Unlike Round 7, this audit *confirmed* the brief's assumed
+domain boundaries rather than overturning them: Goals are fixed, hardcoded KPI
+categories computed *from other tables* (never user-logged directly - `actualFor()`
+counts rows in `applications`/`follow_ups`/etc.), Tasks' recurrence advances to a new
+row with no per-row history or streak concept, Reminders have no repetition at all.
+Habits genuinely needed its own domain - a user-owned completion log is the one thing
+none of the three provide. No new `brain/DECISIONS.md` entry was needed this round,
+since no brief-vs-reality conflict arose to resolve (contrast Round 7's Tasks-vs-
+Reminders fork).
+
+Implemented: new `habits`/`habit_logs` tables (`010_habit_tracker.sql`),
+`backend/src/habits.js` (CRUD, ownership checks, idempotent progress upserts, derived
+streaks reusing the same computational shape as the existing Goals `comparison()`
+streak helper), three frequencies (daily/weekdays/weekly - no monthly, not requested
+by any brief example), and one unified completion model for boolean and count habits
+(one row per habit/date storing an absolute value, upserted via
+`ON CONFLICT ... DO UPDATE`, making progress writes inherently retry-safe). Reused
+`users.week_start` - a setting that existed but was previously unconsumed anywhere -
+for weekly habits' period boundaries. On `feature/008-habit-tracker`, off
+`development`.
+
+Verified with the same rigor as every prior round: real Postgres - 29/29 backend tests
+including 3 new; real Chromium - new E2E spec 5/5 viewports. Hit (and correctly
+diagnosed, not mistook for a real bug) a stale-container artifact mid-session:
+re-running the backend suite against the same already-migrated Postgres container a
+second time fails every test on a username-uniqueness collision - expected, since
+fixed test usernames collide against leftover rows; reset the container between
+manual passes, the way CI's fresh service container does automatically. Also found and
+fixed two real (not pre-existing) Playwright bugs while writing the E2E spec, both new
+instances of Round 6/7 lesson shapes: rapid `+`/`-` clicks on a count habit's controls
+raced their own async re-render exactly like Round 7's tab-click race (fixed by
+awaiting each click's settled result before the next); an unscoped
+`getByText("Weekly")` matched both a habit row and the create form's own "Weekly"
+option (same shape as the Round 6 ambiguous-heading lesson, fixed by scoping to
+`#habit-list`). Also confirmed by hitting it (not just reading about it) and then
+followed an existing documented pattern: this app has no URL-based routing, so
+`page.reload()` always lands back on Dashboard for every page, not just Habits -
+verified persistence via a direct API call instead, matching the Round 4 checklist
+test's already-documented approach.
+
+**For the next agent**: [fill in PR number/state once pushed and opened]. Do not start
+Round 9 (Journal) without the user's explicit go-ahead.
