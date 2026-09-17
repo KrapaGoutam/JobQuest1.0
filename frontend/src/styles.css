@@ -1238,6 +1238,66 @@ pre.example {
     justify-content: flex-end;
   }
 }
+.habit-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.habit-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+}
+.habit-row.inactive {
+  opacity: 0.7;
+}
+.habit-row input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+}
+.habit-meta {
+  flex: 1 1 auto;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.habit-count {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+.habit-row .actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+.habit-history-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+@media (max-width: 650px) {
+  .habit-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .habit-row .actions {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}
 .related-card,
 .link-button {
   border: 1px solid var(--line);
