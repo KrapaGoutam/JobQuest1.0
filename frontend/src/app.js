@@ -38,6 +38,15 @@ import {
   summarizeImportResult,
   previewRowMessage,
 } from "./features/import-export/format.js";
+import {
+  TASK_VIEWS,
+  TASK_PRIORITIES,
+  TASK_RECURRENCES,
+  isOverdue,
+  dueDateLabel,
+  emptyStateMessage,
+  recurrenceLabel,
+} from "./features/tasks/format.js";
 
 const state = {
   user: null,
@@ -53,6 +62,7 @@ const state = {
   relatedAppId: "",
   dashboardDays: 30,
   applicationView: "table",
+  taskView: "today",
   navigationCounts: {},
   expandedKanbanGroups: new Set(),
   selectedApplications: new Set(),
@@ -201,6 +211,7 @@ const nav = [
   // the nav entry didn't.
   ["imports", "Import History", "history"],
   ["calendar", "Calendar", "calendar-days"],
+  ["tasks", "Tasks", "check-square"],
   ["reminders", "Reminder Center", "bell-ring"],
   ["interviews", "Interviews", "users"],
   ["rejections", "Rejections", "x-circle"],
@@ -244,6 +255,7 @@ function shell(content) {
       "Activity",
       [
         "calendar",
+        "tasks",
         "reminders",
         "interviews",
         "rejections",
@@ -363,6 +375,7 @@ function shell(content) {
         interviews: counts.upcoming_interviews,
         follow_ups: counts.overdue_follow_ups,
         reminders: counts.due_reminders,
+        tasks: counts.tasks_due_today,
       };
       Object.entries(mapping).forEach(([id, count]) => {
         const button = qs(`[data-page="${id}"]`),
@@ -459,6 +472,7 @@ async function go(page) {
       "quick-add": renderQuickAdd,
       bulk: renderBulk,
       calendar: renderCalendar,
+      tasks: renderTasks,
       reminders: renderReminders,
       resumes: renderResumes,
       goals: renderGoals,
@@ -1655,7 +1669,7 @@ async function renderDetail(id) {
       "Application details, decisions, and complete history",
       `<div class="actions"><button class="btn secondary" id="pin-detail">${item.pinned ? "Unpin" : "Pin"}</button><button class="btn secondary" id="archive-detail">${item.archived_at ? "Restore" : "Archive"}</button><button class="btn danger" id="delete-detail">Delete</button></div>`,
     ) +
-      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${jobUrlHref ? `<a href="${esc(jobUrlHref)}" target="_blank" rel="noopener noreferrer">Open posting</a>` : item.job_url ? esc(item.job_url) : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}${networkingContactsView(data.networking)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
+      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${jobUrlHref ? `<a href="${esc(jobUrlHref)}" target="_blank" rel="noopener noreferrer">Open posting</a>` : item.job_url ? esc(item.job_url) : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}${applicationTasksView(data.tasks, date())}${networkingContactsView(data.networking)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
   );
   bindApplicationForm(item);
   qsa("[data-detail]").forEach(
@@ -1710,6 +1724,7 @@ async function renderDetail(id) {
   };
   bindTimeline(id);
   bindChecklist(id);
+  bindDetailTasks(id);
 }
 function timelineView(events, id) {
   return `<section class="card full timeline-section"><div class="section-head"><h2>Visual Timeline</h2><div class="actions"><select id="timeline-filter" aria-label="Filter timeline"><option value="all">All</option><option value="stage">Stage changes</option><option value="interview">Interviews</option><option value="follow_up">Follow-ups</option><option value="recruiter">Recruiter activity</option><option value="rejection">Rejections</option><option value="offer">Offers</option><option value="notes">Notes</option><option value="automatic">Automatic</option><option value="manual">Manual</option></select><select id="timeline-sort" aria-label="Sort timeline"><option value="desc">Newest</option><option value="asc">Oldest</option></select><a class="btn small secondary" id="timeline-csv" href="/api/applications/${id}/timeline/csv">CSV</a><a class="btn small secondary" id="timeline-json" href="/api/applications/${id}/timeline/json">JSON</a></div></div><div class="timeline">${events.map((event) => `<article class="timeline-event ${STAGE_CLASS[event.stage] || ""}"><time>${esc(event.event_date)} ${esc(event.event_time || "")}</time><div><span class="badge">${esc(event.category)}</span><h3>${esc(event.title)}</h3><p>${esc(event.description || "")}</p><small>${esc(event.source)} · ${esc(event.actor_username || "")}</small></div></article>`).join("") || empty("No timeline events")}</div><details><summary>Add manual timeline event</summary><form id="timeline-form" class="form-grid">${field("event_date", "Event date", "date", date(), "required")}${field("event_time", "Time", "time")}${select("category", "Category", ["recruiter", "assessment", "interview", "follow_up", "offer", "notes"], "notes")}${select("event_type", "Event type", ["recruiter_viewed", "recruiter_called", "recruiter_emailed", "assessment_received", "assessment_submitted", "hiring_manager_contacted", "reference_requested", "reference_submitted", "background_check_started", "documents_requested", "verbal_offer", "custom"], "custom")}${field("title", "Title", "text", "", "required")}${field("contact_person", "Contact")}${select("stage", "Optional stage", ["", ...STAGES], "")}<label class="full">Note<textarea name="description"></textarea></label>${field("next_action", "Next action")}${field("next_action_date", "Next-action date", "date")}<button class="btn">Add Event</button></form></details></section>`;
@@ -2335,6 +2350,131 @@ async function renderResumes() {
   };
 }
 
+function taskRowHtml(item, appsById, today) {
+  const app = item.application_id ? appsById.get(item.application_id) : null;
+  const overdue = isOverdue(item, today);
+  return `<li class="task-row" data-task-row="${item.id}"><label><input type="checkbox" data-task-toggle="${item.id}" ${item.status === "completed" ? "checked" : ""} aria-label="Mark '${esc(item.title)}' ${item.status === "completed" ? "not complete" : "complete"}"><span>${esc(item.title)}</span></label><div class="task-meta muted">${priorityBadge(item.priority)} <span class="${overdue ? "tone-chip tone-warning" : ""}">${esc(dueDateLabel(item, today))}</span>${item.recurrence ? ` · ${esc(recurrenceLabel(item.recurrence))}` : ""}${app ? ` · <button type="button" class="link-button" data-open-application="${app.id}">${esc(app.company)} — ${esc(app.job_title)}</button>` : ""}</div>${item.notes ? `<p class="muted">${esc(item.notes)}</p>` : ""}<div class="actions"><button type="button" class="btn small danger" data-task-delete="${item.id}">Delete</button></div></li>`;
+}
+function bindTaskActions(after) {
+  qsa("[data-open-application]").forEach(
+    (button) =>
+      (button.onclick = () => go(`detail:${button.dataset.openApplication}`)),
+  );
+  qsa("[data-task-toggle]").forEach(
+    (input) =>
+      (input.onchange = async () => {
+        const wasChecked = !input.checked;
+        try {
+          await api(`/api/tasks/${input.dataset.taskToggle}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              status: input.checked ? "completed" : "open",
+            }),
+          });
+          await after();
+        } catch {
+          input.checked = wasChecked;
+          toast("Could not update that task — try again");
+        }
+      }),
+  );
+  qsa("[data-task-delete]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        if (!confirm("Delete this task?")) return;
+        try {
+          await api(`/api/tasks/${button.dataset.taskDelete}`, {
+            method: "DELETE",
+          });
+          await after();
+        } catch {
+          toast("Could not delete that task — try again");
+        }
+      }),
+  );
+}
+async function renderTasks() {
+  const view = TASK_VIEWS.includes(state.taskView) ? state.taskView : "today";
+  state.taskView = view;
+  const today = date();
+  const [items, apps] = await Promise.all([
+    api(`/api/tasks?view=${view}`),
+    api("/api/applications?page_size=100&archived=all"),
+  ]);
+  const appsById = new Map(apps.items.map((item) => [item.id, item]));
+  const appOptions = [
+    { value: "", label: "No linked application" },
+    ...apps.items.map((item) => ({
+      value: item.id,
+      label: `${item.company} — ${item.job_title}`,
+    })),
+  ];
+  const recurrenceOptions = [
+    { value: "", label: "Does not repeat" },
+    ...TASK_RECURRENCES.map((value) => ({
+      value,
+      label: recurrenceLabel(value),
+    })),
+  ];
+  const tabs = TASK_VIEWS.map(
+    (id) =>
+      `<button class="btn small ${id === view ? "" : "secondary"}" data-task-view="${id}" aria-pressed="${id === view}">${pretty(id)}</button>`,
+  ).join("");
+  shell(
+    pageHead(
+      "Tasks",
+      "A fast to-do layer for job-search and personal work",
+      `<div class="actions">${tabs}</div>`,
+    ) +
+      `<div class="grid"><section class="card wide"><div id="task-list">${
+        items.length
+          ? `<ul class="task-list">${items.map((item) => taskRowHtml(item, appsById, today)).join("")}</ul>`
+          : empty(emptyStateMessage(view))
+      }</div></section><section class="card"><h2>Add task</h2><form id="task-form" class="form-grid">${field("title", "Title", "text", "", "required maxlength='200'")}${field("due_date", "Due date", "date")}${select("priority", "Priority", TASK_PRIORITIES, "Medium")}${select("application_id", "Link to application", appOptions, state.relatedAppId)}${select("recurrence", "Repeat", recurrenceOptions, "")}<label class="full">Notes<textarea name="notes" maxlength="4000"></textarea></label><button class="btn full">Add Task</button></form></section></div>`,
+  );
+  qsa("[data-task-view]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        state.taskView = button.dataset.taskView;
+        renderTasks();
+      }),
+  );
+  qs("#task-form").onsubmit = async (event) => {
+    event.preventDefault();
+    const input = Object.fromEntries(new FormData(event.currentTarget));
+    if (!input.application_id) delete input.application_id;
+    if (!input.due_date) delete input.due_date;
+    if (!input.recurrence) delete input.recurrence;
+    try {
+      await api("/api/tasks", { method: "POST", body: JSON.stringify(input) });
+      state.relatedAppId = "";
+      toast("Task added");
+      renderTasks();
+    } catch (error) {
+      toast(error.message);
+    }
+  };
+  bindTaskActions(renderTasks);
+}
+function applicationTasksView(tasks, today) {
+  return `<section class="card full"><div class="section-head"><h2>Linked Tasks</h2><button type="button" class="btn small secondary" id="add-detail-task">Add Task</button></div>${
+    tasks.length
+      ? `<ul class="task-list">${tasks
+          .map(
+            (item) =>
+              `<li class="task-row" data-task-row="${item.id}"><label><input type="checkbox" data-task-toggle="${item.id}" aria-label="Mark '${esc(item.title)}' complete"><span>${esc(item.title)}</span></label><span class="muted">${esc(dueDateLabel(item, today))}</span></li>`,
+          )
+          .join("")}</ul>`
+      : empty("No open tasks linked to this application")
+  }</section>`;
+}
+function bindDetailTasks(id) {
+  qs("#add-detail-task").onclick = () => {
+    state.relatedAppId = String(id);
+    go("tasks");
+  };
+  bindTaskActions(() => go(`detail:${id}`));
+}
 async function renderReminders() {
   const [items, categories] = await Promise.all([
     api("/api/reminders"),
@@ -2655,6 +2795,7 @@ function renderExports() {
         ["follow_ups", "Follow-Ups CSV"],
         ["networking", "Networking CSV"],
         ["reminders", "Reminders CSV"],
+        ["tasks", "Tasks CSV"],
         ["resume-analytics", "Resume Analytics CSV"],
         ["goals", "Goal History CSV"],
         ["aging", "Aging Report CSV"],
