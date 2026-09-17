@@ -59,6 +59,7 @@ import {
   displayTitle,
   emptyStateMessage as notesEmptyStateMessage,
 } from "./features/notes/format.js";
+import { rateLabel, summarizeRates } from "./features/analytics/format.js";
 
 const state = {
   user: null,
@@ -74,6 +75,7 @@ const state = {
   relatedAppId: "",
   dashboardDays: 30,
   applicationView: "table",
+  analyticsDays: 90,
   taskView: "today",
   habitView: "today",
   habitHistoryId: "",
@@ -237,6 +239,7 @@ const nav = [
   ["follow_ups", "Follow-Ups", "send"],
   ["networking_contacts", "Networking", "network"],
   ["resumes", "Resumes", "file-text"],
+  ["analytics", "Analytics", "trending-up"],
   ["goal-history", "Goal History", "target"],
   ["aging", "Aging Report", "timer"],
   ["stage-analytics", "Stage Analytics", "bar-chart-3"],
@@ -287,7 +290,7 @@ function shell(content) {
     ["Career Assets", ["resumes", "bulk"]],
     [
       "Insights",
-      ["goal-history", "aging", "stage-analytics", "exports"],
+      ["analytics", "goal-history", "aging", "stage-analytics", "exports"],
     ],
     ["Settings", ["settings"]],
   ];
@@ -317,7 +320,15 @@ function shell(content) {
     qs("#sidebar-backdrop").classList.toggle("open", open);
     qs("#mobile-menu").setAttribute("aria-expanded", String(open));
     document.body.classList.toggle("nav-open", open);
-    if (open) qs("#sidebar-close").focus();
+    // Deferred to the next frame: focusing a descendant of the sidebar in
+    // the same tick as the class toggle that starts its CSS transform
+    // transition forces a synchronous layout read before the browser has
+    // committed the "before" state of that transition, which can starve or
+    // skip the animation entirely (observed directly: the "open" class
+    // present, but the drawer still rendered at its fully closed transform,
+    // for seconds at a time under load). Letting one frame land first keeps
+    // the transition and the focus move independent.
+    if (open) requestAnimationFrame(() => qs("#sidebar-close").focus());
     else navigationTrigger?.focus?.();
   };
   qs("#mobile-menu").onclick = () =>
@@ -503,6 +514,7 @@ async function go(page) {
       "goal-history": renderGoalHistory,
       aging: renderAging,
       "stage-analytics": renderCompleteStageAnalytics,
+      analytics: renderAnalytics,
       exports: renderExports,
       profile: renderProfile,
       settings: renderSettings,
@@ -3206,6 +3218,63 @@ async function renderCompleteStageAnalytics() {
       )
       .join("")}</div><p class="muted">${esc(metrics.note)}</p></section>`,
   );
+}
+async function renderAnalytics() {
+  const days = state.analyticsDays;
+  const range = `date_from=${addClientDays(date(), -days)}&date_to=${date()}`;
+  const [funnel, source, resume] = await Promise.all([
+    api(`/api/analytics/funnel?${range}`),
+    api(`/api/analytics/source?${range}`),
+    api(`/api/analytics/resume?${range}`),
+  ]);
+  const totals = summarizeRates(source);
+  const rateRow = (label, numerator) =>
+    `<p><strong>${esc(label)}</strong><br>${esc(rateLabel(numerator, totals.applications))}</p>`;
+  shell(
+    pageHead(
+      "Analytics",
+      "Trustworthy job-search metrics — every rate shown with its sample size",
+      `<select id="analytics-range" aria-label="Analytics date range">${[30, 90, 180, 365]
+        .map(
+          (value) =>
+            `<option value="${value}" ${days === value ? "selected" : ""}>Last ${value} days</option>`,
+        )
+        .join("")}</select>`,
+    ) +
+      `<div class="grid"><section class="card wide"><h2>Overview</h2><div class="summary-grid"><p><strong>Applications</strong><br>${totals.applications}</p>${rateRow("Response rate", totals.responses)}${rateRow("Interview rate", totals.interviews)}${rateRow("Offer rate", totals.offers)}</div><p class="muted">A response/interview/offer counts an application that ever reached that point, regardless of its current stage.</p></section><section class="card wide"><h2>Pipeline</h2><div class="bar-chart">${
+        funnel.stages.filter((item) => item.count).length
+          ? funnel.stages
+              .filter((item) => item.count)
+              .map(
+                (item) =>
+                  `<div><span>${esc(item.stage)}</span>${hBar(item.percentage, `${item.stage}: ${item.count} applications, ${item.percentage}% of ${funnel.total}`)}<strong class="num">${item.count} (${item.percentage}%)</strong></div>`,
+              )
+              .join("")
+          : empty("No applications in this range")
+      }</div></section><section class="card full"><h2>By Source</h2>${table(
+        ["Source", "Applications", "Response rate", "Interview rate", "Offer rate"],
+        source
+          .map(
+            (row) =>
+              `<tr><td>${esc(row.source)}</td><td>${row.applications}</td><td>${esc(rateLabel(row.responses, row.applications))}</td><td>${esc(rateLabel(row.interviews, row.applications))}</td><td>${esc(rateLabel(row.offers, row.applications))}</td></tr>`,
+          )
+          .join(""),
+        "No applications in this range",
+      )}</section><section class="card full"><h2>By Resume Version</h2>${table(
+        ["Version", "Applications", "Response rate", "Interview rate", "Offer rate"],
+        resume
+          .map(
+            (row) =>
+              `<tr><td>${esc(row.version_name)}</td><td>${row.applications}</td><td>${esc(rateLabel(row.responses, row.applications))}</td><td>${esc(rateLabel(row.interviews, row.applications))}</td><td>${esc(rateLabel(row.offers, row.applications))}</td></tr>`,
+          )
+          .join(""),
+        "No resumes recorded yet",
+      )}</section></div>`,
+  );
+  qs("#analytics-range").onchange = (event) => {
+    state.analyticsDays = Number(event.target.value);
+    renderAnalytics();
+  };
 }
 function renderExports() {
   shell(
