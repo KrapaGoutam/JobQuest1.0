@@ -9,8 +9,8 @@ detailed spec in the round's own `docs/FEATURE_UPGRADE_N.md` once it starts.
 | 3 | Dashboard + Applications workspace (info hierarchy + quick filters; most of the draft prompt's search/filter/sort/export wishlist turned out already implemented — see `docs/FEATURE_UPGRADE_3.md`) | Merged (PR #10) |
 | 4 | Application checklist — full CRUD (edit/delete/reorder), validation, lifecycle-phase display grouping; stage-aware *generation* deferred — see `docs/FEATURE_UPGRADE_4.md` | Merged (PR #11) |
 | 5 | Contacts/networking — fixed the broken application-linkage flow, added Edit UI, surfaced contacts on application detail; backend CRUD/security was already solid — see `docs/FEATURE_UPGRADE_5.md` | Merged (PR #12) |
-| 6 | Import/export hardening — fixed CSV formula-injection (every CSV export), job_url unsafe-protocol gap, added CSV import, batch row-detail viewing; preview/validation/duplicate/transaction logic was already solid — see `docs/FEATURE_UPGRADE_6.md` | Implemented locally; PR pending |
-| 7 | Task management (Notion-lite) | Not started |
+| 6 | Import/export hardening — fixed CSV formula-injection (every CSV export), job_url unsafe-protocol gap, added CSV import, batch row-detail viewing; preview/validation/duplicate/transaction logic was already solid — see `docs/FEATURE_UPGRADE_6.md` | Merged (PR #13) |
+| 7 | Task management — genuinely net-new `tasks` table, distinct from the pre-existing (and much closer than expected) `reminders` domain; Today/Upcoming/Backlog/Completed views, priority, optional due date, optional application link, simple recurrence — see `docs/FEATURE_UPGRADE_7.md` | Implemented locally; PR pending |
 | 8 | Habit tracker | Not started |
 | 9 | Journal / notes | Not started |
 | 10 | Analytics module | Not started |
@@ -80,3 +80,18 @@ package, plan-only).
 - A non-reproducible, coincidental PIN-hash test flake was observed once during this
   round's testing (`PIN validation accepts leading zero...` — a substring-coincidence
   assertion, not a real bug). Not fixed; noted for whoever next sees it.
+
+## Smaller items discovered during Round 7 (not yet sequenced into a round)
+
+- Task tagging (`task_tags` join table) — deferred, `tags`/`application_tags` exist but
+  are applications-only; not required by MVP acceptance criteria. See
+  `docs/FEATURE_UPGRADE_7.md` Known Debt.
+- Subtasks — deferred, no strong evidence they'd materially improve the MVP yet.
+- "Tasks due today" dashboard widget — deferred in favor of the (explicitly
+  prioritized) application-detail integration, to avoid touching three separate
+  dashboard-widget registration points for a small win.
+- Completed-tasks view has no "load more"/pagination UI — server-capped at 100 rows,
+  fine at current scale.
+- `docs/PRD.md`'s top status line was stale since Round 2 (still said "no
+  implementation has started" through Round 6) — corrected in Round 7. Worth a habit:
+  keep it current per round rather than letting it drift again.
