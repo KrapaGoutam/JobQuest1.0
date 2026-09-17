@@ -21,6 +21,7 @@ import {
 } from "./service.js";
 import { handleAdvanced } from "./advanced.js";
 import { handleFeatureUpgrade } from "./feature-upgrade.js";
+import { handleTasks } from "./tasks.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Built by Vite (see ../../frontend/vite.config.js) into frontend/dist. Only the
@@ -609,6 +610,10 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
         return;
       if (
         await handleAdvanced(context, { json, body, requireAuth, targetOwner })
+      )
+        return;
+      if (
+        await handleTasks(context, { json, body, requireAuth, targetOwner })
       )
         return;
       if (url.pathname === "/api/applications" && request.method === "GET")

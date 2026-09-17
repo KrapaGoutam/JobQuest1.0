@@ -137,3 +137,47 @@ that "usually" resolves an ambiguous match to one element isn't safe - prefer `e
 true` whenever two elements could plausibly share a substring, rather than relying on
 it never mattering in practice (see `brain/PROJECT_STATE.md` for the fuller note). Do
 not start Round 7 without the user's explicit go-ahead.
+
+## 2026-09-17 — Claude Code (Claude Sonnet 5) — Round 7 implemented
+
+Merged PR #13 (regular merge, per convention). Audited every task-like domain before
+writing any schema, per the round's own instruction. The real finding: `reminders`
+(Feature Upgrade 1) already covers most of what "Task management" was scoped to build
+- due date, priority, status, completion, a derived Overdue/Due Today/Upcoming state,
+even automatic application-linking. The round's own PRD brief said "genuinely net-new,
+no `tasks` table exists" - true about the table, but written without visibility into
+how close `reminders` already was. This was a real product-direction fork (not a
+routine implementation detail), so it was surfaced to the user mid-round rather than
+guessed at. Decision: Tasks stays a **distinct** domain, because `reminders.due_date`
+is `NOT NULL` by design (it's a notification system) and cannot represent an
+unscheduled Backlog item without changing a mature, tested, already-shipped feature -
+see `brain/DECISIONS.md` for the full reasoning.
+
+Implemented: new `tasks` table (`009_task_management.sql`), `backend/src/tasks.js`
+(CRUD, ownership + application-linking ownership checks, recurrence), four views
+(deliberately merged the brief's separate Inbox/Backlog into one - both resolve to the
+identical "no due date" predicate, and splitting them would have added a distinction
+with no real difference), a "Linked Tasks" panel on the application detail page, a nav
+entry + badge count, and CSV/JSON export inclusion. On `feature/007-task-management`,
+off `development`.
+
+Verified with the same rigor as every prior round: real Postgres (Docker was already
+running this session, unlike Round 6) - 26/26 backend tests including 3 new; real
+Chromium - new E2E spec 5/5 viewports. Found and fixed one real bug while writing the
+E2E spec (introduced and fixed within this same round, not pre-existing): clicking a
+task-view tab triggers an async re-render, and interacting with the form immediately
+after could land on the old, about-to-be-replaced DOM (both renders share a field
+label, so Playwright doesn't need to wait). Fixed with `aria-pressed` on the tab
+buttons, used as a real settle point - a genuine accessibility improvement, not only a
+test hook. Also fixed, in passing: `docs/PRD.md`'s top status line had been stale
+since Round 2 (still said "no implementation has started" through Round 6).
+
+**For the next agent**: [fill in PR number/state once pushed and opened]. Worth
+remembering: a locator that resolves without a strict-mode error still isn't
+automatically safe if it can resolve to a *stale* element from an async-render race,
+not just an *ambiguous* one (the Round 6 lesson was specifically about ambiguity) -
+wait for a real signal the new render landed, e.g. `aria-pressed`. Also: nav buttons
+with a pending-count badge change their accessible name once the badge appears
+("Tasks" -> "Tasks 1 pending") - don't use `exact: true` on one after triggering its
+badge condition. Do not start Round 8 (Habit tracker) without the user's explicit
+go-ahead.

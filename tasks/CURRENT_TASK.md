@@ -1,52 +1,51 @@
 # Current task
 
-**Status: Round 6 implemented, CI green, PR #13 open — awaiting the user's
-review/merge.** See [docs/FEATURE_UPGRADE_6.md](../docs/FEATURE_UPGRADE_6.md) for full
+**Status: Round 7 implemented locally, all local checks green, not yet pushed / no PR
+open yet.** See [docs/FEATURE_UPGRADE_7.md](../docs/FEATURE_UPGRADE_7.md) for full
 detail.
 
-Branch: `feature/006-import-export-hardening`, based on `development` (which now
-includes the merged Round 5 PR #12 — regular merge, per convention).
+Branch: `feature/007-task-management`, based on `development` (which now includes the
+merged Round 6 PR #13 — regular merge, per convention).
 
 ## What just happened
 
-1. PR #12 (Round 5) merged into `development` via regular merge commit.
-2. Audited import/export end-to-end before writing anything. Found the preview/
-   validation/duplicate-detection/transaction pipeline was **already exceptionally
-   solid** (both partial-failure models already implemented, XLSX already had
-   formula-injection protection and correct date handling) — but found two real,
-   concrete security gaps and one real missing capability:
-   - **Every CSV export had zero formula-injection protection** (only XLSX did).
-   - **`job_url` accepted `javascript:`/`data:` as "valid"** (only checked
-     parseability, not safety) — and the application-detail page rendered it as a
-     clickable link with no further check.
-   - **CSV import didn't exist at all** — only JSON and a custom structured-text
-     format, despite CSV being a primary export format.
-   - Smaller: `import_rows` (per-row error detail) was written but never read back
-     anywhere; "Import History" was manager-only in the nav even though the API
-     already correctly scoped it to "my own batches" for regular users too.
-3. Closed all of that: `csvEscape` now reuses the existing, already-tested `safeCell`
-   formula-injection guard (fixes every CSV export in one change);
-   `validateApplication` (shared by manual entry *and* import) now requires http(s)
-   job_url; added a small dependency-free CSV parser feeding the exact same
-   downstream pipeline JSON/structured_text already used; added
-   `GET /api/import/history/:id/rows` + a "View Rows" UI action; moved "Import
-   History" into the main nav.
-4. Verified with the same rigor established in Round 4/5: real Postgres via Docker
-   (Docker Desktop wasn't running at session start — started it, waited for the
-   daemon, then proceeded) — 23/23 backend tests including 2 new Round 6 tests; real
-   Chromium — new E2E test 5/5 viewports, full existing non-pixel suite 20/20, no
-   regressions — all before pushing.
-
-5. First two CI pushes failed `browser-and-visual` on a different random viewport
-   each time — a pre-existing (Round 5), latent strict-mode heading ambiguity that
-   never reproduced locally. Fixed with `exact: true` (matching an identical fix
-   already applied elsewhere in Round 5); verified by watching CI go green on the
-   next push, not just local re-runs.
+1. PR #13 (Round 6) merged into `development` via regular merge commit; confirmed all
+   8 CI checks were green beforehand.
+2. Audited every task-like domain before writing any schema: `reminders` (Feature
+   Upgrade 1) turned out to already cover most of what "Task management" describes —
+   due date, priority, status, completion, a derived Overdue/Due Today/Upcoming state,
+   even automatic application-linking. `checklist_items`, `follow_ups`, and
+   `goal_settings`/`goal_snapshots` were confirmed structurally distinct and untouched.
+3. Surfaced the Reminders overlap to the user mid-round (a genuine product-direction
+   fork, not a routine implementation detail) rather than guessing. Decision: Tasks
+   stays a **distinct** domain — `reminders.due_date` is `NOT NULL` by design (it's a
+   notification system), while Tasks needs a nullable due date to support an
+   unscheduled Backlog. See `brain/DECISIONS.md` for the full reasoning.
+4. Implemented the MVP: new `tasks` table (migration `009_task_management.sql`), a new
+   `backend/src/tasks.js` handler module (CRUD, ownership checks, application-linking
+   ownership checks, recurrence), four views (Today/Upcoming/Backlog/Completed —
+   deliberately merged the brief's separate Inbox/Backlog into one, since both resolve
+   to the identical `due_date IS NULL` predicate), a compact "Linked Tasks" panel on
+   the application detail page, a nav entry + nav-badge count, and CSV/JSON export
+   inclusion (one-line additions to already-generic, already-safe export code).
+5. Recurrence (daily/weekdays/weekly/monthly): complete-to-advance model, exactly one
+   next occurrence per completion, verified idempotent (completing an already-completed
+   recurring task a second time creates no duplicate) via a dedicated backend test.
+6. Verified with the same rigor as every prior round: real Postgres via Docker (running
+   in this environment without needing to start Docker Desktop manually this time) —
+   26/26 backend tests including 3 new Round 7 tests; real Chromium — new E2E spec 5/5
+   viewports, full existing non-pixel suite unaffected.
+7. Found and fixed one real bug during E2E testing (not pre-existing — introduced and
+   fixed within this same round): clicking a task-view tab triggers an async
+   re-render, and a `.fill()`/`.click()` issued immediately after could land on the
+   old, about-to-be-replaced form instead of the new one (both have a field with the
+   same label). Fixed by adding `aria-pressed` to the tab buttons — a genuine
+   accessibility improvement, not only a test hook — and waiting on it as a real
+   settle point.
 
 ## Next safe action
 
-PR [#13](https://github.com/KrapaGoutam/JobQuest1.0/pull/13) is open into
-`development` with all 8 CI jobs green (browser-and-visual: 28 passed/7 skipped/0
-failed across 35 tests — 5 new bulk-import tests all pass, 23 pre-existing baseline
-tests unchanged). Left unmerged for the user's review. Do not start Round 7 until this
-PR is merged and the user has explicitly said to proceed.
+Push the branch, open a PR into `development`, wait for CI, fix any real failures at
+root cause (not by loosening assertions), then produce the Round 7 implementation
+report and stop per the round's explicit stop condition — do not start Round 8
+(Habit tracker) without the user's explicit go-ahead.

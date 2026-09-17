@@ -1185,6 +1185,59 @@ pre.example {
     justify-content: flex-end;
   }
 }
+.task-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+}
+.task-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 12rem;
+}
+.task-row input {
+  width: auto;
+}
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+.task-row .actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+.task-row p {
+  flex-basis: 100%;
+  margin: 0;
+}
+@media (max-width: 650px) {
+  .task-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .task-row .actions {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}
 .related-card,
 .link-button {
   border: 1px solid var(--line);
