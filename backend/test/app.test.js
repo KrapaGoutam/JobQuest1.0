@@ -476,6 +476,102 @@ test("related tracker ownership and manager access are enforced", async () => {
   );
 });
 
+test("Final round: editing interviews/rejections/follow_ups via PATCH was already backend-supported but never tested - verified, not assumed", async () => {
+  const user = await register("trackeredit"),
+    other = await register("trackereditother");
+  const app = await request("/api/applications", {
+    method: "POST",
+    auth: user,
+    input: { company: "Acme", job_title: "Engineer", date_applied: "2026-09-01" },
+  });
+
+  const interview = await request("/api/interviews", {
+    method: "POST",
+    auth: user,
+    input: {
+      application_id: app.data.id,
+      interview_round: "1",
+      interview_type: "Technical",
+      scheduled_at: "2026-09-10T10:00",
+    },
+  });
+  assert.equal(interview.status, 201);
+  const editedInterview = await request(`/api/interviews/${interview.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { result: "Passed", notes: "Went well" },
+  });
+  assert.equal(editedInterview.status, 200);
+  assert.equal(editedInterview.data.result, "Passed");
+  assert.equal(
+    (
+      await request(`/api/interviews/${interview.data.id}`, {
+        method: "PATCH",
+        auth: other,
+        input: { result: "hijacked" },
+      })
+    ).status,
+    404,
+  );
+
+  const rejection = await request("/api/rejections", {
+    method: "POST",
+    auth: user,
+    input: {
+      application_id: app.data.id,
+      rejection_date: "2026-09-15",
+      stage_at_rejection: "Interview",
+      eligible_for_reapplication: 1,
+    },
+  });
+  assert.equal(rejection.status, 201);
+  assert.equal(rejection.data.eligible_for_reapplication, 1);
+  // The checkbox-uncheck case is the one that matters: FormData omits an
+  // unchecked box entirely, so the frontend must send an explicit 0/false,
+  // not rely on omission, for an edit to actually be able to turn this off.
+  const uncheck = await request(`/api/rejections/${rejection.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { eligible_for_reapplication: 0 },
+  });
+  assert.equal(uncheck.status, 200);
+  assert.equal(uncheck.data.eligible_for_reapplication, 0);
+  const recheck = await request(`/api/rejections/${rejection.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { eligible_for_reapplication: 1 },
+  });
+  assert.equal(recheck.data.eligible_for_reapplication, 1);
+
+  const followUp = await request("/api/follow_ups", {
+    method: "POST",
+    auth: user,
+    input: {
+      application_id: app.data.id,
+      follow_up_type: "Email",
+      due_date: "2026-09-20",
+    },
+  });
+  assert.equal(followUp.status, 201);
+  const editedFollowUp = await request(`/api/follow_ups/${followUp.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { status: "Sent" },
+  });
+  assert.equal(editedFollowUp.status, 200);
+  assert.equal(editedFollowUp.data.status, "Sent");
+  assert.equal(
+    (
+      await request(`/api/follow_ups/${followUp.data.id}`, {
+        method: "PATCH",
+        auth: other,
+        input: { status: "hijacked" },
+      })
+    ).status,
+    404,
+  );
+});
+
 test("dashboard handles empty data without division errors", async () => {
   const user = await register("emptydash");
   const result = await request("/api/dashboard", { auth: user });

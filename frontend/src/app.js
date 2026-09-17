@@ -2217,13 +2217,14 @@ async function renderTracker(type) {
       );
     })
     .join("");
-  // Edit (as opposed to create/delete) is scoped to networking_contacts this
-  // round, not generalized to every tracker type sharing this view -
-  // interviews/rejections/follow_ups/goals have the same "no edit in UI" gap
-  // (the backend already supports PATCH for all of them), left alone here to
-  // keep this round's change to its actual scope - see
-  // docs/FEATURE_UPGRADE_5.md Known Debt.
-  const editable = type === "networking_contacts";
+  // Round 5 built this edit machinery (form population, PATCH-vs-POST
+  // dispatch, cancel/reset) fully generically off meta.fields, but scoped
+  // its use to networking_contacts only, deliberately leaving the identical
+  // "no edit in UI" gap open for interviews/rejections/follow_ups (the
+  // backend already supported PATCH for all of them even then). Final round
+  // gap audit: closing it here costs one line, since nothing below this
+  // point is networking_contacts-specific.
+  const editable = true;
   shell(
     pageHead(meta.title, "Owned records linked to your application workflow") +
       `<div class="grid"><section class="card wide">${table(
@@ -2268,7 +2269,17 @@ async function renderTracker(type) {
           const item = items.find((row) => row.id === Number(button.dataset.edit));
           editingId = item.id;
           for (const name of meta.fields)
-            if (form.elements[name]) form.elements[name].value = item[name] ?? "";
+            if (form.elements[name]) {
+              // Checkboxes (only eligible_for_reapplication today) reflect
+              // state via .checked, never .value - and an unchecked
+              // checkbox is silently omitted from FormData entirely, which
+              // would make "uncheck it, then Save" a no-op PATCH. Both ends
+              // of that round trip need the checkbox case handled
+              // explicitly (see the submit handler below).
+              if (form.elements[name].type === "checkbox")
+                form.elements[name].checked = Boolean(item[name]);
+              else form.elements[name].value = item[name] ?? "";
+            }
           if (form.elements.notes) form.elements.notes.value = item.notes ?? "";
           qs("#tracker-form-heading").textContent = `Edit ${meta.title.replace(/s$/, "")}`;
           form.querySelector("button.btn:not(.secondary)").textContent =
@@ -2281,6 +2292,12 @@ async function renderTracker(type) {
   form.onsubmit = async (event) => {
     event.preventDefault();
     const payload = Object.fromEntries(new FormData(event.currentTarget));
+    // An unchecked checkbox is omitted from FormData entirely, not sent as
+    // false - fine for create (the server already defaults it), but would
+    // make unchecking a previously-true value a silent no-op on PATCH.
+    for (const name of meta.fields)
+      if (form.elements[name]?.type === "checkbox")
+        payload[name] = form.elements[name].checked ? 1 : 0;
     // Ownership can never be changed via update (the backend rejects it
     // outright) - only relevant when a manager edits another user's record.
     if (editingId) delete payload.target_user_id;

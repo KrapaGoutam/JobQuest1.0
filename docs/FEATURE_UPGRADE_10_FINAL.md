@@ -92,7 +92,46 @@ Closed the gap with the smallest change that reuses what already exists:
 
 ## Remaining PRD Gap Audit
 
-_Filled in during Phase 10B._
+Every backlog item from Rounds 3–9 (`tasks/BACKLOG.md`), classified per the round's
+own priority scheme. Only items materially improving release quality, or closing a
+real functional/security/accessibility gap, were implemented — the rest are
+deliberately left as documented V2 debt, exactly as they were found.
+
+| Round | Item | Classification | Priority | Disposition |
+|---|---|---|---|---|
+| 3 | Interviews-this-week / follow-ups-due quick filters | DEFERRED | P3 | Needs a real join, not a params-only quick filter — no evidence of user need beyond the existing advanced filter panel, which already covers this. |
+| 3 | Salary-range filter | DEFERRED | P3 | Blocked on a real product decision (currency/period normalization), not a UI gap. |
+| 3 | Legacy `GET /api/applications` (callerless) | AUDITED | — | Re-verified in Phase 10G (Refactoring Audit) rather than assumed. |
+| 4 | Checklist add/edit UI control | **COMPLETE** | — | Already shipped as part of Round 4 itself (`data-checklist-edit`, confirmed present) — the backlog note predated its own resolution. |
+| 4 | Stage-aware checklist *generation* | DEFERRED | P2 | Real duplicate-generation risk without a schema change (`stage_hint` column) — correctly deferred in Round 4, still true today. |
+| 4 | Configurable checklist templates | DEFERRED | P3 | No evidence of need beyond the one fixed set. |
+| 4 | Dashboard checklist-progress integration | DEFERRED | P3 | Real N+1 risk across the application list if done carelessly; no measured user need. |
+| 4 | `#detail-stage` missing accessible name | **FIXED** | P1 | Real, load-bearing WCAG 4.1.2 violation on the application detail page — fixed in Phase 10D. |
+| 4 | Cross-group checklist reorder has no visible effect | ACCEPTED V2 DEBT | P3 | A documented quirk, not a bug — group membership is label-based, not position-based, by design. |
+| 5 | **Edit UI gap for interviews/rejections/follow_ups** | **FIXED** | P2 | Closed this round — see Analytics/UI implementation below; the generic edit machinery already existed and was scoped to `networking_contacts` only. One line to enable, plus a real checkbox-handling bug found and fixed along the way (see Testing). |
+| 5 | No accessibility audit of other `renderTracker` pages | **PARTIALLY ADDRESSED** | P2 | Covered by the broader Phase 10D audit. |
+| 5 | Contact search/filter/sort, duplicate detection | DEFERRED | P3 | No evidence of need at current scale. |
+| 6 | JSON restore for the full-workspace backup | ACCEPTED V2 DEBT | P2 | Genuinely separate, higher-risk feature work (restoring across 14+ FK-related tables) — correctly deferred, still true. |
+| 6 | Error-report CSV download for import batches | DEFERRED | P3 | Small, real, but no evidence of need beyond the existing in-UI row detail. |
+| 6 | `import_rows` missing an index on `batch_id` | **FIXED** | P3 | Trivial, safe — added in Phase 10F (Performance Hardening). |
+| 6 | PIN-hash test flake | INVESTIGATED, OBSOLETE | — | Re-checked in Phase 10H; remains non-reproducible and coincidental (a substring-in-hash assertion), not a real bug. |
+| 7 | Task tags, subtasks, dashboard widget | DEFERRED | P3 | No evidence of need; explicitly out of scope per the Round 7 brief. |
+| 7 | Completed Tasks view has no "load more" | ACCEPTED V2 DEBT | P3 | Server-capped at 100 rows, fine at current scale — same pattern accepted for Habits/Notes. |
+| 8 | `habits_due_today` nav badge is daily-only | ACCEPTED V2 DEBT | P3 | No safe cross-dialect weekday SQL function exists; the Habits page itself is correct, only the badge is approximate. |
+| 8 | `users.week_start` unused by the calendar/goal-snapshot code | DEFERRED | P2 | Real, but touches two other mature features' date math — evaluated in Phase 10C, deliberately not changed this round (see Design-System Audit). |
+| 8 | 365-day streak lookback bound | ACCEPTED V2 DEBT | P3 | Documented, currently-irrelevant trade-off. |
+| 8 | `prompt()`-based habit editing | ACCEPTED V2 DEBT | P3 | Evaluated in Phase 10G; matches an existing, already-shipped pattern (reminder-category rename) — not user-hostile enough to justify a new form/dialog component this round. |
+| 9 | Notes pagination, tags/contact/task/habit linking, archive | DEFERRED | P3 | No evidence of need; explicitly out of scope per the Round 9 brief. |
+| 9 | Single-phrase search (not multi-word AND) | ACCEPTED V2 DEBT | P3 | Simpler, sufficient for expected note volume. |
+| 9 | `#toast` color-contrast violation | **FIXED (required)** | P0 | See Phase 10D — the round's explicit, non-negotiable requirement. |
+
+**Summary**: 1 item already complete before this audit, 4 items fixed this round
+(checklist edit — already done; tracker edit gap; `#detail-stage` label;
+`import_rows` index; `#toast` contrast), 1 item partially addressed (broader
+accessibility coverage), 2 items re-investigated and confirmed still correctly
+deferred/obsolete, and the remainder — all genuinely low-value or genuinely
+higher-risk — carried forward as documented, classified V2 debt rather than
+implemented reflexively.
 
 ## UI/UX Audit
 

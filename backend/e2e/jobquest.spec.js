@@ -893,3 +893,42 @@ test("analytics: overview, pipeline, source, and resume breakdowns render with r
   const results = await new AxeBuilder({ page }).exclude("#toast").analyze();
   expect(results.violations).toEqual([]);
 });
+
+test("rejections: edit was a Round 5 known gap (backend already supported PATCH, UI never exposed it) - now closed", async ({
+  page,
+}, testInfo) => {
+  const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
+  if (narrow) await openMobileNav(page);
+  await page.getByRole("button", { name: "Rejections", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Rejections", exact: true })).toBeVisible();
+
+  await page
+    .locator('select[name="application_id"]')
+    .selectOption({ label: "Northstar Labs — Product Engineer" });
+  await page.getByLabel("Rejection Date").fill("2026-09-10");
+  await page.getByLabel("Stage At Rejection").fill("Interview");
+  await page.getByLabel("Eligible For Reapplication").check();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Record saved")).toBeVisible();
+
+  // Edit: the button this round's gap-close actually added.
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Edit Rejection", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Eligible For Reapplication")).toBeChecked();
+  await page.getByLabel("Rejection Reason").fill("Went with an internal candidate");
+  // Uncheck it - the case that specifically needs the explicit 0/false fix,
+  // since an unchecked box is silently omitted from FormData entirely.
+  await page.getByLabel("Eligible For Reapplication").uncheck();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByText("Record updated")).toBeVisible();
+
+  const rows = await (await page.request.get("/api/rejections")).json();
+  const saved = rows.find((item) => item.rejection_reason === "Went with an internal candidate");
+  expect(saved).toBeTruthy();
+  expect(saved.eligible_for_reapplication).toBe(0);
+
+  const results = await new AxeBuilder({ page }).exclude("#toast").analyze();
+  expect(results.violations).toEqual([]);
+});

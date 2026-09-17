@@ -871,16 +871,27 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
             ),
           );
         if (!id && request.method === "POST") {
-          const actor = requireAuth(context, { csrf: true });
-          return json(response, 201, {
-            id: createTracker(db, actor, table, await body(request)),
-          });
+          const actor = requireAuth(context, { csrf: true }),
+            newId = createTracker(db, actor, table, await body(request));
+          // Returns the full created record (not just {id}), matching the
+          // convention tasks.js/habits.js/notes.js already established -
+          // nothing in the frontend used the old {id}-only shape (it always
+          // re-fetches the whole list after a create/edit), so this is a
+          // safe, backward-compatible improvement, not a breaking change.
+          return json(
+            response,
+            201,
+            db.prepare(`SELECT * FROM ${table} WHERE id=?`).get(newId),
+          );
         }
         if (id && request.method === "PATCH") {
           const actor = requireAuth(context, { csrf: true });
-          return json(response, 200, {
-            id: updateTracker(db, actor, table, id, await body(request)),
-          });
+          updateTracker(db, actor, table, id, await body(request));
+          return json(
+            response,
+            200,
+            db.prepare(`SELECT * FROM ${table} WHERE id=?`).get(id),
+          );
         }
         if (id && request.method === "DELETE") {
           const actor = requireAuth(context, { csrf: true }),
