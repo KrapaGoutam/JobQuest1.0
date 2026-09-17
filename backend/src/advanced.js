@@ -1489,6 +1489,13 @@ export async function handleAdvanced(context, helpers) {
         tasks: rows(db.prepare("SELECT * FROM tasks WHERE user_id=?"), [
           userId,
         ]),
+        habits: rows(db.prepare("SELECT * FROM habits WHERE user_id=?"), [
+          userId,
+        ]),
+        habit_logs: rows(
+          db.prepare("SELECT * FROM habit_logs WHERE user_id=?"),
+          [userId],
+        ),
       };
       return (
         sendDownload(
@@ -1513,6 +1520,7 @@ export async function handleAdvanced(context, helpers) {
       reminders: "reminders",
       goals: "goal_snapshots",
       tasks: "tasks",
+      habits: "habits",
     };
     let items;
     if (tables[type])
