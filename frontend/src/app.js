@@ -53,6 +53,12 @@ import {
   streakLabel,
   emptyStateMessage as habitEmptyStateMessage,
 } from "./features/habits/format.js";
+import {
+  NOTE_TYPES,
+  typeLabel,
+  displayTitle,
+  emptyStateMessage as notesEmptyStateMessage,
+} from "./features/notes/format.js";
 
 const state = {
   user: null,
@@ -71,6 +77,9 @@ const state = {
   taskView: "today",
   habitView: "today",
   habitHistoryId: "",
+  notesView: "list",
+  notesEditingId: null,
+  notesFilters: { search: "", type: "", pinned: "" },
   navigationCounts: {},
   expandedKanbanGroups: new Set(),
   selectedApplications: new Set(),
@@ -221,6 +230,7 @@ const nav = [
   ["calendar", "Calendar", "calendar-days"],
   ["tasks", "Tasks", "check-square"],
   ["habits", "Habits", "repeat"],
+  ["notes", "Journal & Notes", "book-open"],
   ["reminders", "Reminder Center", "bell-ring"],
   ["interviews", "Interviews", "users"],
   ["rejections", "Rejections", "x-circle"],
@@ -266,6 +276,7 @@ function shell(content) {
         "calendar",
         "tasks",
         "habits",
+        "notes",
         "reminders",
         "interviews",
         "rejections",
@@ -485,6 +496,7 @@ async function go(page) {
       calendar: renderCalendar,
       tasks: renderTasks,
       habits: renderHabits,
+      notes: renderNotes,
       reminders: renderReminders,
       resumes: renderResumes,
       goals: renderGoals,
@@ -1681,7 +1693,7 @@ async function renderDetail(id) {
       "Application details, decisions, and complete history",
       `<div class="actions"><button class="btn secondary" id="pin-detail">${item.pinned ? "Unpin" : "Pin"}</button><button class="btn secondary" id="archive-detail">${item.archived_at ? "Restore" : "Archive"}</button><button class="btn danger" id="delete-detail">Delete</button></div>`,
     ) +
-      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${jobUrlHref ? `<a href="${esc(jobUrlHref)}" target="_blank" rel="noopener noreferrer">Open posting</a>` : item.job_url ? esc(item.job_url) : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}${applicationTasksView(data.tasks, date())}${networkingContactsView(data.networking)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
+      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${jobUrlHref ? `<a href="${esc(jobUrlHref)}" target="_blank" rel="noopener noreferrer">Open posting</a>` : item.job_url ? esc(item.job_url) : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}${applicationTasksView(data.tasks, date())}${applicationNotesView(data.notes)}${networkingContactsView(data.networking)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
   );
   bindApplicationForm(item);
   qsa("[data-detail]").forEach(
@@ -1737,6 +1749,7 @@ async function renderDetail(id) {
   bindTimeline(id);
   bindChecklist(id);
   bindDetailTasks(id);
+  bindDetailNotes(id);
 }
 function timelineView(events, id) {
   return `<section class="card full timeline-section"><div class="section-head"><h2>Visual Timeline</h2><div class="actions"><select id="timeline-filter" aria-label="Filter timeline"><option value="all">All</option><option value="stage">Stage changes</option><option value="interview">Interviews</option><option value="follow_up">Follow-ups</option><option value="recruiter">Recruiter activity</option><option value="rejection">Rejections</option><option value="offer">Offers</option><option value="notes">Notes</option><option value="automatic">Automatic</option><option value="manual">Manual</option></select><select id="timeline-sort" aria-label="Sort timeline"><option value="desc">Newest</option><option value="asc">Oldest</option></select><a class="btn small secondary" id="timeline-csv" href="/api/applications/${id}/timeline/csv">CSV</a><a class="btn small secondary" id="timeline-json" href="/api/applications/${id}/timeline/json">JSON</a></div></div><div class="timeline">${events.map((event) => `<article class="timeline-event ${STAGE_CLASS[event.stage] || ""}"><time>${esc(event.event_date)} ${esc(event.event_time || "")}</time><div><span class="badge">${esc(event.category)}</span><h3>${esc(event.title)}</h3><p>${esc(event.description || "")}</p><small>${esc(event.source)} · ${esc(event.actor_username || "")}</small></div></article>`).join("") || empty("No timeline events")}</div><details><summary>Add manual timeline event</summary><form id="timeline-form" class="form-grid">${field("event_date", "Event date", "date", date(), "required")}${field("event_time", "Time", "time")}${select("category", "Category", ["recruiter", "assessment", "interview", "follow_up", "offer", "notes"], "notes")}${select("event_type", "Event type", ["recruiter_viewed", "recruiter_called", "recruiter_emailed", "assessment_received", "assessment_submitted", "hiring_manager_contacted", "reference_requested", "reference_submitted", "background_check_started", "documents_requested", "verbal_offer", "custom"], "custom")}${field("title", "Title", "text", "", "required")}${field("contact_person", "Contact")}${select("stage", "Optional stage", ["", ...STAGES], "")}<label class="full">Note<textarea name="description"></textarea></label>${field("next_action", "Next action")}${field("next_action_date", "Next-action date", "date")}<button class="btn">Add Event</button></form></details></section>`;
@@ -2731,6 +2744,162 @@ async function renderHabits() {
   };
   bindHabitActions(renderHabits);
 }
+function noteCardHtml(item) {
+  return `<li class="note-card"><button type="button" class="note-card-open" data-note-open="${item.id}"><div class="note-card-head"><strong>${esc(displayTitle(item))}</strong>${item.pinned ? ` <span class="badge">Pinned</span>` : ""} <span class="badge">${esc(typeLabel(item.note_type))}</span></div><p class="muted">${esc(item.body_preview || "—")}</p><div class="muted note-card-meta">${item.application_company ? `${esc(item.application_company)} — ${esc(item.application_job_title)} · ` : ""}Updated ${esc((item.updated_at || "").slice(0, 10))}</div></button></li>`;
+}
+async function renderNotes() {
+  if (state.notesView === "editor") return renderNoteEditor();
+  const params = new URLSearchParams();
+  if (state.notesFilters.search) params.set("search", state.notesFilters.search);
+  if (state.notesFilters.type) params.set("type", state.notesFilters.type);
+  if (state.notesFilters.pinned) params.set("pinned", state.notesFilters.pinned);
+  const items = await api(`/api/notes?${params}`);
+  const typeOptions = [
+    { value: "", label: "All types" },
+    ...NOTE_TYPES.map((value) => ({ value, label: typeLabel(value) })),
+  ];
+  shell(
+    pageHead(
+      "Journal & Notes",
+      "Capture, search, and revisit your job-search notes",
+      `<button class="btn small" id="new-note">New Note</button>`,
+    ) +
+      `<section class="card full"><form id="note-filters" class="toolbar"><input type="search" name="search" placeholder="Search title or body" value="${esc(state.notesFilters.search)}" aria-label="Search notes">${select("type", "Type", typeOptions, state.notesFilters.type)}<label><input type="checkbox" name="pinned" ${state.notesFilters.pinned === "true" ? "checked" : ""}> Pinned only</label></form><ul class="note-list">${
+        items.length
+          ? items.map(noteCardHtml).join("")
+          : empty(
+              notesEmptyStateMessage(
+                state.notesFilters.type === "daily_journal" ? "daily_journal" : "all",
+              ),
+            )
+      }</ul></section>`,
+  );
+  qs("#new-note").onclick = () => {
+    state.notesEditingId = null;
+    state.notesView = "editor";
+    renderNotes();
+  };
+  qsa("[data-note-open]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        state.notesEditingId = button.dataset.noteOpen;
+        state.notesView = "editor";
+        renderNotes();
+      }),
+  );
+  const filterForm = qs("#note-filters");
+  const applyFilters = () => {
+    const data = Object.fromEntries(new FormData(filterForm));
+    state.notesFilters = {
+      search: data.search || "",
+      type: data.type || "",
+      pinned: data.pinned ? "true" : "",
+    };
+    renderNotes();
+  };
+  let searchTimer;
+  filterForm.querySelector('input[name="search"]').oninput = (event) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.notesFilters = { ...state.notesFilters, search: event.target.value };
+      renderNotes();
+    }, 300);
+  };
+  filterForm.querySelector('select[name="type"]').onchange = applyFilters;
+  filterForm.querySelector('input[name="pinned"]').onchange = applyFilters;
+}
+async function renderNoteEditor() {
+  const editingId = state.notesEditingId;
+  const [note, apps] = await Promise.all([
+    editingId ? api(`/api/notes/${editingId}`) : Promise.resolve(null),
+    api("/api/applications?page_size=100&archived=all"),
+  ]);
+  const appOptions = [
+    { value: "", label: "No linked application" },
+    ...apps.items.map((item) => ({
+      value: item.id,
+      label: `${item.company} — ${item.job_title}`,
+    })),
+  ];
+  const typeOptions = NOTE_TYPES.map((value) => ({ value, label: typeLabel(value) }));
+  shell(
+    pageHead(
+      note ? "Edit Note" : "New Note",
+      "Plain text, safely rendered — no formatting markup needed",
+      `<button class="btn secondary" id="cancel-note">Back to Notes</button>`,
+    ) +
+      `<section class="card full"><form id="note-form" class="form-grid">${field("title", "Title", "text", note?.title || "", "maxlength='200'")}${select("note_type", "Type", typeOptions, note?.note_type || "general")}${field("entry_date", "Date", "date", note?.entry_date || "")}${select("application_id", "Link to application", appOptions, note?.application_id || state.relatedAppId || "")}<label class="full checkbox-field"><input type="checkbox" name="pinned" ${note?.pinned ? "checked" : ""}> Pin this note</label><label class="full">Body<textarea name="body" class="note-body-input" rows="14" maxlength="20000">${esc(note?.body || "")}</textarea></label><div id="note-form-error"></div><div class="actions full"><button class="btn">Save</button>${note ? `<button type="button" class="btn danger" id="delete-note">Delete</button>` : ""}</div></form></section>`,
+  );
+  qs("#cancel-note").onclick = () => {
+    state.notesEditingId = null;
+    state.relatedAppId = "";
+    state.notesView = "list";
+    renderNotes();
+  };
+  qs("#note-form").onsubmit = async (event) => {
+    event.preventDefault();
+    const input = Object.fromEntries(new FormData(event.currentTarget));
+    input.pinned = event.currentTarget.pinned.checked;
+    if (!input.entry_date) delete input.entry_date;
+    if (!input.application_id) delete input.application_id;
+    try {
+      if (editingId)
+        await api(`/api/notes/${editingId}`, {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        });
+      else await api("/api/notes", { method: "POST", body: JSON.stringify(input) });
+      toast(editingId ? "Note updated" : "Note added");
+      state.notesEditingId = null;
+      state.relatedAppId = "";
+      state.notesView = "list";
+      renderNotes();
+    } catch (error) {
+      qs("#note-form-error").innerHTML = errorBox(error);
+    }
+  };
+  if (note)
+    qs("#delete-note").onclick = async () => {
+      if (!confirm("Delete this note?")) return;
+      try {
+        await api(`/api/notes/${editingId}`, { method: "DELETE" });
+        toast("Note deleted");
+        state.notesEditingId = null;
+        state.notesView = "list";
+        renderNotes();
+      } catch (error) {
+        toast(error.message);
+      }
+    };
+}
+function applicationNotesView(notes) {
+  return `<section class="card full"><div class="section-head"><h2>Notes</h2><button type="button" class="btn small secondary" id="add-detail-note">Add Note</button></div>${
+    notes.length
+      ? `<ul class="note-list">${notes
+          .map(
+            (item) =>
+              `<li class="note-card"><button type="button" class="note-card-open" data-open-note="${item.id}"><div class="note-card-head"><strong>${esc(displayTitle(item))}</strong>${item.pinned ? ` <span class="badge">Pinned</span>` : ""} <span class="badge">${esc(typeLabel(item.note_type))}</span></div><p class="muted">${esc((item.body || "").slice(0, 160) || "—")}</p></button></li>`,
+          )
+          .join("")}</ul>`
+      : empty(notesEmptyStateMessage("application"))
+  }</section>`;
+}
+function bindDetailNotes(id) {
+  qs("#add-detail-note").onclick = () => {
+    state.relatedAppId = String(id);
+    state.notesEditingId = null;
+    state.notesView = "editor";
+    go("notes");
+  };
+  qsa("[data-open-note]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        state.notesEditingId = button.dataset.openNote;
+        state.notesView = "editor";
+        go("notes");
+      }),
+  );
+}
 async function renderReminders() {
   const [items, categories] = await Promise.all([
     api("/api/reminders"),
@@ -3053,6 +3222,7 @@ function renderExports() {
         ["reminders", "Reminders CSV"],
         ["tasks", "Tasks CSV"],
         ["habits", "Habits CSV"],
+        ["notes", "Notes CSV"],
         ["resume-analytics", "Resume Analytics CSV"],
         ["goals", "Goal History CSV"],
         ["aging", "Aging Report CSV"],
