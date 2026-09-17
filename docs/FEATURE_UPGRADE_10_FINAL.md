@@ -233,7 +233,69 @@ or resolved at the root this round.
 
 ## Security Audit
 
-_Filled in during Phase 10E._
+Formal final pass across every domain. Findings classified CRITICAL/HIGH/MEDIUM/LOW/
+INFORMATIONAL, per the round's own scheme.
+
+### Authorization Matrix
+
+Every domain follows the same, consistently-applied pattern: `requireAuth(context)`
+resolves the acting user from the session cookie; regular users are always scoped to
+`WHERE user_id=?`; a `MANAGER` may act on another user's records only via an explicit
+`user_id`/`target_user_id` parameter, never implicitly. Verified directly (not just by
+memory) — `requireAuth` call counts match route-branch counts in every handler module
+(`server.js`: 23, `advanced.js`: 18, `feature-upgrade.js`: 12, `habits.js`/`notes.js`/
+`tasks.js`: 4-6 each), and every domain has at least one passing IDOR test.
+
+| Domain | Owner-scoped list/get | Create ownership | Update ownership | Delete ownership | Cross-owner link checked |
+|---|---|---|---|---|---|
+| Applications | ✅ | ✅ (`targetOwner`) | ✅ (rejects `user_id` in body) | ✅ | — |
+| Interviews/Rejections/Follow-ups/Networking/Goals | ✅ | ✅ | ✅ (rejects `user_id`/`target_user_id`/`owner_id`) | ✅ | ✅ (`relatedOwner`) |
+| Checklist items | ✅ (via parent application) | ✅ | ✅ | ✅ | — (always belongs to one already-owned application) |
+| Import batches/rows | ✅ | ✅ | — (immutable after creation) | — | — |
+| Tasks | ✅ | ✅ | ✅ | ✅ | ✅ (`applicationOwner`) |
+| Habits/habit logs | ✅ | ✅ | ✅ | ✅ (cascades logs) | — |
+| Notes | ✅ | ✅ | ✅ | ✅ | ✅ (`applicationOwner`) |
+| Resumes | ✅ | ✅ | ✅ | ✅ | — |
+| Exports (CSV/JSON) | ✅ (`ownerId`) | n/a | n/a | n/a | — |
+
+No CRITICAL or HIGH findings. Two INFORMATIONAL notes, neither blocking:
+
+- **`uuid` (transitive, via `exceljs`)**: `npm audit --audit-level=high` passes clean
+  (exit 0) on both `backend` and `frontend`; two MODERATE advisories exist for a
+  buffer-bounds issue in `uuid` v3/v5/v6 generation, only reachable via a breaking
+  `exceljs` downgrade. Below this round's CRITICAL/HIGH bar — accepted, not forced.
+- **SQL injection**: audited every `${...}` string-interpolated SQL fragment across
+  `backend/src/*.js`. Every case is either (a) a value bound via a `?` placeholder,
+  never concatenated, or (b) a column/table/sort-direction name drawn from a
+  hardcoded whitelist (regex-anchored route tables, `SORT_FIELDS`/`allowedSort` sets,
+  a 3-way ternary for `strftime` group format) — never raw user input. No injectable
+  path found.
+
+### Other checks
+
+- **CSRF**: every mutating route requires `X-CSRF-Token` matching the session's
+  stored token (`requireAuth(context, { csrf: true })`), confirmed present on all new
+  Tasks/Habits/Notes/Analytics-adjacent routes this revamp added.
+- **Stored XSS**: every user-text field (Notes, Task/Habit names, application fields)
+  is rendered through the shared `esc()` helper; Notes was explicitly tested with
+  `<script>`/`<img onerror>`-shaped content at both the API and E2E layers this
+  revamp (Round 9) and remains inert.
+- **CSV formula injection**: `safeCell()` (Round 6) covers every CSV export path,
+  including the new `habits`/`notes` export types added this round.
+- **Sensitive logging**: audited every `console.*` call in `backend/src/*.js`. 500-
+  level errors log the server-side error object (never sent to the client — the
+  client always receives a generic "An unexpected error occurred"); no request body,
+  password, or PIN is ever logged.
+- **Session/cookie handling**: unchanged since Round 1 — `HttpOnly; SameSite=Strict`
+  (+ `Secure` in production), login lockout after 5 failed attempts, 12-hour session
+  expiry. Still covered by a passing test.
+- **CSP**: unchanged since Round 1 —
+  `default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;
+  connect-src 'self'; frame-ancestors 'none'`, no `unsafe-inline`, no external host
+  ever added across any of the nine product rounds. Verified directly in
+  `server.js`, not assumed.
+
+**No unresolved CRITICAL or HIGH findings.** Release is not blocked on security.
 
 ## Performance Audit
 
