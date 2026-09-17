@@ -346,7 +346,75 @@ connection-lifecycle issue found; unchanged this round.
 
 ## Refactoring Audit
 
-_Filled in during Phase 10G._
+### Round 3 "legacy `GET /api/applications` is callerless" claim — FALSE, verified and corrected
+
+Re-checked directly rather than trusting the old backlog note. `GET /api/applications`
+(`backend/src/server.js:629`) is exercised by:
+
+- The frontend, three times, all for the same purpose (populating an "application"
+  picker dropdown with a flat, unpaginated `page_size=100&archived=all` list): the
+  generic tracker editor (`renderTracker`, `app.js:2113`), the tasks editor
+  (`renderTasks`, `app.js:2456`), and the note editor (`renderNoteEditor`,
+  `app.js:2844`). The main Applications page itself uses the newer, filterable
+  `/api/applications/query` — a different route entirely — so the two coexist for
+  different jobs (full-text/stage/priority filtering + pagination vs. a cheap flat
+  list for a `<select>`).
+- Every backend integration test that creates a fixture application (`app.test.js`,
+  30+ call sites) and the Playwright fixture (`jobquest.spec.js:19`).
+
+**Conclusion: not removed.** The claim was wrong; treating it as fact without
+re-verifying would have deleted a route three live pages depend on. Backlog entry
+closed as OBSOLETE (see Technical Debt Classification).
+
+### Dead code found and removed (verified, not assumed)
+
+Each item below was confirmed dead by direct trace (grep for every call site /
+selector usage) before touching it, per the same discipline used for the claim above.
+
+| Item | File | Evidence | Action |
+|---|---|---|---|
+| `more-horizontal` icon | `frontend/src/icons.js` | Zero references anywhere in `frontend/src/` outside its own definition | Removed |
+| Duplicate `.eyebrow` rule | `styles.css` (was ~656) | A second `.eyebrow` rule later in the file redeclares the exact same five properties with different values; same specificity, later source order always wins, so the first block had zero effect | Removed the dead (first) block |
+| Duplicate `.goal-chart { height: 110px }` | `styles.css` (was ~1899) | `.goal-chart` is rendered from exactly one call site (`app.js:695`); a second, later `.goal-chart` rule always sets `height: 14rem` and wins the cascade | Removed the dead declaration |
+| Two standalone `.pagination { ... }` blocks | `styles.css` (was ~1642, ~2138) | `class="pagination"` is never rendered alone anywhere in `app.js` — the only usage is the more specific `class="pagination applications-pagination"`, whose own rule is fully self-contained (sets its own `display`/`align-items`/`justify-content`/`gap`/`margin`/`padding`/`border-top`) | Removed both unreachable blocks |
+| `.bar-chart i { height: 0.55rem }` | `styles.css` (was ~1736) | A later `.bar-chart i` rule always sets `height: 0.8rem`, same specificity, wins | Removed the dead declaration |
+| `.preview-actions { justify-content: space-between }` | `styles.css` (was ~2558) | A later `.preview-actions` rule always sets `justify-content: flex-end`, same specificity, wins | Removed the dead declaration |
+
+None of these changed rendered output (each removed declaration was already
+permanently overridden or its selector never matched anything) — confirmed by
+`npm run build` (frontend), the full backend suite (76/77, 1 pre-existing skip),
+and a full non-visual Playwright run (55/60 passed, 2 failed on the pre-existing
+mobile-nav transition flake documented in Known Deferred Debt, 3 skipped; both
+re-ran green in isolation, confirming no regression from this cleanup).
+
+### `prompt()`-based editing — evaluated, kept as-is
+
+`window.prompt()` is used for quick single/multi-field edits in 11 places across the
+app (saved-view naming, checklist item edit, resume version rename, habit
+create/edit fields, category/tag rename, next-action note) — not just habits as the
+Round 8 backlog note implied. It's a consistent, deliberate, dependency-free pattern
+across the whole app, not isolated debt on one page. Converting only the habits
+editor to a modal (the original backlog ask) would make that one page inconsistent
+with the other ten; converting all eleven is a real UI project (a shared modal/form
+component, focus-trap handling, validation UI) that is out of scope for a targeted
+cleanup pass in the final hardening round and risks exactly the "no risky global
+rewrite" this round rules out. **Decision: keep `prompt()` for V2; classified as
+ACCEPTED V2 DEBT, candidate for a unified inline-edit component in V2.1.**
+
+### `app.js` extraction opportunities — evaluated, none taken
+
+`app.js` already has dedicated `features/<name>/format.js` modules for
+`applications`, `contacts`, `habits`, `tasks`, `notes`, `import-export`, and now
+`analytics` (added this round) for pure formatting/validation logic. Checked for
+further extraction candidates:
+
+- No duplicate formatter logic found across feature modules (grepped every
+  `export function` matching `format|rate|label|percent` — no overlap).
+- The remaining bulk of `app.js` is view-rendering (`render*` functions) and event
+  wiring, which is inherently coupled to the single-page shell and DOM structure;
+  splitting it further would be a structural rewrite with no functional benefit,
+  not a targeted cleanup. Not pursued, consistent with "no vanity line-count
+  rewrite."
 
 ## Technical Debt Classification
 
@@ -373,8 +441,14 @@ columns; no migration.
 
 ## API Impact
 
-Additive only: one new `kind` (`resume`) on the existing `/api/analytics/:kind`
-endpoint. No existing endpoint's behavior or response shape changed.
+- Additive: one new `kind` (`resume`) on the existing `/api/analytics/:kind` endpoint.
+- Response-shape improvement (Phase 10B, backward-compatible): the generic tracker
+  `POST`/`PATCH` routes (`interviews`/`rejections`/`follow_ups`/`networking_contacts`/
+  `daily_goals`/`weekly_goals`) now return the full updated record instead of `{id}`,
+  matching the convention already used by `tasks.js`/`habits.js`/`notes.js`. No caller
+  (frontend or tests, pre-existing at the time) relied on the old `{id}`-only shape —
+  the frontend always re-fetches after a write — so this is a strict widening, not a
+  breaking change.
 
 ## Implementation Phases
 
@@ -384,7 +458,7 @@ endpoint. No existing endpoint's behavior or response shape changed.
 4. **10D — Full accessibility audit (including the required `#toast` fix).**
 5. **10E — Security hardening pass.**
 6. **10F — Performance hardening pass.**
-7. **10G — Code quality / refactor / dead-code pass.**
+7. **10G — Code quality / refactor / dead-code pass** — done.
 8. **10H — Full regression + release-candidate validation.**
 9. **10I — development-vs-main divergence audit + integration plan + release notes.**
 

@@ -653,13 +653,6 @@ h1 {
   margin: 0;
   font-size: clamp(1.8rem, 4vw, 2.7rem);
 }
-.eyebrow {
-  color: var(--brand);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.72rem;
-  font-weight: 800;
-}
 .muted {
   color: var(--muted-foreground);
 }
@@ -1639,11 +1632,6 @@ tbody td.num {
   font-size: 0.78rem;
   cursor: pointer;
 }
-.pagination {
-  align-items: center;
-  justify-content: flex-end;
-  margin-top: 1rem;
-}
 .pagination.applications-pagination {
   display: flex;
   align-items: center;
@@ -1734,7 +1722,6 @@ tbody td.num {
 }
 .mini-bars i,
 .bar-chart i {
-  height: 0.55rem;
   width: calc(min(var(--value), 10) * 10%);
   min-width: 3px;
   border-radius: 99px;
@@ -1895,9 +1882,6 @@ tbody td.num {
   fill: none;
   stroke: var(--primary);
   stroke-width: 1.5;
-}
-.goal-chart {
-  height: 110px;
 }
 .goal-chart-svg {
   height: 100%;
@@ -2137,12 +2121,6 @@ tbody td.num {
 .export-card:hover {
   border-color: var(--brand);
   transform: translateY(-2px);
-}
-.pagination {
-  display: flex;
-  justify-content: center;
-  gap: 0.8rem;
-  margin: 1rem;
 }
 progress {
   width: 100%;
@@ -2560,7 +2538,6 @@ dialog::backdrop {
   z-index: 2;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 1rem;
   padding: 1rem 1.25rem;
   background: var(--color-surface-1);
