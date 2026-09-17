@@ -51,12 +51,13 @@ function isoDate(offsetDays = 0) {
   return date.toISOString().slice(0, 10);
 }
 
-// The tab buttons trigger an async re-render (they fetch, then replace the
-// whole page). Clicking one and immediately interacting with the form races
-// the fetch - the old, about-to-be-replaced form can still be "actionable"
-// for a moment. aria-pressed flips only once the new render has actually
-// landed, so waiting on it is a real settle point, not an arbitrary sleep.
-async function selectTaskView(page, name) {
+// Shared by the Tasks and Habits pages: their tab buttons both trigger an
+// async re-render (fetch, then replace the whole page). Clicking one and
+// immediately interacting with the form races the fetch - the old,
+// about-to-be-replaced form can still be "actionable" for a moment.
+// aria-pressed flips only once the new render has actually landed, so
+// waiting on it is a real settle point, not an arbitrary sleep.
+async function selectTab(page, name) {
   await page.getByRole("button", { name, exact: true }).click();
   await expect(page.getByRole("button", { name, exact: true })).toHaveAttribute(
     "aria-pressed",
@@ -446,11 +447,11 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
   await page.getByLabel("Title").fill("Update resume project section");
   await page.getByRole("button", { name: "Add Task", exact: true }).click();
   await expect(page.getByText("Task added")).toBeVisible();
-  await selectTaskView(page, "Backlog");
+  await selectTab(page, "Backlog");
   await expect(page.getByText("Update resume project section")).toBeVisible();
 
   // Today: due today, high priority.
-  await selectTaskView(page, "Today");
+  await selectTab(page, "Today");
   await page.getByLabel("Title").fill("Apply to five QA roles today");
   await page.getByLabel("Due date").fill(isoDate(0));
   await page.getByLabel("Priority").selectOption("High");
@@ -465,22 +466,22 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
   await page.getByRole("button", { name: "Add Task", exact: true }).click();
   await expect(page.getByText("Task added")).toBeVisible();
   await expect(page.getByText("Practice SQL interview questions")).toHaveCount(0);
-  await selectTaskView(page, "Upcoming");
+  await selectTab(page, "Upcoming");
   await expect(page.getByText("Practice SQL interview questions")).toBeVisible();
 
   // Complete/reopen round-trips through Completed and back to Today.
-  await selectTaskView(page, "Today");
+  await selectTab(page, "Today");
   await page
     .getByRole("checkbox", { name: "Mark 'Apply to five QA roles today' complete" })
     .check();
   await expect(page.getByText("Apply to five QA roles today")).toHaveCount(0);
-  await selectTaskView(page, "Completed");
+  await selectTab(page, "Completed");
   await expect(page.getByText("Apply to five QA roles today")).toBeVisible();
   await page
     .getByRole("checkbox", { name: "Mark 'Apply to five QA roles today' not complete" })
     .uncheck();
   await expect(page.getByText("Apply to five QA roles today")).toHaveCount(0);
-  await selectTaskView(page, "Today");
+  await selectTab(page, "Today");
   await expect(page.getByText("Apply to five QA roles today")).toBeVisible();
 
   // Recurrence: complete a weekly task and verify exactly one next occurrence.
@@ -493,7 +494,7 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
     .getByRole("checkbox", { name: "Mark 'Weekly recruiter check-in' complete" })
     .check();
   await expect(page.getByText("Weekly recruiter check-in")).toHaveCount(0);
-  await selectTaskView(page, "Upcoming");
+  await selectTab(page, "Upcoming");
   await expect(page.getByText("Weekly recruiter check-in")).toBeVisible();
   // Scoped to the list, not the whole page - the create form's own "Repeat"
   // select also has a "Repeats weekly" option (Round 6 lesson: an unscoped
@@ -525,10 +526,151 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
   // button's accessible name, since a task is due today at this point in the
   // test - a plain substring match stays correct either way.
   await page.getByRole("button", { name: "Tasks" }).click();
-  await selectTaskView(page, "Backlog");
+  await selectTab(page, "Backlog");
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByText("Update resume project section")).toHaveCount(0);
+
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+});
+
+test("habits: boolean and count completion, weekly progress, streaks, archive/reactivate, and history", async ({
+  page,
+}, testInfo) => {
+  const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
+  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  // Exact and safe here: no habit exists yet, so the nav-badge count is zero
+  // and this button's accessible name is still plainly "Habits" (see the
+  // Round 7 lesson on nav-badge accessible names, in Tasks' own test above).
+  await page.getByRole("button", { name: "Habits", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Habits", exact: true })).toBeVisible();
+  await expect(page.getByText("No habits scheduled for today.")).toBeVisible();
+
+  // Boolean habit (target_count 1): checkbox toggle, persistence, streak.
+  await page.getByLabel("Name").fill("Practice coding");
+  await page.getByLabel("Target count").fill("1");
+  await page.getByRole("button", { name: "Add Habit", exact: true }).click();
+  await expect(page.getByText("Habit added")).toBeVisible();
+  const codingCheckbox = page.getByRole("checkbox", {
+    name: "Mark 'Practice coding' complete",
+  });
+  await expect(codingCheckbox).toBeVisible();
+  await codingCheckbox.check();
+  await expect(page.getByText("Completed today")).toBeVisible();
+  // A just-completed period counts toward the streak immediately.
+  await expect(page.getByText("1-day streak")).toBeVisible();
+
+  // Verify it actually persisted server-side, not just in the DOM. This app
+  // has no URL-based routing (state.page lives in memory), so a real
+  // page.reload() always lands back on the Dashboard by design (see the
+  // identical, already-documented reasoning on the checklist test above) -
+  // asking the server directly is both more precise and more reliable.
+  const persisted = await (
+    await page.request.get("/api/habits?view=today")
+  ).json();
+  const codingHabit = persisted.find((item) => item.name === "Practice coding");
+  expect(codingHabit.completed).toBe(true);
+  expect(codingHabit.streak).toBe(1);
+
+  // Uncheck reverts cleanly.
+  await page
+    .getByRole("checkbox", { name: "Mark 'Practice coding' not complete" })
+    .uncheck();
+  await expect(page.getByText("Not yet completed today")).toBeVisible();
+
+  // Count habit (target_count 5): +/- controls, partial progress, reaching
+  // target, and over-achievement still counting as complete.
+  await page.getByLabel("Name").fill("Apply to jobs");
+  await page.getByLabel("Target count").fill("5");
+  await page.getByRole("button", { name: "Add Habit", exact: true }).click();
+  await expect(page.getByText("Habit added")).toBeVisible();
+  // Each click is a PUT + async re-render (the whole page is replaced, same
+  // as the task-view tabs in the Tasks test above). Clicking again before
+  // the previous click's re-render lands would read a stale data-value off
+  // the about-to-be-replaced button and under-count - so each click is
+  // followed by a wait for its expected, settled result before the next one.
+  const increment = () =>
+    page.getByRole("button", { name: "Increase progress for 'Apply to jobs'" });
+  await increment().click();
+  await expect(page.getByText("1 of 5 completed today")).toBeVisible();
+  await increment().click();
+  await expect(page.getByText("2 of 5 completed today")).toBeVisible();
+  await increment().click();
+  await expect(page.getByText("3 of 5 completed today")).toBeVisible();
+  await increment().click();
+  await expect(page.getByText("4 of 5 completed today")).toBeVisible();
+  await increment().click();
+  await expect(page.getByText("5 of 5 completed today")).toBeVisible();
+  await increment().click();
+  await expect(page.getByText("6 of 5 completed today")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Decrease progress for 'Apply to jobs'" })
+    .click();
+  await expect(page.getByText("5 of 5 completed today")).toBeVisible();
+
+  // Weekly habit (target-per-week, not tied to one day).
+  await page.getByLabel("Name").fill("Networking outreach");
+  await page.getByLabel("Frequency").selectOption("weekly");
+  await page.getByLabel("Target count").fill("3");
+  await page.getByRole("button", { name: "Add Habit", exact: true }).click();
+  await expect(page.getByText("Habit added")).toBeVisible();
+
+  await selectTab(page, "All Habits");
+  await expect(page.getByText("Practice coding")).toBeVisible();
+  // Scoped to the habit list, not the whole page - the create form's own
+  // Frequency select also has a "Weekly" option (same Round 6/7 lesson: an
+  // unscoped text match can resolve to more than one element).
+  await expect(
+    page.locator("#habit-list").getByText("0 of 3 completed this week"),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Increase progress for 'Networking outreach'" })
+    .click();
+  await expect(page.getByText("1 of 3 completed this week")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Increase progress for 'Networking outreach'" })
+    .click();
+  await expect(page.getByText("2 of 3 completed this week")).toBeVisible();
+
+  // Archive: leaves Today, stays visible (and editable) in All Habits.
+  await page
+    .getByRole("listitem")
+    .filter({ hasText: "Practice coding" })
+    .getByRole("button", { name: "Archive", exact: true })
+    .click();
+  await expect(page.getByText("Habit archived")).toBeVisible();
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "Practice coding" }),
+  ).toContainText("Archived");
+  await selectTab(page, "Today");
+  await expect(page.getByText("Practice coding")).toHaveCount(0);
+  await selectTab(page, "All Habits");
+  await page
+    .getByRole("listitem")
+    .filter({ hasText: "Practice coding" })
+    .getByRole("button", { name: "Reactivate", exact: true })
+    .click();
+  await expect(page.getByText("Habit reactivated")).toBeVisible();
+
+  // History: recent completions remain visible after archiving/reactivating.
+  await page
+    .getByRole("listitem")
+    .filter({ hasText: "Practice coding" })
+    .getByRole("button", { name: "History", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: "History", exact: true })).toBeVisible();
+  await expect(page.locator("#habit-history-list")).toContainText(/— (0|1)/);
+
+  // Delete.
+  await selectTab(page, "All Habits");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page
+    .getByRole("listitem")
+    .filter({ hasText: "Networking outreach" })
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await expect(page.getByText("Networking outreach")).toHaveCount(0);
 
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
