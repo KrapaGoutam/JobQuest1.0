@@ -11,8 +11,8 @@ detailed spec in the round's own `docs/FEATURE_UPGRADE_N.md` once it starts.
 | 5 | Contacts/networking — fixed the broken application-linkage flow, added Edit UI, surfaced contacts on application detail; backend CRUD/security was already solid — see `docs/FEATURE_UPGRADE_5.md` | Merged (PR #12) |
 | 6 | Import/export hardening — fixed CSV formula-injection (every CSV export), job_url unsafe-protocol gap, added CSV import, batch row-detail viewing; preview/validation/duplicate/transaction logic was already solid — see `docs/FEATURE_UPGRADE_6.md` | Merged (PR #13) |
 | 7 | Task management — genuinely net-new `tasks` table, distinct from the pre-existing (and much closer than expected) `reminders` domain; Today/Upcoming/Backlog/Completed views, priority, optional due date, optional application link, simple recurrence — see `docs/FEATURE_UPGRADE_7.md` | Merged (PR #14) |
-| 8 | Habit tracker — genuinely net-new `habits`/`habit_logs`; daily/weekdays/weekly frequency, unified boolean+count completion model, idempotent progress writes, derived streaks — see `docs/FEATURE_UPGRADE_8.md` | Implemented locally; PR pending |
-| 9 | Journal / notes | Not started |
+| 8 | Habit tracker — genuinely net-new `habits`/`habit_logs`; daily/weekdays/weekly frequency, unified boolean+count completion model, idempotent progress writes, derived streaks — see `docs/FEATURE_UPGRADE_8.md` | Merged (PR #15) |
+| 9 | Journal / notes — genuinely net-new `notes` table, distinct from the 8 existing domain-specific notes fields (left untouched); search, type/pinned filters, optional application link, safe plain-text rendering — see `docs/FEATURE_UPGRADE_9.md` | Implemented locally; PR pending |
 | 10 | Analytics module | Not started |
 | 11 | Responsive/design-system capstone pass | Not started |
 
@@ -111,3 +111,22 @@ package, plan-only).
   edits, worth revisiting if that turns out to undersell the feature.
 - Streak lookback is bounded at 365 days (a documented, currently-irrelevant trade-off
   — see `docs/FEATURE_UPGRADE_8.md` Streak Semantics).
+
+## Smaller items discovered during Round 9 (not yet sequenced into a round)
+
+- **A real, pre-existing, previously-undiscovered accessibility issue on the shared
+  `#toast` component** (used on every page) — a serious color-contrast violation,
+  reproduced deterministically, not resolved by waiting for the toast's `.show`
+  class to clear. Not caused by this round; excluded from this round's E2E scan
+  (`.exclude("#toast")`) rather than fixed. See `docs/FEATURE_UPGRADE_9.md` Known
+  Debt for the investigation notes — worth a dedicated look in a future round or
+  polish pass.
+- No "load more"/pagination past Notes' 100-row cap — same pattern as Tasks/Habits.
+- Note tags, contact/task/habit linking, and archive were all explicitly deferred
+  per the round's own instructions; consolidating the 8 existing embedded notes
+  fields into the new table was considered and explicitly rejected.
+- Round 8's `frontend/src/features/habits/format.js` pure functions
+  (`frequencyLabel`/`progressLabel`/`streakLabel`/`emptyStateMessage`) were never
+  unit-tested (only the backend `habits.js` functions were) — noticed while adding
+  Round 9's own frontend unit tests. Minor, zero-risk gap; not fixed here since it's
+  out of Round 9's scope, noted for whoever next touches that file.
