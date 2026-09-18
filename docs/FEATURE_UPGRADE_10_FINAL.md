@@ -743,11 +743,22 @@ None this phase.
   race fixed in Phase 10H bug 1 above, which was about `analyze()` catching an
   in-flight CSS transition — this one is the toast's assertion itself losing the race
   against its own hide timer when a very long run has made the whole page slow).
-  Observed once, 67 tests deep into a 70-test full run, at the narrowest viewport
-  (small-mobile); reproduced 0/3 times in immediate isolated re-runs. Same
-  load-dependent-residual-flake class as the mobile-nav issue below, and treated the
-  same way: root cause understood, not chased further given the now-low, load-only
-  reproduction rate.
+  Observed once locally, 67 tests deep into a 70-test full run, at the narrowest
+  viewport (small-mobile); reproduced 0/3 times in immediate isolated re-runs. Same
+  load-dependent-residual-flake class as the mobile-nav issue below.
+  **Recurred on GitHub Actions itself** (PR #17, second CI run, a different
+  instance in the same notes test — the "Pinned" toast after editing, not the
+  "deleted" one caught locally) — CI runners have measurably less CPU headroom
+  than local dev (also evidenced by the Phase 10H-bug-4 CI-only toast/axe race),
+  making this whole flake class more likely there than locally. That specific
+  instance was mitigated: its toast assertion was redundant with the very next
+  line (the "Pinned" badge check, which proves the same real outcome and doesn't
+  share the toast's transient timing), so it was removed rather than hardened in
+  place. ~18 structurally similar toast assertions remain elsewhere in the spec,
+  none of which have ever actually failed (locally or on CI, across every run
+  this round) — rewriting all of them preemptively was judged disproportionate
+  scope creep for a flake class with a single, now-fixed, confirmed occurrence;
+  not chased further without new evidence.
 - **The mobile-navigation transition fix above reduced but did not fully eliminate**
   the rare underlying flake (observed once in 40 full-suite runs post-fix, down from a
   much higher rate before it — the exact prior rate wasn't measured, but the failure

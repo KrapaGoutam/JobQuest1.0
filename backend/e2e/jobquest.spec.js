@@ -853,10 +853,15 @@ test("notes: create/edit/delete, journal entries, search, application linking, p
     "Strong technical round, weak system design.",
   );
 
-  // Pin it, verify the badge appears in the list.
+  // Pin it, verify the badge appears in the list. Deliberately not asserting
+  // the "Note updated" toast itself here - it's a real CI-observed flake
+  // (toast() auto-hides after a fixed 2600ms, and under a slower/more loaded
+  // CI runner there's no guarantee this assertion starts polling before that
+  // window closes, especially this far into a long sequential run). The
+  // Pinned badge below is the actual, stable outcome this step needs to
+  // prove, and proves it regardless of the toast's own transient timing.
   await page.getByLabel("Pin this note").check();
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("Note updated")).toBeVisible();
   await expect(
     page
       .locator(".note-card", { hasText: "Northstar interview reflection" })
