@@ -110,7 +110,14 @@ test("PIN validation accepts leading zero and rejects non-four-digit values", as
     .prepare("SELECT password_hash,pin_hash FROM users WHERE username=?")
     .get("leadingzero");
   assert.ok(stored.pin_hash.startsWith("scrypt$"));
-  assert.equal(stored.pin_hash.includes("0007"), false);
+  // A prior version of this test also asserted the hash never contains "0007" as a
+  // literal substring - a scrypt hash is expected to look like random noise, so
+  // that had a small but real (Round 6-observed) chance of a coincidental
+  // substring match, unrelated to any actual security property. The two
+  // assertions above (it's really hashed, and never appears in the API response)
+  // are what this test needs to prove; that third check tested nothing real and
+  // was a source of non-deterministic failures. Root-caused and removed, not
+  // silently ignored - see docs/FEATURE_UPGRADE_10_FINAL.md Phase 10H.
   assert.equal(JSON.stringify(valid.data).includes("pin_hash"), false);
 });
 
@@ -473,6 +480,102 @@ test("related tracker ownership and manager access are enforced", async () => {
   assert.equal(
     (await request("/api/manager/users", { auth: managerAuth })).status,
     200,
+  );
+});
+
+test("Final round: editing interviews/rejections/follow_ups via PATCH was already backend-supported but never tested - verified, not assumed", async () => {
+  const user = await register("trackeredit"),
+    other = await register("trackereditother");
+  const app = await request("/api/applications", {
+    method: "POST",
+    auth: user,
+    input: { company: "Acme", job_title: "Engineer", date_applied: "2026-09-01" },
+  });
+
+  const interview = await request("/api/interviews", {
+    method: "POST",
+    auth: user,
+    input: {
+      application_id: app.data.id,
+      interview_round: "1",
+      interview_type: "Technical",
+      scheduled_at: "2026-09-10T10:00",
+    },
+  });
+  assert.equal(interview.status, 201);
+  const editedInterview = await request(`/api/interviews/${interview.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { result: "Passed", notes: "Went well" },
+  });
+  assert.equal(editedInterview.status, 200);
+  assert.equal(editedInterview.data.result, "Passed");
+  assert.equal(
+    (
+      await request(`/api/interviews/${interview.data.id}`, {
+        method: "PATCH",
+        auth: other,
+        input: { result: "hijacked" },
+      })
+    ).status,
+    404,
+  );
+
+  const rejection = await request("/api/rejections", {
+    method: "POST",
+    auth: user,
+    input: {
+      application_id: app.data.id,
+      rejection_date: "2026-09-15",
+      stage_at_rejection: "Interview",
+      eligible_for_reapplication: 1,
+    },
+  });
+  assert.equal(rejection.status, 201);
+  assert.equal(rejection.data.eligible_for_reapplication, 1);
+  // The checkbox-uncheck case is the one that matters: FormData omits an
+  // unchecked box entirely, so the frontend must send an explicit 0/false,
+  // not rely on omission, for an edit to actually be able to turn this off.
+  const uncheck = await request(`/api/rejections/${rejection.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { eligible_for_reapplication: 0 },
+  });
+  assert.equal(uncheck.status, 200);
+  assert.equal(uncheck.data.eligible_for_reapplication, 0);
+  const recheck = await request(`/api/rejections/${rejection.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { eligible_for_reapplication: 1 },
+  });
+  assert.equal(recheck.data.eligible_for_reapplication, 1);
+
+  const followUp = await request("/api/follow_ups", {
+    method: "POST",
+    auth: user,
+    input: {
+      application_id: app.data.id,
+      follow_up_type: "Email",
+      due_date: "2026-09-20",
+    },
+  });
+  assert.equal(followUp.status, 201);
+  const editedFollowUp = await request(`/api/follow_ups/${followUp.data.id}`, {
+    method: "PATCH",
+    auth: user,
+    input: { status: "Sent" },
+  });
+  assert.equal(editedFollowUp.status, 200);
+  assert.equal(editedFollowUp.data.status, "Sent");
+  assert.equal(
+    (
+      await request(`/api/follow_ups/${followUp.data.id}`, {
+        method: "PATCH",
+        auth: other,
+        input: { status: "hijacked" },
+      })
+    ).status,
+    404,
   );
 });
 
@@ -2330,4 +2433,64 @@ test("Round 9: search, type/pinned/application filters, previews, and stored XSS
     input: { pinned: false },
   });
   assert.equal(unpinned.data.pinned, 0);
+});
+
+test("Final round: resume performance analytics is owner-scoped and computes correct rates", async () => {
+  const user = await register("analyticsuser"),
+    other = await register("analyticsother");
+  const resume = await request("/api/resumes", {
+    method: "POST",
+    auth: user,
+    input: { version_name: "Backend v1" },
+  });
+  assert.equal(resume.status, 201);
+
+  const responded = await request("/api/applications", {
+    method: "POST",
+    auth: user,
+    input: {
+      company: "Acme",
+      job_title: "Engineer",
+      date_applied: "2026-09-01",
+      resume_id: resume.data.id,
+      last_response_date: "2026-09-05",
+      stage: "Interview",
+    },
+  });
+  assert.equal(responded.status, 201);
+  const noResponse = await request("/api/applications", {
+    method: "POST",
+    auth: user,
+    input: {
+      company: "Globex",
+      job_title: "Engineer",
+      date_applied: "2026-09-02",
+      resume_id: resume.data.id,
+    },
+  });
+  assert.equal(noResponse.status, 201);
+
+  const analytics = await request(
+    "/api/analytics/resume?date_from=2026-01-01&date_to=2026-12-31",
+    { auth: user },
+  );
+  assert.equal(analytics.status, 200);
+  const row = analytics.data.find((item) => item.version_name === "Backend v1");
+  assert.equal(row.applications, 2);
+  assert.equal(row.responses, 1);
+  assert.equal(row.response_rate, 50);
+  assert.equal(row.interviews, 1);
+  assert.equal(row.interview_rate, 50);
+  assert.equal(row.offers, 0);
+  assert.equal(row.offer_rate, 0);
+
+  // IDOR: another user's request never sees this user's resume rows.
+  const otherAnalytics = await request(
+    "/api/analytics/resume?date_from=2026-01-01&date_to=2026-12-31",
+    { auth: other },
+  );
+  assert.equal(
+    otherAnalytics.data.some((item) => item.version_name === "Backend v1"),
+    false,
+  );
 });

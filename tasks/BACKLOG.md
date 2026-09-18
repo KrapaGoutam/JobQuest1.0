@@ -12,9 +12,8 @@ detailed spec in the round's own `docs/FEATURE_UPGRADE_N.md` once it starts.
 | 6 | Import/export hardening — fixed CSV formula-injection (every CSV export), job_url unsafe-protocol gap, added CSV import, batch row-detail viewing; preview/validation/duplicate/transaction logic was already solid — see `docs/FEATURE_UPGRADE_6.md` | Merged (PR #13) |
 | 7 | Task management — genuinely net-new `tasks` table, distinct from the pre-existing (and much closer than expected) `reminders` domain; Today/Upcoming/Backlog/Completed views, priority, optional due date, optional application link, simple recurrence — see `docs/FEATURE_UPGRADE_7.md` | Merged (PR #14) |
 | 8 | Habit tracker — genuinely net-new `habits`/`habit_logs`; daily/weekdays/weekly frequency, unified boolean+count completion model, idempotent progress writes, derived streaks — see `docs/FEATURE_UPGRADE_8.md` | Merged (PR #15) |
-| 9 | Journal / notes — genuinely net-new `notes` table, distinct from the 8 existing domain-specific notes fields (left untouched); search, type/pinned filters, optional application link, safe plain-text rendering — see `docs/FEATURE_UPGRADE_9.md` | Implemented locally; PR pending |
-| 10 | Analytics module | Not started |
-| 11 | Responsive/design-system capstone pass | Not started |
+| 9 | Journal / notes — genuinely net-new `notes` table, distinct from the 8 existing domain-specific notes fields (left untouched); search, type/pinned filters, optional application link, safe plain-text rendering — see `docs/FEATURE_UPGRADE_9.md` | Merged (PR #16) |
+| 10 (FINAL) | Analytics + Capstone Hardening — Analytics page, full backlog reconciliation, UI/UX + design-system capstone, accessibility root-fix, formal security audit, performance audit, refactor/dead-code pass, full regression validation, `development`-vs-`main` integration plan + release notes — see `docs/FEATURE_UPGRADE_10_FINAL.md` | Implemented locally; PR pending |
 
 Not sequenced, on request only: `docs/design/STITCH_PROMPT.md` (Google Stitch prompt
 package, plan-only).
@@ -26,8 +25,10 @@ package, plan-only).
   `docs/FEATURE_UPGRADE_3.md` Known Debt.
 - Salary-range filter UI — blocked on a product decision about currency/period
   normalization, not just a UI gap. See same doc.
-- Decide whether to deprecate `GET /api/applications` (the pre-Feature-Upgrade-1 listing
-  endpoint) now that its only frontend caller was removed as dead code.
+- ~~Decide whether to deprecate `GET /api/applications`...~~ — **re-verified in Round
+  10 (Phase 10G) and found false**: it has three live frontend callers (the tracker,
+  tasks, and note editors' application picker) plus the entire backend/E2E test
+  suite. Not deprecated.
 
 ## Smaller items discovered during Round 4 (not yet sequenced into a round)
 
@@ -41,24 +42,22 @@ package, plan-only).
 - Dashboard integration of checklist completion/progress — deferred to avoid an N+1
   query pattern across the application list; needs a deliberate efficient query shape
   if pursued.
-- **`#detail-stage` (application detail page's stage-change dropdown) has no accessible
-  name** — real, critical-impact, pre-existing WCAG violation, found while scoping
-  Round 4's new E2E test but left unfixed (unrelated to checklists; the rest of the
-  detail page likely has more of the same pattern and deserves a dedicated audit, not a
-  one-off fix here). Cheap to fix whenever someone picks it up.
+- ~~`#detail-stage` has no accessible name~~ — **fixed in Round 10** (Phase 10D:
+  `aria-label="Change application stage"`).
 - Cross-group checklist reordering has no visible effect in the grouped display (group
   membership is decided by label, not `position`) — not a bug, but worth knowing if the
   grouping/reorder interaction is ever revisited. See `docs/FEATURE_UPGRADE_4.md`.
 
 ## Smaller items discovered during Round 5 (not yet sequenced into a round)
 
-- **Edit UI gap for interviews/rejections/follow_ups/daily_goals/weekly_goals** — same
-  "no edit control in the UI, backend already supports PATCH" gap this round closed for
-  networking_contacts, identically present for every other type sharing the generic
-  `renderTracker` view. See `docs/FEATURE_UPGRADE_5.md`.
+- ~~Edit UI gap for interviews/rejections/follow_ups/daily_goals/weekly_goals~~ —
+  **fixed in Round 10** (Phase 10B: `renderTracker`'s `editable` flag is now always
+  `true`; also fixed two real bugs this surfaced — checkbox handling and the
+  generic tracker API's response shape).
 - No accessibility audit of the other `renderTracker`-based pages (interviews,
-  rejections, follow_ups, goals, resumes, reminders) — only Networking and the
-  application-detail page were scanned this round.
+  rejections, follow_ups, goals, resumes, reminders) — partially addressed by
+  Round 10's broader Phase 10D sweep; not every one was individually, exhaustively
+  scanned. Remaining gap accepted as V2 debt.
 - Contact search/filter/sort and duplicate-contact detection — deferred, no evidence of
   need at current scale.
 - ~~`job_url` on the application detail page has the same unvalidated-external-link-
@@ -73,13 +72,12 @@ package, plan-only).
   work. See `docs/FEATURE_UPGRADE_6.md` Known Debt.
 - No downloadable error-report CSV for a bulk-import batch — row-level detail is now
   viewable in the UI (this round); exporting it is a small, separate follow-up.
-- `import_rows` has no dedicated index on `batch_id` — fine at current scale, worth
-  adding if import volume ever grows.
-- The Edit-UI gap noted in Round 5 (interviews/rejections/follow_ups/goals sharing
-  `renderTracker` still have no Edit control) is still open — unrelated to this round.
-- A non-reproducible, coincidental PIN-hash test flake was observed once during this
-  round's testing (`PIN validation accepts leading zero...` — a substring-coincidence
-  assertion, not a real bug). Not fixed; noted for whoever next sees it.
+- ~~`import_rows` has no dedicated index on `batch_id`~~ — **fixed in Round 10**
+  (Phase 10F: composite `(batch_id, row_number)` index, migration `012`).
+- The Edit-UI gap noted in Round 5 — **fixed in Round 10**, see above.
+- ~~A non-reproducible, coincidental PIN-hash test flake...~~ — **fixed in Round 10**
+  (Phase 10H/10I: root-caused as a flawed assertion testing a non-security-relevant
+  property; removed).
 
 ## Smaller items discovered during Round 7 (not yet sequenced into a round)
 
@@ -107,26 +105,44 @@ package, plan-only).
   Monday-first) and the goal-snapshot weekly walker still don't — worth a consistency
   pass later, not done this round.
 - Habit editing uses a `prompt()`-sequence flow, matching the existing reminder-
-  category-rename pattern, rather than a richer inline form — fine for occasional
-  edits, worth revisiting if that turns out to undersell the feature.
+  category-rename pattern, rather than a richer inline form — evaluated app-wide in
+  Round 10 (Phase 10G: this pattern is used consistently in 11 places, not just
+  habits); kept as-is, a shared modal component is a real V2.1+ candidate, not a
+  defect.
 - Streak lookback is bounded at 365 days (a documented, currently-irrelevant trade-off
   — see `docs/FEATURE_UPGRADE_8.md` Streak Semantics).
 
 ## Smaller items discovered during Round 9 (not yet sequenced into a round)
 
-- **A real, pre-existing, previously-undiscovered accessibility issue on the shared
-  `#toast` component** (used on every page) — a serious color-contrast violation,
-  reproduced deterministically, not resolved by waiting for the toast's `.show`
-  class to clear. Not caused by this round; excluded from this round's E2E scan
-  (`.exclude("#toast")`) rather than fixed. See `docs/FEATURE_UPGRADE_9.md` Known
-  Debt for the investigation notes — worth a dedicated look in a future round or
-  polish pass.
+- ~~A real, pre-existing, previously-undiscovered accessibility issue on the shared
+  `#toast` component...~~ — **fixed in Round 10** (Phase 10D: a `visibility`-
+  transition CSS fix, at the root, not an exclusion).
 - No "load more"/pagination past Notes' 100-row cap — same pattern as Tasks/Habits.
+  Accepted as V2 debt (Round 10 triage).
 - Note tags, contact/task/habit linking, and archive were all explicitly deferred
   per the round's own instructions; consolidating the 8 existing embedded notes
   fields into the new table was considered and explicitly rejected.
-- Round 8's `frontend/src/features/habits/format.js` pure functions
-  (`frequencyLabel`/`progressLabel`/`streakLabel`/`emptyStateMessage`) were never
-  unit-tested (only the backend `habits.js` functions were) — noticed while adding
-  Round 9's own frontend unit tests. Minor, zero-risk gap; not fixed here since it's
-  out of Round 9's scope, noted for whoever next touches that file.
+- ~~Round 8's `frontend/src/features/habits/format.js` pure functions... were never
+  unit-tested~~ — **fixed in Round 10** (Phase 10I prep).
+
+## Smaller items discovered during Round 10 (FINAL) (not yet sequenced into a round)
+
+- **Several `toast(); render*();` call sites in `app.js` don't `await` the
+  re-render** (e.g. the Tasks page's "Add task" submit handler) — real, confirmed
+  application-level debt, not just a test artifact; caused a genuine, reproducible
+  E2E failure this round (fixed at the test level). A full audit of every such call
+  site is separate, larger work than this round's validation phase. See
+  `docs/FEATURE_UPGRADE_10_FINAL.md` Known Deferred Debt.
+- `users.week_start` inconsistency (calendar week view and the goal-snapshot weekly
+  walker still don't honor it, only Habits does) — evaluated in Phase 10C,
+  deliberately not changed this round; touches two other mature features' date
+  math.
+- JSON restore for the full-workspace backup export, and a downloadable
+  error-report CSV for import batches — both real, both small-to-medium, neither
+  sequenced into any round yet.
+- Dashboard checklist-progress integration — deferred again (real N+1 risk without
+  a deliberate query shape; no measured user need yet).
+- Two latent, unconfirmed E2E locator issues were surfaced (not caused) while
+  investigating an unrelated test fix and are flagged, not chased further, since
+  the specific test line that could trigger either was reverted — see Phase 10H
+  notes in `docs/FEATURE_UPGRADE_10_FINAL.md`.

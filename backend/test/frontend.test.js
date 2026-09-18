@@ -52,12 +52,23 @@ import {
   emptyStateMessage as notesEmptyStateMessage,
 } from "../../frontend/src/features/notes/format.js";
 import {
+  rateLabel,
+  summarizeRates,
+} from "../../frontend/src/features/analytics/format.js";
+import {
   computeStreak,
   isDueToday,
   weekRange,
   validateHabit,
   validateProgress,
 } from "../src/habits.js";
+import {
+  frequencyLabel,
+  periodNoun,
+  progressLabel,
+  streakLabel,
+  emptyStateMessage as habitsEmptyStateMessage,
+} from "../../frontend/src/features/habits/format.js";
 import {
   isOverdue,
   dueDateLabel,
@@ -663,6 +674,44 @@ test("validateProgress rejects negative/non-integer values and future dates", ()
   assert.equal(ok.data.value, 5);
 });
 
+test("frequencyLabel, periodNoun, progressLabel, and streakLabel cover both completion models and all three frequencies (Round 9 gap: never unit-tested)", () => {
+  assert.equal(frequencyLabel("daily"), "Daily");
+  assert.equal(frequencyLabel("weekdays"), "Weekdays");
+  assert.equal(frequencyLabel("weekly"), "Weekly");
+  assert.equal(frequencyLabel("unknown"), "unknown");
+
+  assert.equal(periodNoun("daily"), "today");
+  assert.equal(periodNoun("weekdays"), "today");
+  assert.equal(periodNoun("weekly"), "this week");
+
+  assert.equal(
+    progressLabel({ frequency: "daily", target_count: 1, completed: true }),
+    "Completed today",
+  );
+  assert.equal(
+    progressLabel({ frequency: "daily", target_count: 1, completed: false }),
+    "Not yet completed today",
+  );
+  assert.equal(
+    progressLabel({
+      frequency: "weekly",
+      target_count: 3,
+      period_value: 2,
+      completed: false,
+    }),
+    "2 of 3 completed this week",
+  );
+
+  assert.equal(streakLabel({ streak: 0 }), "No current streak");
+  assert.equal(streakLabel({ streak: 4, frequency: "daily" }), "4-day streak");
+  assert.equal(streakLabel({ streak: 2, frequency: "weekly" }), "2-week streak");
+
+  assert.equal(habitsEmptyStateMessage("today"), "No habits scheduled for today.");
+  assert.equal(habitsEmptyStateMessage("all"), "Create your first habit.");
+  assert.equal(habitsEmptyStateMessage("history"), "No habit history yet.");
+  assert.equal(habitsEmptyStateMessage("unknown-view"), "No habits");
+});
+
 test("notePreview truncates long bodies with an ellipsis and passes short ones through", () => {
   assert.equal(notePreview("Short note."), "Short note.");
   assert.equal(notePreview(""), "");
@@ -718,4 +767,30 @@ test("validateNote rejects a fully blank note, unknown/forbidden fields, and ove
   const ok = validateNote({ title: "Reflection", body: "Went well." });
   assert.deepEqual(ok.errors, []);
   assert.equal(ok.data.note_type, "general");
+});
+
+test("rateLabel always shows the sample size alongside the percentage, never a bare rate", () => {
+  assert.equal(rateLabel(2, 7), "2/7 (28.6%)");
+  assert.equal(rateLabel(0, 0), "No data");
+  assert.equal(rateLabel(0, 5), "0/5 (0%)");
+  assert.equal(rateLabel(5, 5), "5/5 (100%)");
+});
+
+test("summarizeRates sums per-source rows into one overall total without a second query", () => {
+  const totals = summarizeRates([
+    { applications: 10, responses: 3, interviews: 1, offers: 0 },
+    { applications: 5, responses: 2, interviews: 2, offers: 1 },
+  ]);
+  assert.deepEqual(totals, {
+    applications: 15,
+    responses: 5,
+    interviews: 3,
+    offers: 1,
+  });
+  assert.deepEqual(summarizeRates([]), {
+    applications: 0,
+    responses: 0,
+    interviews: 0,
+    offers: 0,
+  });
 });

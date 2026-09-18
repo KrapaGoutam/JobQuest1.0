@@ -1371,6 +1371,20 @@ export async function handleAdvanced(context, helpers) {
       ).map(rates);
       return (json(response, 200, items), true);
     }
+    if (kind === "resume") {
+      // Same shape/formula as the "source" breakdown above (and the same SQL
+      // already used by the resume-analytics CSV export below) - resume
+      // performance previously had no interactive view at all, only a
+      // download. Reusing the existing, already-tested query and rates()
+      // formula rather than inventing a second one.
+      const items = rows(
+        db.prepare(
+          "SELECT r.version_name,count(a.id) applications,sum(a.last_response_date IS NOT NULL) responses,sum(a.stage IN ('Interview','Final Interview','Offer','Accepted')) interviews,sum(a.stage IN ('Offer','Accepted')) offers FROM resumes r LEFT JOIN applications a ON a.resume_id=r.id AND a.date_applied BETWEEN ? AND ? WHERE r.user_id=? GROUP BY r.id ORDER BY applications DESC",
+        ),
+        [start, end, userId],
+      ).map(rates);
+      return (json(response, 200, items), true);
+    }
     if (kind === "funnel") {
       const items = rows(
         db.prepare(

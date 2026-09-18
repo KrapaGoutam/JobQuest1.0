@@ -59,6 +59,7 @@ import {
   displayTitle,
   emptyStateMessage as notesEmptyStateMessage,
 } from "./features/notes/format.js";
+import { rateLabel, summarizeRates } from "./features/analytics/format.js";
 
 const state = {
   user: null,
@@ -74,6 +75,7 @@ const state = {
   relatedAppId: "",
   dashboardDays: 30,
   applicationView: "table",
+  analyticsDays: 90,
   taskView: "today",
   habitView: "today",
   habitHistoryId: "",
@@ -237,6 +239,7 @@ const nav = [
   ["follow_ups", "Follow-Ups", "send"],
   ["networking_contacts", "Networking", "network"],
   ["resumes", "Resumes", "file-text"],
+  ["analytics", "Analytics", "trending-up"],
   ["goal-history", "Goal History", "target"],
   ["aging", "Aging Report", "timer"],
   ["stage-analytics", "Stage Analytics", "bar-chart-3"],
@@ -265,7 +268,20 @@ function shell(content) {
     '<div class="sidebar-backdrop" id="sidebar-backdrop"></div>',
   );
   qsa("[data-page]").forEach(
-    (button) => (button.onclick = () => go(button.dataset.page)),
+    (button) =>
+      (button.onclick = () => {
+        // The mobile sidebar drawer and its backdrop are recreated fresh
+        // (closed) on every shell() render, but document.body itself is not -
+        // classList.toggle("nav-open", true) from opening the drawer sticks
+        // on body forever if the user navigates via a link instead of the
+        // drawer's own close button/backdrop, since nothing else ever clears
+        // it. Its only CSS effect is `overflow: hidden`, but that's real:
+        // the page becomes permanently unable to scroll on mobile after the
+        // drawer's been opened once. Clear it unconditionally here - a no-op
+        // when it wasn't set.
+        document.body.classList.remove("nav-open");
+        go(button.dataset.page);
+      }),
   );
   const navRoot = qs("aside nav");
   const groupedNavigation = [
@@ -287,7 +303,7 @@ function shell(content) {
     ["Career Assets", ["resumes", "bulk"]],
     [
       "Insights",
-      ["goal-history", "aging", "stage-analytics", "exports"],
+      ["analytics", "goal-history", "aging", "stage-analytics", "exports"],
     ],
     ["Settings", ["settings"]],
   ];
@@ -317,7 +333,15 @@ function shell(content) {
     qs("#sidebar-backdrop").classList.toggle("open", open);
     qs("#mobile-menu").setAttribute("aria-expanded", String(open));
     document.body.classList.toggle("nav-open", open);
-    if (open) qs("#sidebar-close").focus();
+    // Deferred to the next frame: focusing a descendant of the sidebar in
+    // the same tick as the class toggle that starts its CSS transform
+    // transition forces a synchronous layout read before the browser has
+    // committed the "before" state of that transition, which can starve or
+    // skip the animation entirely (observed directly: the "open" class
+    // present, but the drawer still rendered at its fully closed transform,
+    // for seconds at a time under load). Letting one frame land first keeps
+    // the transition and the focus move independent.
+    if (open) requestAnimationFrame(() => qs("#sidebar-close").focus());
     else navigationTrigger?.focus?.();
   };
   qs("#mobile-menu").onclick = () =>
@@ -503,6 +527,7 @@ async function go(page) {
       "goal-history": renderGoalHistory,
       aging: renderAging,
       "stage-analytics": renderCompleteStageAnalytics,
+      analytics: renderAnalytics,
       exports: renderExports,
       profile: renderProfile,
       settings: renderSettings,
@@ -899,7 +924,20 @@ async function renderDashboard(manager = false) {
       }),
   );
   qsa("[data-page]").forEach(
-    (button) => (button.onclick = () => go(button.dataset.page)),
+    (button) =>
+      (button.onclick = () => {
+        // The mobile sidebar drawer and its backdrop are recreated fresh
+        // (closed) on every shell() render, but document.body itself is not -
+        // classList.toggle("nav-open", true) from opening the drawer sticks
+        // on body forever if the user navigates via a link instead of the
+        // drawer's own close button/backdrop, since nothing else ever clears
+        // it. Its only CSS effect is `overflow: hidden`, but that's real:
+        // the page becomes permanently unable to scroll on mobile after the
+        // drawer's been opened once. Clear it unconditionally here - a no-op
+        // when it wasn't set.
+        document.body.classList.remove("nav-open");
+        go(button.dataset.page);
+      }),
   );
 }
 function renderDashboardSettings(layout, manager) {
@@ -1693,7 +1731,7 @@ async function renderDetail(id) {
       "Application details, decisions, and complete history",
       `<div class="actions"><button class="btn secondary" id="pin-detail">${item.pinned ? "Unpin" : "Pin"}</button><button class="btn secondary" id="archive-detail">${item.archived_at ? "Restore" : "Archive"}</button><button class="btn danger" id="delete-detail">Delete</button></div>`,
     ) +
-      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${jobUrlHref ? `<a href="${esc(jobUrlHref)}" target="_blank" rel="noopener noreferrer">Open posting</a>` : item.job_url ? esc(item.job_url) : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}${applicationTasksView(data.tasks, date())}${applicationNotesView(data.notes)}${networkingContactsView(data.networking)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
+      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage" aria-label="Change application stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${jobUrlHref ? `<a href="${esc(jobUrlHref)}" target="_blank" rel="noopener noreferrer">Open posting</a>` : item.job_url ? esc(item.job_url) : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}${applicationTasksView(data.tasks, date())}${applicationNotesView(data.notes)}${networkingContactsView(data.networking)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
   );
   bindApplicationForm(item);
   qsa("[data-detail]").forEach(
@@ -2205,13 +2243,14 @@ async function renderTracker(type) {
       );
     })
     .join("");
-  // Edit (as opposed to create/delete) is scoped to networking_contacts this
-  // round, not generalized to every tracker type sharing this view -
-  // interviews/rejections/follow_ups/goals have the same "no edit in UI" gap
-  // (the backend already supports PATCH for all of them), left alone here to
-  // keep this round's change to its actual scope - see
-  // docs/FEATURE_UPGRADE_5.md Known Debt.
-  const editable = type === "networking_contacts";
+  // Round 5 built this edit machinery (form population, PATCH-vs-POST
+  // dispatch, cancel/reset) fully generically off meta.fields, but scoped
+  // its use to networking_contacts only, deliberately leaving the identical
+  // "no edit in UI" gap open for interviews/rejections/follow_ups (the
+  // backend already supported PATCH for all of them even then). Final round
+  // gap audit: closing it here costs one line, since nothing below this
+  // point is networking_contacts-specific.
+  const editable = true;
   shell(
     pageHead(meta.title, "Owned records linked to your application workflow") +
       `<div class="grid"><section class="card wide">${table(
@@ -2256,7 +2295,17 @@ async function renderTracker(type) {
           const item = items.find((row) => row.id === Number(button.dataset.edit));
           editingId = item.id;
           for (const name of meta.fields)
-            if (form.elements[name]) form.elements[name].value = item[name] ?? "";
+            if (form.elements[name]) {
+              // Checkboxes (only eligible_for_reapplication today) reflect
+              // state via .checked, never .value - and an unchecked
+              // checkbox is silently omitted from FormData entirely, which
+              // would make "uncheck it, then Save" a no-op PATCH. Both ends
+              // of that round trip need the checkbox case handled
+              // explicitly (see the submit handler below).
+              if (form.elements[name].type === "checkbox")
+                form.elements[name].checked = Boolean(item[name]);
+              else form.elements[name].value = item[name] ?? "";
+            }
           if (form.elements.notes) form.elements.notes.value = item.notes ?? "";
           qs("#tracker-form-heading").textContent = `Edit ${meta.title.replace(/s$/, "")}`;
           form.querySelector("button.btn:not(.secondary)").textContent =
@@ -2269,6 +2318,12 @@ async function renderTracker(type) {
   form.onsubmit = async (event) => {
     event.preventDefault();
     const payload = Object.fromEntries(new FormData(event.currentTarget));
+    // An unchecked checkbox is omitted from FormData entirely, not sent as
+    // false - fine for create (the server already defaults it), but would
+    // make unchecking a previously-true value a silent no-op on PATCH.
+    for (const name of meta.fields)
+      if (form.elements[name]?.type === "checkbox")
+        payload[name] = form.elements[name].checked ? 1 : 0;
     // Ownership can never be changed via update (the backend rejects it
     // outright) - only relevant when a manager edits another user's record.
     if (editingId) delete payload.target_user_id;
@@ -2917,7 +2972,7 @@ async function renderReminders() {
       "One place for due, overdue, snoozed, and completed work",
       `<button class="btn secondary" id="manage-categories">Manage Categories</button>`,
     ) +
-      `<div class="grid"><section class="card wide"><div class="toolbar"><select id="reminder-filter"><option value="">All categories</option>${options.map((item) => `<option value="${item.value}">${esc(item.label)}</option>`).join("")}</select></div><div id="reminder-list">${items.map((item) => `<article class="reminder" data-category="${item.category_id}"><div><span class="badge">${esc(item.calculated_status)}</span><span class="badge">${esc(item.priority)}</span><h3>${esc(item.title)}</h3><p>${esc(item.due_date)} ${esc(item.due_time || "")} · ${esc(item.description || "")}</p></div><div class="actions"><button class="btn small" data-complete-reminder="${item.id}">Complete</button><button class="btn small secondary" data-snooze="${item.id}" data-days="1">Tomorrow</button><button class="btn small secondary" data-snooze="${item.id}" data-days="7">One week</button><button class="btn small danger" data-delete-reminder="${item.id}">Delete</button></div></article>`).join("") || empty("No reminders")}</div></section><section class="card"><h2>Add reminder</h2><form id="reminder-form" class="form-grid">${select("category_id", "Category", options, "", "required")}${field("title", "Title", "text", "", "required")}${field("due_date", "Due date", "date", date(), "required")}${field("due_time", "Due time", "time", "09:00")}${select("priority", "Priority", ["Low", "Medium", "High"], "Medium")}<label class="full">Description<textarea name="description"></textarea></label><button class="btn full">Save</button></form></section></div>`,
+      `<div class="grid"><section class="card wide"><div class="toolbar"><select id="reminder-filter" aria-label="Filter by category"><option value="">All categories</option>${options.map((item) => `<option value="${item.value}">${esc(item.label)}</option>`).join("")}</select></div><div id="reminder-list">${items.map((item) => `<article class="reminder" data-category="${item.category_id}"><div><span class="badge">${esc(item.calculated_status)}</span><span class="badge">${esc(item.priority)}</span><h3>${esc(item.title)}</h3><p>${esc(item.due_date)} ${esc(item.due_time || "")} · ${esc(item.description || "")}</p></div><div class="actions"><button class="btn small" data-complete-reminder="${item.id}">Complete</button><button class="btn small secondary" data-snooze="${item.id}" data-days="1">Tomorrow</button><button class="btn small secondary" data-snooze="${item.id}" data-days="7">One week</button><button class="btn small danger" data-delete-reminder="${item.id}">Delete</button></div></article>`).join("") || empty("No reminders")}</div></section><section class="card"><h2>Add reminder</h2><form id="reminder-form" class="form-grid">${select("category_id", "Category", options, "", "required")}${field("title", "Title", "text", "", "required")}${field("due_date", "Due date", "date", date(), "required")}${field("due_time", "Due time", "time", "09:00")}${select("priority", "Priority", ["Low", "Medium", "High"], "Medium")}<label class="full">Description<textarea name="description"></textarea></label><button class="btn full">Save</button></form></section></div>`,
   );
   qs("#manage-categories").onclick = () => renderCategories(categories);
   qs("#reminder-filter").onchange = (event) =>
@@ -3206,6 +3261,63 @@ async function renderCompleteStageAnalytics() {
       )
       .join("")}</div><p class="muted">${esc(metrics.note)}</p></section>`,
   );
+}
+async function renderAnalytics() {
+  const days = state.analyticsDays;
+  const range = `date_from=${addClientDays(date(), -days)}&date_to=${date()}`;
+  const [funnel, source, resume] = await Promise.all([
+    api(`/api/analytics/funnel?${range}`),
+    api(`/api/analytics/source?${range}`),
+    api(`/api/analytics/resume?${range}`),
+  ]);
+  const totals = summarizeRates(source);
+  const rateRow = (label, numerator) =>
+    `<p><strong>${esc(label)}</strong><br>${esc(rateLabel(numerator, totals.applications))}</p>`;
+  shell(
+    pageHead(
+      "Analytics",
+      "Trustworthy job-search metrics — every rate shown with its sample size",
+      `<select id="analytics-range" aria-label="Analytics date range">${[30, 90, 180, 365]
+        .map(
+          (value) =>
+            `<option value="${value}" ${days === value ? "selected" : ""}>Last ${value} days</option>`,
+        )
+        .join("")}</select>`,
+    ) +
+      `<div class="grid"><section class="card wide"><h2>Overview</h2><div class="summary-grid"><p><strong>Applications</strong><br>${totals.applications}</p>${rateRow("Response rate", totals.responses)}${rateRow("Interview rate", totals.interviews)}${rateRow("Offer rate", totals.offers)}</div><p class="muted">A response/interview/offer counts an application that ever reached that point, regardless of its current stage.</p></section><section class="card wide"><h2>Pipeline</h2><div class="bar-chart">${
+        funnel.stages.filter((item) => item.count).length
+          ? funnel.stages
+              .filter((item) => item.count)
+              .map(
+                (item) =>
+                  `<div><span>${esc(item.stage)}</span>${hBar(item.percentage, `${item.stage}: ${item.count} applications, ${item.percentage}% of ${funnel.total}`)}<strong class="num">${item.count} (${item.percentage}%)</strong></div>`,
+              )
+              .join("")
+          : empty("No applications in this range")
+      }</div></section><section class="card full"><h2>By Source</h2>${table(
+        ["Source", "Applications", "Response rate", "Interview rate", "Offer rate"],
+        source
+          .map(
+            (row) =>
+              `<tr><td>${esc(row.source)}</td><td>${row.applications}</td><td>${esc(rateLabel(row.responses, row.applications))}</td><td>${esc(rateLabel(row.interviews, row.applications))}</td><td>${esc(rateLabel(row.offers, row.applications))}</td></tr>`,
+          )
+          .join(""),
+        "No applications in this range",
+      )}</section><section class="card full"><h2>By Resume Version</h2>${table(
+        ["Version", "Applications", "Response rate", "Interview rate", "Offer rate"],
+        resume
+          .map(
+            (row) =>
+              `<tr><td>${esc(row.version_name)}</td><td>${row.applications}</td><td>${esc(rateLabel(row.responses, row.applications))}</td><td>${esc(rateLabel(row.interviews, row.applications))}</td><td>${esc(rateLabel(row.offers, row.applications))}</td></tr>`,
+          )
+          .join(""),
+        "No resumes recorded yet",
+      )}</section></div>`,
+  );
+  qs("#analytics-range").onchange = (event) => {
+    state.analyticsDays = Number(event.target.value);
+    renderAnalytics();
+  };
 }
 function renderExports() {
   shell(

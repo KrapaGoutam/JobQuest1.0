@@ -51,6 +51,28 @@ function isoDate(offsetDays = 0) {
   return date.toISOString().slice(0, 10);
 }
 
+// The mobile sidebar drawer opens via a CSS transform transition (~0.2s),
+// not a display/visibility change. Waiting for the "open" *class* is not
+// enough - confirmed by direct measurement (getBoundingClientRect) that the
+// class can be present while the element is still rendered at its fully
+// closed off-screen transform, for well over a second under load (this only
+// started surfacing once the nav list grew long enough - Analytics is the
+// newest addition - to add enough render/layout work that the transition
+// reliably lags behind the class toggle in a full sequential test run,
+// though it can happen in isolation too). Poll the real rendered position
+// instead of a proxy for it, per the Playwright reliability rule (wait for
+// actual state, not timing assumptions).
+async function openMobileNav(page) {
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await expect(page.locator("#sidebar")).toHaveClass(/\bopen\b/);
+  await expect
+    .poll(
+      async () => (await page.locator("#sidebar").boundingBox())?.x ?? -9999,
+      { timeout: 15_000 },
+    )
+    .toBeGreaterThan(-1);
+}
+
 // Shared by the Tasks and Habits pages: their tab buttons both trigger an
 // async re-render (fetch, then replace the whole page). Clicking one and
 // immediately interacting with the form races the fetch - the old,
@@ -65,6 +87,23 @@ async function selectTab(page, name) {
   );
 }
 
+// #toast's Round 9 color-contrast finding is fixed (styles.css) for both its
+// settled states - shown and at-rest - but toast() auto-hides itself via a
+// 2600ms setTimeout (app.js), and axe's analyze() walks the live DOM rather
+// than a snapshot: if that timer is still pending (or fires mid-scan) when a
+// full-page scan runs, axe can observe the in-flight opacity transition
+// itself, whose blended colors represent neither real, presented state - a
+// CI-observed failure (slower/more loaded runners than local dev make an
+// unfired 2600ms timer more likely by the time a test reaches its scan, even
+// long after the toast's own triggering action). Call this before any
+// full-page scan that isn't the dedicated toast test itself, which needs
+// precise control over toast state and checks both real states directly.
+async function toastSettled(page) {
+  await expect(page.locator("#toast")).toHaveCSS("visibility", "hidden", {
+    timeout: 5_000,
+  });
+}
+
 test.beforeEach(async ({ page }, testInfo) => {
   await authenticatedPage(page, testInfo);
 });
@@ -73,7 +112,7 @@ test("applications table controls, filter dialog, preview drawer, and accessibil
   page,
 }, testInfo) => {
   if (["tablet", "mobile", "small-mobile"].includes(testInfo.project.name))
-    await page.getByRole("button", { name: "Open navigation" }).click();
+    await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   const companyFilter = page.getByRole("button", { name: "Filter Company" });
   await expect(companyFilter).toBeVisible();
@@ -98,9 +137,12 @@ test("applications table controls, filter dialog, preview drawer, and accessibil
       .getByText("Product v3"),
   ).toBeVisible();
   await page.keyboard.press("Escape");
-  const results = await new AxeBuilder({ page })
-    .exclude(".goal-chart")
-    .analyze();
+  // The .goal-chart exclusion this scan used to carry was audited and found
+  // obsolete: this scan runs on the Applications page, where that Dashboard
+  // widget was never even present in the DOM being scanned - confirmed by
+  // running unscoped (zero violations either way).
+  await toastSettled(page);
+  const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
 
@@ -111,7 +153,7 @@ test("responsive visual states", async ({ page }, testInfo) => {
     animations: "disabled",
   });
   if (["tablet", "mobile", "small-mobile"].includes(project))
-    await page.getByRole("button", { name: "Open navigation" }).click();
+    await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   await expect(page).toHaveScreenshot(`applications-table-${project}.png`, {
     animations: "disabled",
@@ -148,8 +190,7 @@ test("responsive visual states", async ({ page }, testInfo) => {
       animations: "disabled",
     });
   } else {
-    await page.getByRole("button", { name: "Open navigation" }).click();
-    await expect(page.locator("#sidebar")).toHaveClass(/\bopen\b/);
+    await openMobileNav(page);
     await expect(page).toHaveScreenshot(`mobile-navigation-${project}.png`, {
       animations: "disabled",
     });
@@ -206,7 +247,7 @@ test("application checklist: grouping, completion, custom items, reorder, delete
   page,
 }, testInfo) => {
   if (["tablet", "mobile", "small-mobile"].includes(testInfo.project.name))
-    await page.getByRole("button", { name: "Open navigation" }).click();
+    await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   await page.getByText("Northstar Labs").click();
   await expect(
@@ -317,7 +358,7 @@ test("networking contacts: link to an application, edit, show on application det
   page,
 }, testInfo) => {
   if (["tablet", "mobile", "small-mobile"].includes(testInfo.project.name))
-    await page.getByRole("button", { name: "Open navigation" }).click();
+    await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   await page.getByText("Northstar Labs").click();
 
@@ -381,7 +422,7 @@ test("networking contacts: link to an application, edit, show on application det
   // end-to-end here; the underlying FK/ownership behavior has its own
   // dedicated backend test (see docs/FEATURE_UPGRADE_5.md).
   if (["tablet", "mobile", "small-mobile"].includes(testInfo.project.name))
-    await page.getByRole("button", { name: "Open navigation" }).click();
+    await openMobileNav(page);
   await page.getByRole("button", { name: "Networking", exact: true }).click();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Delete", exact: true }).click();
@@ -392,7 +433,10 @@ test("networking contacts: link to an application, edit, show on application det
     page.locator("tbody").getByText("Northstar Labs — Product Engineer"),
   ).toHaveCount(0);
 
-  const results = await new AxeBuilder({ page }).exclude(".goal-chart").analyze();
+  // Same .goal-chart audit as the Applications test above - obsolete on
+  // this (Networking) page too.
+  await toastSettled(page);
+  const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
 
@@ -400,7 +444,7 @@ test("bulk import: CSV format, preview, and import; Import History reachable by 
   page,
 }, testInfo) => {
   const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Bulk Import", exact: true }).click();
 
   await page.getByLabel("Format").selectOption("csv");
@@ -423,13 +467,14 @@ test("bulk import: CSV format, preview, and import; Import History reachable by 
 
   // Import History - Round 6 fix: previously manager-only in the nav, even
   // though the API already scoped a regular user to their own batches.
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Import History", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Import History" })).toBeVisible();
   await page.getByRole("button", { name: "View Rows" }).first().click();
   await expect(page.getByText(/Batch #\d+ rows/)).toBeVisible();
   await expect(page.locator("tbody").getByText("created")).toBeVisible();
 
+  await toastSettled(page);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
@@ -438,7 +483,7 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
   page,
 }, testInfo) => {
   const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Tasks", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
   await expect(page.getByText("Nothing due today.")).toBeVisible();
@@ -509,8 +554,23 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
     .selectOption({ label: "Northstar Labs — Product Engineer" });
   await page.getByRole("button", { name: "Add Task", exact: true }).click();
   await expect(page.getByText("Task added")).toBeVisible();
+  // The submit handler's own renderTasks() call is not awaited (app.js) - the
+  // toast is synchronous, but the shell rebuild it triggers (which replaces
+  // the sidebar along with everything else, see shell() in app.js) is still
+  // in flight when the toast appears. openMobileNav right after this toast
+  // was a real, reproducible failure: the click's "open" class landed on the
+  // about-to-be-replaced sidebar node, so the fresh one the test locator
+  // resolves to never got it. The old form node (with this stale value)
+  // isn't reset in place - it's discarded wholesale by the rebuild, replaced
+  // by a fresh form whose Title field starts empty - so waiting for that is
+  // a settle point that's only true once the rebuild has actually landed,
+  // without switching tabs (this task has no due date, so it wouldn't be on
+  // the still-active Upcoming tab anyway, and switching tabs here was found
+  // to shift this test's timing enough to expose a separate, pre-existing,
+  // unrelated locator-ambiguity race a few lines down).
+  await expect(page.getByLabel("Title")).toHaveValue("");
 
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   await page.getByText("Northstar Labs").click();
   await expect(page.getByRole("heading", { name: "Linked Tasks", exact: true })).toBeVisible();
@@ -521,7 +581,7 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
   await expect(page.getByText("No open tasks linked to this application")).toBeVisible();
 
   // Delete: remove the backlog item created earlier.
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   // Not exact: the nav-badge count ("Tasks 1 pending") is now part of this
   // button's accessible name, since a task is due today at this point in the
   // test - a plain substring match stays correct either way.
@@ -531,6 +591,7 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByText("Update resume project section")).toHaveCount(0);
 
+  await toastSettled(page);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
@@ -539,7 +600,7 @@ test("habits: boolean and count completion, weekly progress, streaks, archive/re
   page,
 }, testInfo) => {
   const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   // Exact and safe here: no habit exists yet, so the nav-badge count is zero
   // and this button's accessible name is still plainly "Habits" (see the
   // Round 7 lesson on nav-badge accessible names, in Tasks' own test above).
@@ -672,6 +733,7 @@ test("habits: boolean and count completion, weekly progress, streaks, archive/re
     .click();
   await expect(page.getByText("Networking outreach")).toHaveCount(0);
 
+  await toastSettled(page);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
@@ -680,7 +742,7 @@ test("notes: create/edit/delete, journal entries, search, application linking, p
   page,
 }, testInfo) => {
   const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Journal & Notes", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Journal & Notes", exact: true }),
@@ -760,8 +822,22 @@ test("notes: create/edit/delete, journal entries, search, application linking, p
   await page.getByLabel("Body").fill("Strong technical round, weak system design.");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Note added")).toBeVisible();
+  // Unlike every other save in this test, this one wasn't followed by a wait
+  // for the list view's heading to reappear - the shell rebuild a save
+  // triggers (see app.js: go() replaces app.innerHTML wholesale, including
+  // the sidebar) could still be in flight when openMobileNav's click fires,
+  // landing on the about-to-be-replaced #mobile-menu/#sidebar pair instead of
+  // the live one. That produced a real, reproducible failure at small-mobile:
+  // the class toggled on the stale node while the test's #sidebar locator
+  // re-resolved to the fresh one, which never got the "open" class, so its
+  // bounding box stayed pinned at its closed position for the full poll
+  // window. Waiting for the settled list view first, as every other save in
+  // this test already does, avoids the race at its source.
+  await expect(
+    page.getByRole("heading", { name: "Journal & Notes", exact: true }),
+  ).toBeVisible();
 
-  if (narrow) await page.getByRole("button", { name: "Open navigation" }).click();
+  if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
   await page.getByText("Northstar Labs").click();
   await expect(page.getByRole("heading", { name: "Notes", exact: true })).toBeVisible();
@@ -777,10 +853,15 @@ test("notes: create/edit/delete, journal entries, search, application linking, p
     "Strong technical round, weak system design.",
   );
 
-  // Pin it, verify the badge appears in the list.
+  // Pin it, verify the badge appears in the list. Deliberately not asserting
+  // the "Note updated" toast itself here - it's a real CI-observed flake
+  // (toast() auto-hides after a fixed 2600ms, and under a slower/more loaded
+  // CI runner there's no guarantee this assertion starts polling before that
+  // window closes, especially this far into a long sequential run). The
+  // Pinned badge below is the actual, stable outcome this step needs to
+  // prove, and proves it regardless of the toast's own transient timing.
   await page.getByLabel("Pin this note").check();
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("Note updated")).toBeVisible();
   await expect(
     page
       .locator(".note-card", { hasText: "Northstar interview reflection" })
@@ -814,22 +895,151 @@ test("notes: create/edit/delete, journal entries, search, application linking, p
   ).toBeVisible();
   await expect(page.getByText("Resume ideas")).toHaveCount(0);
 
-  // #toast is excluded here (same precedent as the existing .goal-chart
-  // exclusion in the Applications test above) - a real, pre-existing,
-  // previously-undiscovered color-contrast issue on the shared toast
-  // component, reproduced deterministically and confirmed unrelated to this
-  // round: styles.css defines --sidebar/--sidebar-foreground (the colors
-  // #toast uses) as a properly high-contrast dark-navy/light-gray pair in
-  // both the light and dark theme blocks, so the near-white-on-near-white
-  // colors axe reports here are not that pair at all - axe still evaluates
-  // #toast's contrast even at rest (opacity:0, no "show" class - confirmed
-  // by re-testing after explicitly waiting for "show" to clear), which
-  // points to a CSS custom-property resolution quirk in how this specific
-  // headless-browser context resolves the toast's theme tokens, not
-  // something introduced by Round 9's own markup or CSS. Fixing a shared,
-  // every-page component's theme-token resolution is real, separate,
-  // higher-risk work - documented in docs/FEATURE_UPGRADE_9.md Known Debt
-  // rather than attempted here.
-  const results = await new AxeBuilder({ page }).exclude("#toast").analyze();
+  await toastSettled(page);
+  const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
+});
+
+test("analytics: overview, pipeline, source, and resume breakdowns render with real counts and rates", async ({
+  page,
+}, testInfo) => {
+  const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
+  // The exact numerator/denominator math is already covered precisely by the
+  // dedicated backend test (real Postgres, real assertions on the computed
+  // rates) - this E2E pass verifies the page actually wires that data up and
+  // renders it, using the one application the shared fixture already seeded,
+  // via the UI rather than a second direct API call (this file's established
+  // pattern - only the shared authenticatedPage() fixture uses page.request
+  // directly, with the CSRF token it captures from registration itself).
+  if (narrow) await openMobileNav(page);
+  await page.getByRole("button", { name: "Analytics", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Analytics", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Overview", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pipeline", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "By Source", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "By Resume Version", exact: true }),
+  ).toBeVisible();
+  // The fixture's one seeded application (no source set, stage "Applied")
+  // shows up as real data, not just empty-state placeholders.
+  await expect(page.locator(".card", { hasText: "Pipeline" })).toContainText(
+    "Applied",
+  );
+  await expect(page.locator(".card", { hasText: "By Source" })).toContainText(
+    "Other",
+  );
+
+  // Date-range selector triggers a fresh, correctly-labeled reload.
+  await page.getByLabel("Analytics date range").selectOption("30");
+  await expect(
+    page.getByRole("heading", { name: "Analytics", exact: true }),
+  ).toBeVisible();
+
+  await toastSettled(page);
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+});
+
+test("rejections: edit was a Round 5 known gap (backend already supported PATCH, UI never exposed it) - now closed", async ({
+  page,
+}, testInfo) => {
+  const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
+  if (narrow) await openMobileNav(page);
+  await page.getByRole("button", { name: "Rejections", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Rejections", exact: true })).toBeVisible();
+
+  await page
+    .locator('select[name="application_id"]')
+    .selectOption({ label: "Northstar Labs — Product Engineer" });
+  await page.getByLabel("Rejection Date").fill("2026-09-10");
+  await page.getByLabel("Stage At Rejection").fill("Interview");
+  await page.getByLabel("Eligible For Reapplication").check();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Record saved")).toBeVisible();
+
+  // Edit: the button this round's gap-close actually added.
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Edit Rejection", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Eligible For Reapplication")).toBeChecked();
+  await page.getByLabel("Rejection Reason").fill("Went with an internal candidate");
+  // Uncheck it - the case that specifically needs the explicit 0/false fix,
+  // since an unchecked box is silently omitted from FormData entirely.
+  await page.getByLabel("Eligible For Reapplication").uncheck();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByText("Record updated")).toBeVisible();
+
+  const rows = await (await page.request.get("/api/rejections")).json();
+  const saved = rows.find((item) => item.rejection_reason === "Went with an internal candidate");
+  expect(saved).toBeTruthy();
+  expect(saved.eligible_for_reapplication).toBe(0);
+
+  await toastSettled(page);
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+});
+
+test("toast: readable while visible, and genuinely non-perceivable at rest (Round 9 contrast finding, fixed)", async ({
+  page,
+}, testInfo) => {
+  const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
+  // Round 9 found a real color-contrast violation on #toast; investigation
+  // during the final round showed the toast's own colors were always a
+  // correctly high-contrast pair - the real defect was that #toast relied
+  // on opacity alone to hide itself, so its role="status"/aria-live="polite"
+  // live region stayed in the accessibility tree (and subject to contrast
+  // scanning) even while resting at opacity:0. Fixed with a visibility
+  // transition (styles.css). This test scans the toast in both states
+  // directly, rather than only proving the rest of the page is clean.
+  await expect(page.locator("#toast")).toHaveCSS("visibility", "hidden");
+  let results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations.filter((item) => item.id === "color-contrast")).toEqual(
+    [],
+  );
+
+  // The sidebar's own theme-cycle button is the simplest reliable toast
+  // trigger anywhere in the app (saveTheme() calls toast() directly).
+  if (narrow) await openMobileNav(page);
+  await page.getByRole("button", { name: "Change color theme" }).click();
+  await expect(page.locator("#toast")).toHaveCSS("visibility", "visible");
+  await expect(page.locator("#toast")).toHaveCSS("opacity", "1");
+  results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations.filter((item) => item.id === "color-contrast")).toEqual(
+    [],
+  );
+});
+
+test("accessibility sweep: pages with no prior dedicated scan", async ({
+  page,
+}, testInfo) => {
+  // Prior rounds' accessibility scans are all feature-scoped (Applications,
+  // Checklist, Networking, Import, Tasks, Habits, Notes, Analytics,
+  // Rejections). This is the broader pass the final round asks for: every
+  // remaining top-level page that has never been scanned at all. Waiting on
+  // the clicked nav button's own "active" class (set by app.js's navButton
+  // template once state.page actually matches) is a real settle signal for
+  // any of these pages, without needing to know each one's exact heading
+  // text up front.
+  const narrow = ["tablet", "mobile", "small-mobile"].includes(testInfo.project.name);
+  const pages = [
+    "Calendar",
+    "Reminder Center",
+    "Resumes",
+    "Goal History",
+    "Aging Report",
+    "Stage Analytics",
+    "Exports",
+    "Settings",
+  ];
+  for (const label of pages) {
+    if (narrow) await openMobileNav(page);
+    await page.getByRole("button", { name: label, exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: label, exact: true }),
+    ).toHaveClass(/\bactive\b/);
+    await toastSettled(page);
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations, `violations on "${label}"`).toEqual([]);
+  }
 });

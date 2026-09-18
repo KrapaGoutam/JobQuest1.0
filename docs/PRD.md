@@ -1,11 +1,18 @@
 # JobQuest — Product Requirements & Phased Roadmap
 
-Status: Rounds 2–7 implemented (see `docs/FEATURE_UPGRADE_N.md` per round and
-[brain/PROJECT_STATE.md](../brain/PROJECT_STATE.md) for current state); Round 8 onward
-not started. This status line and the "nothing implemented" note below went stale for
-several rounds before being corrected in Round 7 — worth keeping current going forward.
-See [CURRENT_STATE_AUDIT.md](../CURRENT_STATE_AUDIT.md) for the discovery this is based
-on, and [brain/DECISIONS.md](../brain/DECISIONS.md) for the decisions behind it.
+Status: Rounds 2–10 implemented — Round 10 (`docs/FEATURE_UPGRADE_10_FINAL.md`) was
+the final round of the V2 feature set, combining Analytics with a full release-
+hardening capstone (backlog reconciliation, UI/UX, accessibility, security,
+performance, refactoring, regression validation, and `development`-vs-`main`
+integration planning). Implemented locally on
+`feature/010-final-analytics-hardening`, PR into `development` pending; see
+[brain/PROJECT_STATE.md](../brain/PROJECT_STATE.md) for current state and
+`docs/FINAL_MAIN_INTEGRATION_PLAN.md` for the (not-yet-authorized) `main`
+integration step. This status line and the "nothing implemented" note below went
+stale for several rounds before being corrected in Round 7 — worth keeping current
+going forward. See [CURRENT_STATE_AUDIT.md](../CURRENT_STATE_AUDIT.md) for the
+discovery this is based on, and [brain/DECISIONS.md](../brain/DECISIONS.md) for the
+decisions behind it.
 
 ## 1. Vision
 
@@ -45,6 +52,14 @@ already shipped — see `docs/NEON_MIGRATION.md`, `docs/FEATURE_UPGRADE_1.md`,
 | 9 | Journal / notes | Net-new | 3, 7 | M |
 | 10 | Analytics module | Net-new | 3, 4 | M |
 | 11 | Responsive/design-system capstone pass | Polish | all above | M |
+
+Rounds 10 and 11 as originally planned above were executed together as one combined
+final round (`docs/FEATURE_UPGRADE_10_FINAL.md`) — Analytics plus the capstone pass,
+broadened into a full release-hardening round (backlog reconciliation, accessibility
+root-fixes, a formal security audit, performance audit, refactor/dead-code pass,
+full regression validation, and `development`-vs-`main` integration planning), since
+by this point in the project a release-readiness pass needed all of that, not just
+responsive/design-system polish.
 
 Optional, on request, not sequenced: `docs/design/STITCH_PROMPT.md` — a standalone
 prompt package for Google Stitch to explore visual design directions. Plan-only, no

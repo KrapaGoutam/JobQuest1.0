@@ -82,3 +82,17 @@ frontend/src/**  →  Vite build  →  frontend/dist/** (served as today's stati
   any of this has been identified.
 - An ORM — raw SQL via `pg` has worked fine at this scale and this team is already
   fluent in the existing migration style; revisit only if a specific pain point emerges.
+
+## Note for a possible future framework migration (not planned, not scoped)
+
+As of the end of V2 (Round 10), `frontend/src/app.js` still holds most of the app's
+view-rendering and event-wiring logic, with pure formatting/validation logic already
+extracted into per-feature `features/*/format.js` modules (`applications`,
+`contacts`, `checklist`, `dashboard`, `tasks`, `habits`, `notes`, `import-export`,
+`analytics`). If a component-framework migration (React or otherwise) is ever
+pursued, that extraction boundary is the natural starting seam: the pure modules
+would need no rewrite, only new components consuming them; the render/event-wiring
+code in `app.js` is what would actually need porting. This is not a proposal to do
+that migration — the vanilla-JS/Vite decision above stands for V2 and is not
+revisited by this note — it's a pointer for whoever scopes that question later, so
+they aren't starting from zero.
