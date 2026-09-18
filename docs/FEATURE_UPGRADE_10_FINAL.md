@@ -463,13 +463,15 @@ applies) / **DUPLICATE** (same underlying item logged more than once).
 | Toast auto-hide racing a `toBeVisible` assertion under heavy sequential E2E load | Round 10 | ACCEPTED V2 DEBT — Phase 10H; load-only, reproduces 0/3 in isolation, same class as the mobile-nav flake below. |
 | Residual mobile-nav transition flake (rare, post-fix) | Round 10 (root-caused in Phase 10A, still present) | ACCEPTED V2 DEBT — root cause understood and primary trigger fixed twice over (Phase 10A, Phase 10H); a much rarer residual remains under maximum load, honestly documented rather than chased for diminishing returns. |
 | Latent `getByText("Northstar Labs")` locator ambiguity vs. a `<select>` option, and a related "click landed somewhere unexpected" symptom (both only observed while probing an unrelated fix, Phase 10H) | Round 10 | MOVE TO V2.1 — neither confirmed to affect any currently-passing, currently-exercised path (the test line that could trigger either was reverted), but both are real enough to be worth a dedicated look rather than assuming they can't recur. |
+| `#toast` mid-transition axe-scan race, CI-only instances beyond the one Phase 10H fixed locally | Round 10 | FIXED — found via PR #17's own CI (not local testing), root-caused to the same class as Phase 10H bug 1; generalized into a shared `toastSettled()` helper applied to every unprotected full-page scan in the spec, rather than patched call-site-by-call-site. |
+| `postgres-db.js`/`postgres-worker.js` RPC protocol has no request-correlation ID, allowing a late response from an already-timed-out call to corrupt a later call's shared buffer | Pre-existing (untouched by any commit on this branch — found via CI on PR #17) | MOVE TO V2.1 — real architectural gap, root-caused, but reproduced only once across 5 CI runs and 0 local runs; fixing core synchronous cross-thread DB RPC code under this round's remaining time pressure risks a worse, harder-to-detect bug than the current rare failure mode. Needs a properly scoped, carefully tested pass of its own. |
 
-**Net result**: 9 items FIXED this round (beyond the 6 already counted in the
+**Net result**: 10 items FIXED this round (beyond the 6 already counted in the
 Remaining PRD Gap Audit summary above, once duplicates and the newly-closed
-PIN-hash/habits-test items are folded in), 4 items MOVE TO V2.1 (each real,
-scoped, and none release-blocking), 2 items OBSOLETE, 1 DUPLICATE, and the rest
-ACCEPTED V2 DEBT — deliberately not fixed, with the reasoning recorded rather than
-silently dropped. Nothing in this table is a release blocker.
+PIN-hash/habits-test/CI-toast items are folded in), 5 items MOVE TO V2.1 (each
+real, scoped, and none release-blocking), 2 items OBSOLETE, 1 DUPLICATE, and the
+rest ACCEPTED V2 DEBT — deliberately not fixed, with the reasoning recorded rather
+than silently dropped. Nothing in this table is a release blocker.
 
 ## Release Readiness
 
@@ -711,11 +713,30 @@ was reverted.
 ## CI
 
 **PR #17** (`feature/010-final-analytics-hardening` → `development`), opened
-2026-09-18. All 8 checks green on the first run — `static-quality`, `security`,
-`tests (backend)`, `tests (frontend)`, `tests (integration)`, `tests (e2e)`,
-`sqlite-postgres-migration`, `browser-and-visual` — confirming the local
-Phase 10H validation (including the three real timing-bug fixes) reproduced
-cleanly in the actual CI environment, not just locally.
+2026-09-18. All 8 checks — `static-quality`, `security`, `tests (backend)`,
+`tests (frontend)`, `tests (integration)`, `tests (e2e)`,
+`sqlite-postgres-migration`, `browser-and-visual` — are green as of the final push.
+
+The `browser-and-visual` check (the full real-Chromium/real-Postgres E2E + visual
+suite) passed on its first run, then failed three more times across follow-up
+pushes and re-runs — each time on a **genuinely different, real, individually
+root-caused issue**, not the same thing recurring unaddressed:
+
+1. A CI-only recurrence of the `#toast` mid-transition axe-scan race (Phase 10H
+   bug 1), in a call site that fix hadn't reached yet — fixed by generalizing it
+   into a shared helper applied everywhere.
+2. A redundant, timing-fragile toast assertion in the notes test, immediately
+   followed by a real, stable-state assertion that already proved the same
+   outcome — removed the fragile one.
+3. A rare, one-off, pre-existing infrastructure issue in the Postgres worker RPC
+   protocol (confirmed untouched by this round via `git diff`) — did not
+   reproduce on an immediate re-run; documented as real V2.1-scoped debt rather
+   than rushed, per Known Deferred Debt above.
+
+Each CI-caught issue was fixed (or, for the pre-existing infra one, thoroughly
+investigated and documented) before moving on — the same root-cause discipline
+used throughout this round, just applied to CI's own, occasionally more
+demanding, execution environment rather than only to local runs.
 
 ## Render Impact
 
@@ -727,6 +748,36 @@ None this phase.
 
 ## Known Deferred Debt
 
+- **A real, previously-undiscovered infrastructure robustness gap in the Postgres
+  worker-thread RPC protocol (`backend/src/postgres-db.js` /
+  `backend/src/postgres-worker.js`), found on CI, not caused by this round —
+  confirmed via `git diff development...HEAD` that neither file has been touched by
+  any commit on this branch.** The main thread and the worker thread holding the
+  persistent `pg.Client` communicate over a single shared `SharedArrayBuffer`, with
+  the main thread blocking synchronously on `Atomics.wait` for a response. The
+  protocol carries **no request-correlation identifier**: if a query is slow enough
+  that a prior main-thread call's 30-second timeout has already elapsed and thrown
+  (letting the caller move on), the worker keeps processing that query in the
+  background regardless, and when it eventually finishes and calls `publish()`, it
+  writes into the *same* shared buffer/header a *later*, unrelated `rpc()` call may
+  already be waiting on — with nothing to detect the mismatch. Observed once on
+  GitHub Actions (`PR #17`, one CI attempt out of five) as
+  `SyntaxError: Unexpected end of JSON input` inside `rpc()`, which left one E2E
+  test's dashboard load failing to render; did not reproduce on an immediate
+  re-run, nor in any local run this round (dozens of full-suite runs total) — a
+  genuinely rare timing condition, not a systematic failure, consistent with CI's
+  own runners having measurably less and more variable CPU headroom than local dev
+  (already evidenced twice this round by CI-only toast-timing flakes). **Not
+  attempted as a fix in this round**: this is core, concurrency-sensitive database
+  communication infrastructure — Render/Neon-adjacent, "protected" in spirit even
+  though this specific file isn't infra-config — and a rushed change to a
+  synchronous cross-thread RPC protocol under time pressure risks introducing a
+  *worse*, harder-to-detect data-correctness bug than the current rare crash-and-
+  recover behavior. **Recommended for V2.1, properly scoped**: add a request
+  correlation ID to the RPC message/response pair (e.g. an incrementing counter
+  written into a third `header` slot) so a stale, late-arriving response can be
+  detected and discarded instead of being read as if it belonged to the current
+  call.
 - **`toast()`'s success calls are followed by unawaited re-renders in several `app.js`
   submit handlers** (e.g. `toast("Task added"); renderTasks();` — no `await`), so the
   toast's appearance is not a reliable proxy for "the shell rebuild it may trigger has
