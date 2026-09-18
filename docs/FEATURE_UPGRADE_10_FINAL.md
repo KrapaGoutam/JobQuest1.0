@@ -459,7 +459,7 @@ columns; no migration.
 5. **10E — Security hardening pass.**
 6. **10F — Performance hardening pass.**
 7. **10G — Code quality / refactor / dead-code pass** — done.
-8. **10H — Full regression + release-candidate validation.**
+8. **10H — Full regression + release-candidate validation** — done.
 9. **10I — development-vs-main divergence audit + integration plan + release notes.**
 
 ## Acceptance Criteria
@@ -496,6 +496,87 @@ real state, not a proxy for it" reliability rule. Verified across three consecut
 full-suite runs post-fix (16/16, 16/16, then 40/40 across all 5 viewports minus one
 rare recurrence — see Known Deferred Debt).
 
+**Phase 10H — full regression + release-candidate validation**: replicated every job
+in `.github/workflows/ci.yml` locally against a real `postgres:17-alpine` container
+(matching CI's per-job isolation by dropping and recreating the schema between
+suites, after an initial run without that reset produced spurious unique-constraint
+failures — a test-harness mistake, not a real bug, confirmed by a clean re-run).
+
+- **static-quality**: `migrate:check`, `lint`, `typecheck`, `build`, `build:frontend`
+  — all clean.
+- **security**: backend `npm audit --audit-level=high` clean (the one pre-existing
+  moderate `uuid`/`exceljs` advisory is already tracked in the Security Audit
+  section, below CI's HIGH gate); frontend audit clean; committed-secret scan clean.
+- **tests matrix** (`backend`/`frontend`/`integration`/`e2e`, each against a freshly
+  reset real Postgres schema): 33/33, 43/43, 33/33, 33/33.
+- **sqlite-postgres-migration**: `migration.test.js` against a dedicated fresh
+  Postgres container — 1/1 (this is the suite that's always skipped in the plain
+  `npm test` run without `TEST_DATABASE_URL`; confirmed it actually passes for real,
+  not just untested).
+- **browser-and-visual** (`npm run test:browser`: full E2E + visual suite, real
+  Chromium, real Postgres, all 5 viewports): found and fixed three real,
+  previously-undiscovered bugs during validation — see below. Official run after all
+  three fixes: 62 passed, 7 skipped (visual-baseline-only projects), 1 failed — the
+  1 failure (`notes`, small-mobile, a *different* `toast()` assertion than the one
+  fixed in bug 1 below — see Known Deferred Debt) reproduced only 67 tests deep into
+  the full sequential run and passed cleanly 3/3 in isolated re-runs immediately
+  after, confirming it's a load-dependent timing artifact of the same class as the
+  already-documented mobile-nav flake, not a logic defect.
+
+### Three real bugs found and fixed during Phase 10H's browser-and-visual validation
+
+All three were caught by running the *entire* suite for real, back to back, under
+real load — exactly the kind of issue a scoped or partial run wouldn't have surfaced,
+and the reason this phase exists.
+
+1. **`#toast` axe scan can catch a mid-fade animation frame (notes test, desktop).**
+   `toast()` (`app.js`) auto-hides itself via `setTimeout(..., 2600)`; the notes
+   test's final `AxeBuilder.analyze()` runs immediately after asserting the "Note
+   deleted" toast is visible. `analyze()` walks the *live* DOM and can itself take
+   long enough that the 2600ms timer fires mid-scan, catching the CSS opacity
+   transition's blended, in-between colors — not a real regression in the Phase 10D
+   `#toast` fix (the dedicated toast test still passes clean in both of its real,
+   settled states). Fixed by waiting for `#toast` to reach `visibility: hidden`
+   (its genuinely-settled resting state) before scanning, in `jobquest.spec.js`.
+2. **A second, pre-existing trigger for the mobile-nav race (notes test, all
+   viewports) that the Phase 10A fix didn't cover.** One note-save in the notes test
+   wasn't followed by a wait for the list view to resettle before calling
+   `openMobileNav()` (every other save in the same test does wait) — if the shell
+   rebuild the save triggers (`go()` replaces the whole shell, sidebar included) was
+   still in flight, the click's `"open"` class could land on the about-to-be-replaced
+   sidebar node while the test's `#sidebar` locator resolved to the fresh one, which
+   never got it. Fixed by adding the same settle wait already used everywhere else in
+   the test.
+3. **The same class of bug on the Tasks page (tasks test, all viewports) — this one
+   is application code, not just the test.** The "Add task" form's submit handler
+   (`app.js`) calls `renderTasks()` **without `await`**: `toast("Task added");
+   renderTasks();`. The toast is synchronous; the shell rebuild `renderTasks()`
+   triggers is not, so it can still be in flight when `openMobileNav()` fires right
+   after the toast. Fixed at the test level (the minimal, correctly-scoped fix,
+   consistent with this round's "no risky global rewrite" constraint): wait for the
+   stale form's `Title` field to read back empty — a signal that's only true once
+   the old form has actually been discarded and replaced by the freshly rendered
+   one, and unlike waiting for the new task's own text, it doesn't depend on which
+   tab happens to be active. The unawaited `renderTasks()` call itself is real,
+   confirmed application-level debt (not exercised by any known user-facing bug
+   report, only by this timing-sensitive E2E path) — logged in Technical Debt
+   Classification rather than fixed here, since auditing every `toast(); render*()`
+   call site in `app.js` for the same pattern is a larger, separate piece of work
+   than this validation phase should absorb.
+
+Two earlier attempts at fixing bug 3 are worth recording because they surfaced two
+*more* real, separate, pre-existing issues by shifting the test's timing: switching
+tabs before the wait (to make the new task visible) exposed a latent
+`getByText("Northstar Labs")` ambiguity against a same-named `<select>` `<option>`
+still mounted from the page being navigated away from, and, after scoping that
+locator to `role: button`, still didn't reach the expected page — both were reverted
+in favor of the tab-agnostic empty-Title-field wait once it was clear the tab switch
+itself was the variable exposing them, not a defect in either fix. Neither of those
+two latent issues is confirmed to affect any passing, currently-exercised path, so
+neither was chased further; flagged here for visibility rather than backlogged as
+a formal item, since the specific test line that could have triggered either of them
+was reverted.
+
 ## CI
 
 _Filled in once CI has run on the final PR — see `brain/PROJECT_STATE.md` if this
@@ -511,6 +592,27 @@ None this phase.
 
 ## Known Deferred Debt
 
+- **`toast()`'s success calls are followed by unawaited re-renders in several `app.js`
+  submit handlers** (e.g. `toast("Task added"); renderTasks();` — no `await`), so the
+  toast's appearance is not a reliable proxy for "the shell rebuild it may trigger has
+  finished." This is real, confirmed application-level debt (Phase 10H, bug 3 above),
+  not just a test artifact — it's what made the Tasks-page mobile-nav race
+  reproducible. Fixing it properly means auditing every `toast(); render*();` call
+  site in `app.js` for the same pattern, which is a larger, separate piece of work
+  than this validation phase's scope; the concrete failures it caused in this round's
+  own test suite were fixed at the test level instead (settle waits already used
+  elsewhere in the same specs). Candidate for V2.1: make these renders consistently
+  awaited.
+- **A related, narrower flake: `toast()`'s own 2600ms auto-hide can race a `toBeVisible`
+  assertion under heavy full-suite sequential load** (distinct from the mid-scan axe
+  race fixed in Phase 10H bug 1 above, which was about `analyze()` catching an
+  in-flight CSS transition — this one is the toast's assertion itself losing the race
+  against its own hide timer when a very long run has made the whole page slow).
+  Observed once, 67 tests deep into a 70-test full run, at the narrowest viewport
+  (small-mobile); reproduced 0/3 times in immediate isolated re-runs. Same
+  load-dependent-residual-flake class as the mobile-nav issue below, and treated the
+  same way: root cause understood, not chased further given the now-low, load-only
+  reproduction rate.
 - **The mobile-navigation transition fix above reduced but did not fully eliminate**
   the rare underlying flake (observed once in 40 full-suite runs post-fix, down from a
   much higher rate before it — the exact prior rate wasn't measured, but the failure

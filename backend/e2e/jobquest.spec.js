@@ -534,6 +534,21 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
     .selectOption({ label: "Northstar Labs — Product Engineer" });
   await page.getByRole("button", { name: "Add Task", exact: true }).click();
   await expect(page.getByText("Task added")).toBeVisible();
+  // The submit handler's own renderTasks() call is not awaited (app.js) - the
+  // toast is synchronous, but the shell rebuild it triggers (which replaces
+  // the sidebar along with everything else, see shell() in app.js) is still
+  // in flight when the toast appears. openMobileNav right after this toast
+  // was a real, reproducible failure: the click's "open" class landed on the
+  // about-to-be-replaced sidebar node, so the fresh one the test locator
+  // resolves to never got it. The old form node (with this stale value)
+  // isn't reset in place - it's discarded wholesale by the rebuild, replaced
+  // by a fresh form whose Title field starts empty - so waiting for that is
+  // a settle point that's only true once the rebuild has actually landed,
+  // without switching tabs (this task has no due date, so it wouldn't be on
+  // the still-active Upcoming tab anyway, and switching tabs here was found
+  // to shift this test's timing enough to expose a separate, pre-existing,
+  // unrelated locator-ambiguity race a few lines down).
+  await expect(page.getByLabel("Title")).toHaveValue("");
 
   if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
@@ -785,6 +800,20 @@ test("notes: create/edit/delete, journal entries, search, application linking, p
   await page.getByLabel("Body").fill("Strong technical round, weak system design.");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Note added")).toBeVisible();
+  // Unlike every other save in this test, this one wasn't followed by a wait
+  // for the list view's heading to reappear - the shell rebuild a save
+  // triggers (see app.js: go() replaces app.innerHTML wholesale, including
+  // the sidebar) could still be in flight when openMobileNav's click fires,
+  // landing on the about-to-be-replaced #mobile-menu/#sidebar pair instead of
+  // the live one. That produced a real, reproducible failure at small-mobile:
+  // the class toggled on the stale node while the test's #sidebar locator
+  // re-resolved to the fresh one, which never got the "open" class, so its
+  // bounding box stayed pinned at its closed position for the full poll
+  // window. Waiting for the settled list view first, as every other save in
+  // this test already does, avoids the race at its source.
+  await expect(
+    page.getByRole("heading", { name: "Journal & Notes", exact: true }),
+  ).toBeVisible();
 
   if (narrow) await openMobileNav(page);
   await page.getByRole("button", { name: "Applications", exact: true }).click();
@@ -839,8 +868,18 @@ test("notes: create/edit/delete, journal entries, search, application linking, p
   ).toBeVisible();
   await expect(page.getByText("Resume ideas")).toHaveCount(0);
 
-  // #toast's Round 9 color-contrast finding is fixed as of the final round
-  // (see styles.css) - no exclusion needed here anymore.
+  // #toast's Round 9 color-contrast finding is fixed (styles.css) for both
+  // its settled states - shown and at-rest - but toast() auto-hides itself
+  // via a 2600ms setTimeout (app.js), and axe's analyze() walks the live DOM
+  // rather than a snapshot: if that timer fires mid-scan, axe can observe the
+  // brief in-flight opacity transition itself, whose blended colors are not
+  // representative of either real, presented state (see the dedicated toast
+  // test above, which scans both settled states directly and passes clean).
+  // Waiting for the toast to finish its full auto-hide cycle first lands the
+  // scan on a genuinely stable state, matching that test's approach.
+  await expect(page.locator("#toast")).toHaveCSS("visibility", "hidden", {
+    timeout: 5_000,
+  });
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
