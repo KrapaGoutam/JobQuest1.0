@@ -138,11 +138,20 @@ export function validateApplication(input, { partial = false } = {}) {
   if (data.employment_type && !EMPLOYMENT_TYPES.includes(data.employment_type))
     errors.push(`Unsupported employment type: ${data.employment_type}`);
   if (data.job_url) {
+    // new URL() alone accepts any syntactically valid scheme, including
+    // javascript:/data: - job_url is rendered as a clickable link on the
+    // application detail page, so an imported row must not be able to
+    // smuggle one through as "valid". Round 6: this was flagged in Round 5
+    // as an unrelated observation; it's directly import-relevant, so fixed
+    // here instead of only backlogged.
+    let parsedUrl;
     try {
-      new URL(data.job_url);
+      parsedUrl = new URL(data.job_url);
     } catch {
-      errors.push("Job URL must be a valid URL");
+      /* falls through to the protocol check's error below */
     }
+    if (!parsedUrl || !["http:", "https:"].includes(parsedUrl.protocol))
+      errors.push("Job URL must be a valid http(s) URL");
   }
   if (
     data.recruiter_email &&
@@ -186,8 +195,65 @@ export function validateApplication(input, { partial = false } = {}) {
   return { data, errors };
 }
 
+// RFC 4180-ish CSV parser: quoted fields, doubled-quote escaping, embedded
+// commas/newlines inside quotes, CRLF and LF line endings. No dependency -
+// small enough to own directly, and the only consumer (parseBulk below)
+// just needs an array of plain objects, same shape as JSON/structured_text
+// input, so the existing alias-mapping/validation pipeline never has to
+// know which format a row came from.
+export function parseCsvRows(text) {
+  const table = [];
+  let row = [],
+    field = "",
+    inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (inQuotes) {
+      if (char === '"' && text[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (char === '"') inQuotes = false;
+      else field += char;
+    } else if (char === '"') inQuotes = true;
+    else if (char === ",") {
+      row.push(field);
+      field = "";
+    } else if (char === "\r") continue;
+    else if (char === "\n") {
+      row.push(field);
+      table.push(row);
+      row = [];
+      field = "";
+    } else field += char;
+  }
+  if (field.length || row.length) {
+    row.push(field);
+    table.push(row);
+  }
+  return table.filter((cells) => cells.some((cell) => cell !== ""));
+}
+
 export function parseBulk(format, text) {
   if (!String(text || "").trim()) throw new Error("Input is required");
+  if (format === "csv") {
+    const table = parseCsvRows(text);
+    if (table.length < 2)
+      throw new Error("CSV must include a header row and at least one data row");
+    // Spreadsheet headers are naturally human-friendly ("Company Name",
+    // "Applied Date") with spaces, but the alias table below (also used by
+    // JSON/structured_text input) keys on underscore_case ("company_name",
+    // "applied_date"). Collapsing whitespace to underscores here, not in the
+    // shared alias table, keeps CSV's own conventions from leaking into the
+    // other formats' expected input shape.
+    const headers = table[0].map((header) =>
+      header.trim().replace(/\s+/g, "_"),
+    );
+    return table
+      .slice(1)
+      .map((cells) =>
+        Object.fromEntries(headers.map((header, index) => [header, (cells[index] ?? "").trim()])),
+      );
+  }
   if (format === "json") {
     let parsed;
     try {

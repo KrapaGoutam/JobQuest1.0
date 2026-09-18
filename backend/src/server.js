@@ -21,9 +21,14 @@ import {
 } from "./service.js";
 import { handleAdvanced } from "./advanced.js";
 import { handleFeatureUpgrade } from "./feature-upgrade.js";
+import { handleTasks } from "./tasks.js";
+import { handleHabits } from "./habits.js";
+import { handleNotes } from "./notes.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const frontendDir = join(here, "..", "..", "frontend");
+// Built by Vite (see ../../frontend/vite.config.js) into frontend/dist. Only the
+// build output is served — never frontend/src, node_modules, or package.json.
+const frontendDir = join(here, "..", "..", "frontend", "dist");
 const LOCKOUT_ATTEMPTS = 5,
   LOCKOUT_MINUTES = 5,
   SESSION_HOURS = 12;
@@ -609,6 +614,18 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
         await handleAdvanced(context, { json, body, requireAuth, targetOwner })
       )
         return;
+      if (
+        await handleTasks(context, { json, body, requireAuth, targetOwner })
+      )
+        return;
+      if (
+        await handleHabits(context, { json, body, requireAuth, targetOwner })
+      )
+        return;
+      if (
+        await handleNotes(context, { json, body, requireAuth, targetOwner })
+      )
+        return;
       if (url.pathname === "/api/applications" && request.method === "GET")
         return json(
           response,
@@ -700,6 +717,38 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
                   ),
                   [actor.id],
                 );
+        return json(response, 200, items);
+      }
+      // Round 6: import_rows (batch_id, row_number, status, messages_json)
+      // was already written by every import - created_rows/updated_rows/
+      // skipped_rows/rejected_rows counts were the only thing visible
+      // afterward. This surfaces the per-row detail that already exists,
+      // rather than adding a new tracking mechanism.
+      const importRowsMatch = url.pathname.match(
+        /^\/api\/import\/history\/(\d+)\/rows$/,
+      );
+      if (importRowsMatch && request.method === "GET") {
+        const actor = requireAuth(context),
+          batchId = Number(importRowsMatch[1]),
+          batch =
+            actor.role === "MANAGER"
+              ? db.prepare("SELECT id FROM import_batches WHERE id=?").get(batchId)
+              : db
+                  .prepare(
+                    "SELECT id FROM import_batches WHERE id=? AND user_id=?",
+                  )
+                  .get(batchId, actor.id);
+        if (!batch)
+          throw Object.assign(new Error("Not found"), { status: 404 });
+        const items = rows(
+          db.prepare(
+            "SELECT id,row_number,status,messages_json,application_id FROM import_rows WHERE batch_id=? ORDER BY row_number",
+          ),
+          [batchId],
+        ).map(({ messages_json, ...row }) => ({
+          ...row,
+          messages: JSON.parse(messages_json || "[]"),
+        }));
         return json(response, 200, items);
       }
       if (url.pathname === "/api/dashboard" && request.method === "GET")
@@ -822,16 +871,27 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
             ),
           );
         if (!id && request.method === "POST") {
-          const actor = requireAuth(context, { csrf: true });
-          return json(response, 201, {
-            id: createTracker(db, actor, table, await body(request)),
-          });
+          const actor = requireAuth(context, { csrf: true }),
+            newId = createTracker(db, actor, table, await body(request));
+          // Returns the full created record (not just {id}), matching the
+          // convention tasks.js/habits.js/notes.js already established -
+          // nothing in the frontend used the old {id}-only shape (it always
+          // re-fetches the whole list after a create/edit), so this is a
+          // safe, backward-compatible improvement, not a breaking change.
+          return json(
+            response,
+            201,
+            db.prepare(`SELECT * FROM ${table} WHERE id=?`).get(newId),
+          );
         }
         if (id && request.method === "PATCH") {
           const actor = requireAuth(context, { csrf: true });
-          return json(response, 200, {
-            id: updateTracker(db, actor, table, id, await body(request)),
-          });
+          updateTracker(db, actor, table, id, await body(request));
+          return json(
+            response,
+            200,
+            db.prepare(`SELECT * FROM ${table} WHERE id=?`).get(id),
+          );
         }
         if (id && request.method === "DELETE") {
           const actor = requireAuth(context, { csrf: true }),

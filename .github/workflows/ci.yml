@@ -29,7 +29,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
       - name: Install dependencies
         run: npm ci
       - name: Verify migrations on a clean database
@@ -40,6 +42,8 @@ jobs:
         run: npm run typecheck
       - name: Production build validation
         run: npm run build
+      - name: Frontend build (Vite)
+        run: npm run build:frontend
 
   tests:
     runs-on: ubuntu-latest
@@ -98,11 +102,18 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
       - name: Install dependencies
         run: npm ci
       - name: Dependency audit
         run: npm audit --audit-level=high
+      - name: Frontend dependency audit
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --audit-level=high
       - name: Reject committed runtime secrets and databases
         working-directory: .
         run: |
@@ -168,7 +179,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
       - run: npm ci
       - run: npm run migrate:postgres
       - run: npx playwright install --with-deps chromium

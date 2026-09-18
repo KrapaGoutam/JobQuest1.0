@@ -653,13 +653,6 @@ h1 {
   margin: 0;
   font-size: clamp(1.8rem, 4vw, 2.7rem);
 }
-.eyebrow {
-  color: var(--brand);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.72rem;
-  font-weight: 800;
-}
 .muted {
   color: var(--muted-foreground);
 }
@@ -788,6 +781,15 @@ legend {
   padding: 0.45rem 0.65rem;
   font-size: 0.82rem;
 }
+.btn.small.danger {
+  /* At this smaller size the default .btn.danger text color (#c92e3b on
+     #f6dee0) falls just under WCAG AA (4.17:1, needs 4.5:1) - axe-core
+     caught this via the checklist Delete button, but the same combination
+     was already used in 5 other places before this round; darkening here
+     fixes all of them without touching the shared --bad/--destructive
+     tokens other (non-small) danger elements rely on. ~4.9:1 at this size. */
+  color: #b02a37;
+}
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -913,12 +915,32 @@ a {
   box-shadow: var(--shadow);
   opacity: 0;
   transform: translateY(1rem);
-  transition: 0.2s;
+  /* visibility stays hidden while at rest - its own colors are already a
+     correctly high-contrast pair (verified: computed color/background are
+     the theme's real --sidebar/--sidebar-foreground tokens, not degraded
+     ones), but role="status"/aria-live="polite" (see the markup this rule
+     applies to) keeps a live region in the accessibility tree even at
+     opacity:0, so an unscoped contrast scan still evaluates it - a false
+     positive for an element that's genuinely not meant to be perceived at
+     rest. The delayed visibility transition is the standard fix: it goes
+     visible immediately on show (0s delay) and stays visible for the full
+     fade-out before switching back to hidden, so the animation is
+     unaffected but the resting state is now genuinely non-perceivable. */
+  visibility: hidden;
+  transition:
+    opacity 0.2s,
+    transform 0.2s,
+    visibility 0s linear 0.2s;
   pointer-events: none;
 }
 #toast.show {
   opacity: 1;
   transform: none;
+  visibility: visible;
+  transition:
+    opacity 0.2s,
+    transform 0.2s,
+    visibility 0s linear 0s;
 }
 pre.example {
   white-space: pre-wrap;
@@ -1135,6 +1157,205 @@ pre.example {
 .checklist-item input {
   width: auto;
 }
+.checklist-group + .checklist-group {
+  margin-top: 1rem;
+}
+.checklist-group h3 {
+  margin: 0 0 0.4rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.checklist-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.checklist-item label {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 0.5rem;
+}
+.checklist-item .checklist-note {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+}
+.checklist-item .actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.3rem;
+}
+@media (max-width: 650px) {
+  .checklist-item {
+    flex-wrap: wrap;
+  }
+  .checklist-item .actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+}
+.task-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+}
+.task-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 12rem;
+}
+.task-row input {
+  width: auto;
+}
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+.task-row .actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+.task-row p {
+  flex-basis: 100%;
+  margin: 0;
+}
+@media (max-width: 650px) {
+  .task-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .task-row .actions {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}
+.habit-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.habit-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+}
+.habit-row.inactive {
+  opacity: 0.7;
+}
+.habit-row input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+}
+.habit-meta {
+  flex: 1 1 auto;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.habit-count {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+.habit-row .actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+.habit-history-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+@media (max-width: 650px) {
+  .habit-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .habit-row .actions {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}
+.note-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+.note-card-open {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  padding: 0.7rem;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+.note-card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
+}
+.note-card p {
+  margin: 0 0 0.3rem;
+  white-space: pre-wrap;
+}
+.note-card-meta {
+  font-size: 0.8125rem;
+}
+.note-body-input {
+  min-height: 16rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.checkbox-field input {
+  width: auto;
+}
 .related-card,
 .link-button {
   border: 1px solid var(--line);
@@ -1142,6 +1363,26 @@ pre.example {
   padding: 0.7rem;
   color: var(--ink);
   background: var(--paper);
+}
+.contact-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+.contact-card {
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--paper);
+}
+.contact-meta {
+  margin-top: 0.3rem;
+  font-size: 0.82rem;
+}
+.contact-meta a {
+  color: var(--brand);
 }
 .previous-next {
   display: flex;
@@ -1178,6 +1419,21 @@ tbody td.num {
 .widget-grid [data-widget="weekly-goals"],
 .widget-grid [data-widget="daily-goals"] {
   background: color-mix(in srgb, var(--primary) 6%, var(--paper));
+}
+.widget-tier + .widget-tier {
+  margin-top: 1.75rem;
+}
+.widget-tier-header {
+  margin-bottom: 0.75rem;
+}
+.widget-tier-header h2 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.widget-tier-header p {
+  margin: 0;
+  font-size: 0.8125rem;
 }
 
 .dashboard-hero {
@@ -1342,6 +1598,27 @@ tbody td.num {
   overflow-x: auto;
   padding: 0.25rem 0 0.75rem;
 }
+.quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.25rem 0 0.75rem;
+}
+.chip-toggle {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.chip-toggle.active {
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
+  background: var(--brand);
+  color: var(--primary-foreground);
+}
 .filter-chip {
   flex: 0 0 auto;
   display: inline-flex;
@@ -1354,11 +1631,6 @@ tbody td.num {
   padding: 0.3rem 0.65rem;
   font-size: 0.78rem;
   cursor: pointer;
-}
-.pagination {
-  align-items: center;
-  justify-content: flex-end;
-  margin-top: 1rem;
 }
 .pagination.applications-pagination {
   display: flex;
@@ -1450,7 +1722,6 @@ tbody td.num {
 }
 .mini-bars i,
 .bar-chart i {
-  height: 0.55rem;
   width: calc(min(var(--value), 10) * 10%);
   min-width: 3px;
   border-radius: 99px;
@@ -1611,9 +1882,6 @@ tbody td.num {
   fill: none;
   stroke: var(--primary);
   stroke-width: 1.5;
-}
-.goal-chart {
-  height: 110px;
 }
 .goal-chart-svg {
   height: 100%;
@@ -1783,7 +2051,14 @@ tbody td.num {
   border-bottom: 1px solid var(--line);
 }
 .calendar-day.outside {
-  opacity: 0.45;
+  /* Not opacity: an out-of-month day still needs to be legible (it's real,
+     readable content - just de-emphasized relative to the current month),
+     and opacity-based fading of real text is exactly what produced a real,
+     previously-undiscovered AA color-contrast failure here (2.88:1 against
+     white, needs 4.5:1) - found by the final round's broader accessibility
+     sweep. --muted-foreground is the same already-vetted de-emphasis color
+     the rest of the app uses (see .muted) - solid, not blended-to-fade. */
+  color: var(--muted-foreground);
 }
 .calendar-day time {
   display: block;
@@ -1846,12 +2121,6 @@ tbody td.num {
 .export-card:hover {
   border-color: var(--brand);
   transform: translateY(-2px);
-}
-.pagination {
-  display: flex;
-  justify-content: center;
-  gap: 0.8rem;
-  margin: 1rem;
 }
 progress {
   width: 100%;
@@ -2269,7 +2538,6 @@ dialog::backdrop {
   z-index: 2;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 1rem;
   padding: 1rem 1.25rem;
   background: var(--color-surface-1);

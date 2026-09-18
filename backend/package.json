@@ -8,7 +8,9 @@
   },
   "scripts": {
     "start": "node src/server.js",
+    "predev": "npm run build:frontend",
     "dev": "node --watch src/server.js",
+    "build:frontend": "npm ci --prefix ../frontend && npm run build --prefix ../frontend",
     "migrate": "node src/migrate.js",
     "migrate:check": "node src/migrate.js --check",
     "migrate:postgres": "node src/postgres-migrate.js",
@@ -20,13 +22,13 @@
     "test:frontend": "node --test test/frontend.test.js",
     "test:integration": "node --test --test-concurrency=1 test/app.test.js",
     "test:e2e": "node --test --test-concurrency=1 test/app.test.js",
-    "test:browser": "playwright test",
-    "test:accessibility": "playwright test -g accessibility --project=desktop --project=mobile",
-    "test:visual": "playwright test --grep \"responsive visual states|light dark and system themes|settings forms reports\"",
-    "test:visual:update": "playwright test --grep \"responsive visual states|light dark and system themes|settings forms reports\" --update-snapshots",
-    "lint": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/feature-upgrade.js && node --check src/db.js && node --check ../frontend/app.js && node --check ../frontend/application-table.js && node --check ../frontend/application-preview.js",
-    "typecheck": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/feature-upgrade.js && node --check src/db.js && node --check ../frontend/app.js && node --check ../frontend/application-table.js && node --check ../frontend/application-preview.js",
-    "build": "node --check ../frontend/app.js && node --check ../frontend/ui-utils.js && node --check ../frontend/application-table.js && node --check ../frontend/application-preview.js && node src/migrate.js --check"
+    "test:browser": "npm run build:frontend && playwright test",
+    "test:accessibility": "npm run build:frontend && playwright test -g accessibility --project=desktop --project=mobile",
+    "test:visual": "npm run build:frontend && playwright test --grep \"responsive visual states|light dark and system themes|settings forms reports\"",
+    "test:visual:update": "npm run build:frontend && playwright test --grep \"responsive visual states|light dark and system themes|settings forms reports\" --update-snapshots",
+    "lint": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/feature-upgrade.js && node --check src/tasks.js && node --check src/habits.js && node --check src/notes.js && node --check src/db.js && node --check ../frontend/src/app.js && node --check ../frontend/src/application-table.js && node --check ../frontend/src/application-preview.js",
+    "typecheck": "node --check src/server.js && node --check src/service.js && node --check src/advanced.js && node --check src/feature-upgrade.js && node --check src/tasks.js && node --check src/habits.js && node --check src/notes.js && node --check src/db.js && node --check ../frontend/src/app.js && node --check ../frontend/src/application-table.js && node --check ../frontend/src/application-preview.js",
+    "build": "node --check ../frontend/src/app.js && node --check ../frontend/src/ui-utils.js && node --check ../frontend/src/application-table.js && node --check ../frontend/src/application-preview.js && node src/migrate.js --check"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

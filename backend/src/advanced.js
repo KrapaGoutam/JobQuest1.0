@@ -1,5 +1,6 @@
 import { rows } from "./db.js";
 import { STAGES, changeStage, ownedApplication } from "./service.js";
+import { safeCell } from "./feature-upgrade.js";
 
 const BUILTIN_WIDGETS = [
   "applications-today",
@@ -64,7 +65,16 @@ const GOAL_CATEGORIES = [
   "recruiter_messages",
   "interview_prep_minutes",
 ];
-const csvEscape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+// safeCell (already used by the XLSX export in feature-upgrade.js, and
+// already tested there) neutralizes spreadsheet-formula injection by
+// prefixing a leading '=','+','-','@' with an apostrophe, forcing text
+// interpretation when opened in Excel/Sheets. Round 6: every CSV export in
+// this file used quote-escaping only, with no formula-injection protection
+// at all - a real gap the XLSX path never had. Applying it here closes that
+// gap for every CSV export (application/interview/rejection/follow-up/
+// networking/reminder/goal/timeline), not just one.
+const csvEscape = (value) =>
+  `"${String(safeCell(value) ?? "").replaceAll('"', '""')}"`;
 const isoDate = (date = new Date()) => date.toISOString().slice(0, 10);
 const addDays = (date, count) => {
   const result = new Date(`${date}T12:00:00Z`);
@@ -74,6 +84,12 @@ const addDays = (date, count) => {
 
 function fail(message, status = 400) {
   throw Object.assign(new Error(message), { status });
+}
+function checklistLabel(value) {
+  const label = String(value ?? "").trim();
+  if (!label) fail("Checklist item text is required");
+  if (label.length > 200) fail("Checklist item text must be 200 characters or fewer");
+  return label;
 }
 function ownerId(actor, query = {}) {
   return actor.role === "MANAGER" && query.user_id
@@ -419,6 +435,18 @@ export async function handleAdvanced(context, helpers) {
         ),
         [app.id],
       ),
+      tasks: rows(
+        db.prepare(
+          "SELECT * FROM tasks WHERE application_id=? AND status='open' ORDER BY due_date IS NULL,due_date,id DESC",
+        ),
+        [app.id],
+      ),
+      notes: rows(
+        db.prepare(
+          "SELECT * FROM notes WHERE application_id=? ORDER BY pinned DESC,updated_at DESC",
+        ),
+        [app.id],
+      ),
       related,
       previous:
         db
@@ -607,14 +635,22 @@ export async function handleAdvanced(context, helpers) {
       if (appAction[3]) {
         const item = owned(db, actor, "checklist_items", Number(appAction[3]));
         if (item.application_id !== app.id) fail("Not found", 404);
+        if (request.method === "DELETE") {
+          db.prepare("DELETE FROM checklist_items WHERE id=?").run(item.id);
+          return (json(response, 200, { message: "Deleted" }), true);
+        }
+        const hasLabel = typeof input.label === "string";
+        const label = hasLabel ? checklistLabel(input.label) : null;
+        const hasCompleted = input.completed !== undefined;
+        const completed = hasCompleted ? Number(Boolean(input.completed)) : null;
         db.prepare(
-          "UPDATE checklist_items SET completed=?,completed_at=CASE WHEN ?=1 THEN CURRENT_TIMESTAMP ELSE NULL END,note=coalesce(?,note),updated_at=CURRENT_TIMESTAMP WHERE id=?",
-        ).run(
-          Number(Boolean(input.completed)),
-          Number(Boolean(input.completed)),
-          input.note || null,
-          item.id,
-        );
+          // completed_at mixes a CURRENT_TIMESTAMP branch with a completed_at
+          // (TEXT column) branch in the same CASE; Postgres unifies branch
+          // types stricter than it does a plain assignment cast, so the
+          // CURRENT_TIMESTAMP branch needs an explicit CAST here (a no-op on
+          // SQLite, whose CURRENT_TIMESTAMP is already text).
+          "UPDATE checklist_items SET label=coalesce(?,label),completed=coalesce(?,completed),completed_at=CASE WHEN ?=1 THEN CAST(CURRENT_TIMESTAMP AS TEXT) WHEN ?=0 THEN NULL ELSE completed_at END,note=coalesce(?,note),updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        ).run(label, completed, completed, completed, input.note || null, item.id);
       } else {
         const position = db
           .prepare(
@@ -623,10 +659,40 @@ export async function handleAdvanced(context, helpers) {
           .get(app.id).position;
         db.prepare(
           "INSERT INTO checklist_items(application_id,user_id,label,is_custom,position) VALUES (?,?,?,1,?)",
-        ).run(app.id, app.user_id, input.label, position);
+        ).run(app.id, app.user_id, checklistLabel(input.label), position);
       }
     }
     return (json(response, 200, { message: "Application updated" }), true);
+  }
+
+  const checklistMoveMatch = path.match(
+    /^\/api\/applications\/(\d+)\/checklist\/(\d+)\/move$/,
+  );
+  if (checklistMoveMatch && request.method === "PATCH") {
+    const actor = requireAuth(context, { csrf: true }),
+      app = ownedApplication(db, actor, Number(checklistMoveMatch[1]));
+    if (!app) fail("Not found", 404);
+    const item = owned(db, actor, "checklist_items", Number(checklistMoveMatch[2]));
+    if (item.application_id !== app.id) fail("Not found", 404);
+    const input = await body(request);
+    if (!["up", "down"].includes(input.direction))
+      fail("direction must be 'up' or 'down'");
+    const comparator = input.direction === "up" ? "<" : ">",
+      order = input.direction === "up" ? "DESC" : "ASC";
+    const sibling = db
+      .prepare(
+        `SELECT id,position FROM checklist_items WHERE application_id=? AND position${comparator}? ORDER BY position ${order} LIMIT 1`,
+      )
+      .get(app.id, item.position);
+    if (sibling) {
+      db.prepare(
+        "UPDATE checklist_items SET position=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+      ).run(sibling.position, item.id);
+      db.prepare(
+        "UPDATE checklist_items SET position=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+      ).run(item.position, sibling.id);
+    }
+    return (json(response, 200, { message: "Reordered" }), true);
   }
 
   const resourceMatch = path.match(
@@ -1305,6 +1371,20 @@ export async function handleAdvanced(context, helpers) {
       ).map(rates);
       return (json(response, 200, items), true);
     }
+    if (kind === "resume") {
+      // Same shape/formula as the "source" breakdown above (and the same SQL
+      // already used by the resume-analytics CSV export below) - resume
+      // performance previously had no interactive view at all, only a
+      // download. Reusing the existing, already-tested query and rates()
+      // formula rather than inventing a second one.
+      const items = rows(
+        db.prepare(
+          "SELECT r.version_name,count(a.id) applications,sum(a.last_response_date IS NOT NULL) responses,sum(a.stage IN ('Interview','Final Interview','Offer','Accepted')) interviews,sum(a.stage IN ('Offer','Accepted')) offers FROM resumes r LEFT JOIN applications a ON a.resume_id=r.id AND a.date_applied BETWEEN ? AND ? WHERE r.user_id=? GROUP BY r.id ORDER BY applications DESC",
+        ),
+        [start, end, userId],
+      ).map(rates);
+      return (json(response, 200, items), true);
+    }
     if (kind === "funnel") {
       const items = rows(
         db.prepare(
@@ -1426,6 +1506,19 @@ export async function handleAdvanced(context, helpers) {
           [userId],
         ),
         tags: rows(db.prepare("SELECT * FROM tags WHERE user_id=?"), [userId]),
+        tasks: rows(db.prepare("SELECT * FROM tasks WHERE user_id=?"), [
+          userId,
+        ]),
+        habits: rows(db.prepare("SELECT * FROM habits WHERE user_id=?"), [
+          userId,
+        ]),
+        habit_logs: rows(
+          db.prepare("SELECT * FROM habit_logs WHERE user_id=?"),
+          [userId],
+        ),
+        notes: rows(db.prepare("SELECT * FROM notes WHERE user_id=?"), [
+          userId,
+        ]),
       };
       return (
         sendDownload(
@@ -1449,6 +1542,9 @@ export async function handleAdvanced(context, helpers) {
       networking: "networking_contacts",
       reminders: "reminders",
       goals: "goal_snapshots",
+      tasks: "tasks",
+      habits: "habits",
+      notes: "notes",
     };
     let items;
     if (tables[type])

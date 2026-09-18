@@ -19,6 +19,47 @@ import {
   widgetDefinition,
 } from "./dashboard-config.js";
 import { icon } from "./icons.js";
+import { groupWidgetsByTier } from "./features/dashboard/tiers.js";
+import {
+  QUICK_FILTERS,
+  activeQuickFilter,
+  toggleQuickFilter,
+} from "./features/applications/quick-filters.js";
+import {
+  groupChecklistItems,
+  checklistProgress,
+} from "./features/checklist/groups.js";
+import {
+  safeExternalUrl,
+  contactLabel,
+  isFollowUpOverdue,
+} from "./features/contacts/format.js";
+import {
+  summarizeImportResult,
+  previewRowMessage,
+} from "./features/import-export/format.js";
+import {
+  TASK_VIEWS,
+  TASK_PRIORITIES,
+  TASK_RECURRENCES,
+  isOverdue,
+  dueDateLabel,
+  emptyStateMessage,
+  recurrenceLabel,
+} from "./features/tasks/format.js";
+import {
+  frequencyLabel,
+  progressLabel,
+  streakLabel,
+  emptyStateMessage as habitEmptyStateMessage,
+} from "./features/habits/format.js";
+import {
+  NOTE_TYPES,
+  typeLabel,
+  displayTitle,
+  emptyStateMessage as notesEmptyStateMessage,
+} from "./features/notes/format.js";
+import { rateLabel, summarizeRates } from "./features/analytics/format.js";
 
 const state = {
   user: null,
@@ -34,6 +75,13 @@ const state = {
   relatedAppId: "",
   dashboardDays: 30,
   applicationView: "table",
+  analyticsDays: 90,
+  taskView: "today",
+  habitView: "today",
+  habitHistoryId: "",
+  notesView: "list",
+  notesEditingId: null,
+  notesFilters: { search: "", type: "", pinned: "" },
   navigationCounts: {},
   expandedKanbanGroups: new Set(),
   selectedApplications: new Set(),
@@ -160,7 +208,15 @@ function empty(message) {
   return `<div class="empty">${esc(message)}</div>`;
 }
 function table(headers, body, emptyMessage = "No records yet") {
-  return `<div class="table-wrap"><table><thead><tr>${headers.map((header) => `<th>${esc(header)}</th>`).join("")}</tr></thead><tbody>${body || `<tr><td colspan="${headers.length}">${empty(emptyMessage)}</td></tr>`}</tbody></table></div>`;
+  // tabindex so the scrollable wrapper (overflow: auto in styles.css) is
+  // itself keyboard-focusable, not just its cell contents - a real,
+  // pre-existing WCAG 2.1.1/2.1.3 gap on every page using this helper,
+  // surfaced by Round 5's first-ever accessibility scan of a tracker page
+  // (interviews/rejections/follow_ups/networking_contacts/goals). Fixed here
+  // since it's a one-line, shared, unambiguous, low-risk fix - unlike the
+  // page-specific pre-existing issues left backlogged (see
+  // docs/FEATURE_UPGRADE_5.md Known Debt).
+  return `<div class="table-wrap" tabindex="0"><table><thead><tr>${headers.map((header) => `<th>${esc(header)}</th>`).join("")}</tr></thead><tbody>${body || `<tr><td colspan="${headers.length}">${empty(emptyMessage)}</td></tr>`}</tbody></table></div>`;
 }
 
 const nav = [
@@ -168,13 +224,22 @@ const nav = [
   ["applications", "Applications", "briefcase"],
   ["add", "Add Application", "plus-circle"],
   ["bulk", "Bulk Import", "upload"],
+  // Round 6: was manager-only, even though /api/import/history already
+  // correctly scopes to "my own batches" for a regular user (managers see
+  // everyone's) - the data and the page both already supported this, only
+  // the nav entry didn't.
+  ["imports", "Import History", "history"],
   ["calendar", "Calendar", "calendar-days"],
+  ["tasks", "Tasks", "check-square"],
+  ["habits", "Habits", "repeat"],
+  ["notes", "Journal & Notes", "book-open"],
   ["reminders", "Reminder Center", "bell-ring"],
   ["interviews", "Interviews", "users"],
   ["rejections", "Rejections", "x-circle"],
   ["follow_ups", "Follow-Ups", "send"],
   ["networking_contacts", "Networking", "network"],
   ["resumes", "Resumes", "file-text"],
+  ["analytics", "Analytics", "trending-up"],
   ["goal-history", "Goal History", "target"],
   ["aging", "Aging Report", "timer"],
   ["stage-analytics", "Stage Analytics", "bar-chart-3"],
@@ -189,7 +254,6 @@ function shell(content) {
       ? `<div class="nav-section-static"><p class="nav-group">Manager</p>${[
           ["manager", "Manager Dashboard", "shield-check"],
           ["users", "User Management", "user-cog"],
-          ["imports", "Import History", "history"],
           ["audit", "Audit History", "scroll-text"],
         ]
           .map(navButton)
@@ -204,7 +268,20 @@ function shell(content) {
     '<div class="sidebar-backdrop" id="sidebar-backdrop"></div>',
   );
   qsa("[data-page]").forEach(
-    (button) => (button.onclick = () => go(button.dataset.page)),
+    (button) =>
+      (button.onclick = () => {
+        // The mobile sidebar drawer and its backdrop are recreated fresh
+        // (closed) on every shell() render, but document.body itself is not -
+        // classList.toggle("nav-open", true) from opening the drawer sticks
+        // on body forever if the user navigates via a link instead of the
+        // drawer's own close button/backdrop, since nothing else ever clears
+        // it. Its only CSS effect is `overflow: hidden`, but that's real:
+        // the page becomes permanently unable to scroll on mobile after the
+        // drawer's been opened once. Clear it unconditionally here - a no-op
+        // when it wasn't set.
+        document.body.classList.remove("nav-open");
+        go(button.dataset.page);
+      }),
   );
   const navRoot = qs("aside nav");
   const groupedNavigation = [
@@ -213,6 +290,9 @@ function shell(content) {
       "Activity",
       [
         "calendar",
+        "tasks",
+        "habits",
+        "notes",
         "reminders",
         "interviews",
         "rejections",
@@ -223,7 +303,7 @@ function shell(content) {
     ["Career Assets", ["resumes", "bulk"]],
     [
       "Insights",
-      ["goal-history", "aging", "stage-analytics", "exports"],
+      ["analytics", "goal-history", "aging", "stage-analytics", "exports"],
     ],
     ["Settings", ["settings"]],
   ];
@@ -253,7 +333,15 @@ function shell(content) {
     qs("#sidebar-backdrop").classList.toggle("open", open);
     qs("#mobile-menu").setAttribute("aria-expanded", String(open));
     document.body.classList.toggle("nav-open", open);
-    if (open) qs("#sidebar-close").focus();
+    // Deferred to the next frame: focusing a descendant of the sidebar in
+    // the same tick as the class toggle that starts its CSS transform
+    // transition forces a synchronous layout read before the browser has
+    // committed the "before" state of that transition, which can starve or
+    // skip the animation entirely (observed directly: the "open" class
+    // present, but the drawer still rendered at its fully closed transform,
+    // for seconds at a time under load). Letting one frame land first keeps
+    // the transition and the focus move independent.
+    if (open) requestAnimationFrame(() => qs("#sidebar-close").focus());
     else navigationTrigger?.focus?.();
   };
   qs("#mobile-menu").onclick = () =>
@@ -332,6 +420,8 @@ function shell(content) {
         interviews: counts.upcoming_interviews,
         follow_ups: counts.overdue_follow_ups,
         reminders: counts.due_reminders,
+        tasks: counts.tasks_due_today,
+        habits: counts.habits_due_today,
       };
       Object.entries(mapping).forEach(([id, count]) => {
         const button = qs(`[data-page="${id}"]`),
@@ -428,12 +518,16 @@ async function go(page) {
       "quick-add": renderQuickAdd,
       bulk: renderBulk,
       calendar: renderCalendar,
+      tasks: renderTasks,
+      habits: renderHabits,
+      notes: renderNotes,
       reminders: renderReminders,
       resumes: renderResumes,
       goals: renderGoals,
       "goal-history": renderGoalHistory,
       aging: renderAging,
       "stage-analytics": renderCompleteStageAnalytics,
+      analytics: renderAnalytics,
       exports: renderExports,
       profile: renderProfile,
       settings: renderSettings,
@@ -726,6 +820,24 @@ function widgetContent(id, data, manager) {
     ? `<div class="metric num">${users.total ?? 0}</div><p>Users in manager scope</p>`
     : empty("No data in the selected range");
 }
+
+function widgetCardHtml(item, data, manager) {
+  const kind = widgetDefinition(item.widget_id)?.kind || "insight";
+  return `<section class="widget size-${item.width} widget-${kind}" data-widget="${item.widget_id}"><header class="widget-header"><div><span class="widget-kicker">${esc(kind)}</span><h2>${esc(WIDGET_NAMES[item.widget_id])}</h2></div>${DASHBOARD_DRILL[item.widget_id] ? `<button class="widget-drill" data-widget-drill="${item.widget_id}" aria-label="Open details for ${esc(WIDGET_NAMES[item.widget_id])}">View</button>` : ""}</header>${widgetContent(item.widget_id, data, manager)}</section>`;
+}
+
+// Round 3: group enabled widgets into the operational hierarchy (needs
+// attention / current pipeline / trends & context) instead of one flat grid,
+// while leaving each widget's own rendering, drill-through, and persisted
+// position/width untouched.
+function renderTieredWidgets(widgets, data, manager) {
+  return groupWidgetsByTier(widgets)
+    .map(
+      (tier) =>
+        `<section class="widget-tier widget-tier-${tier.id}"><header class="widget-tier-header"><h2>${esc(tier.label)}</h2><p class="muted">${esc(tier.description)}</p></header><div class="widget-grid">${tier.widgets.map((item) => widgetCardHtml(item, data, manager)).join("")}</div></section>`,
+    )
+    .join("");
+}
 async function renderDashboard(manager = false) {
   shell(
     pageHead(
@@ -753,7 +865,7 @@ async function renderDashboard(manager = false) {
     : "";
   shell(
     `<section class="dashboard-hero"><div><p class="eyebrow">JobQuest Workspace</p><h1>${manager ? "Team search overview" : `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${esc(state.user.full_name.split(" ")[0])}`}</h1><p class="muted">${manager ? "See team momentum, pipeline health, and where support is needed." : "Here’s what’s moving in your job search and what needs attention next."}</p></div><div class="dashboard-controls"><div class="view-switcher" role="group" aria-label="Dashboard type"><button class="btn small ${manager ? "secondary" : ""}" data-dashboard-mode="user" aria-pressed="${!manager}">User</button>${state.user.role === "MANAGER" ? `<button class="btn small ${manager ? "" : "secondary"}" data-dashboard-mode="manager" aria-pressed="${manager}">Manager</button>` : ""}</div>${scopeSelect}<select id="dashboard-range" aria-label="Dashboard date range"><option value="7" ${state.dashboardDays === 7 ? "selected" : ""}>Last 7 days</option><option value="30" ${state.dashboardDays === 30 ? "selected" : ""}>Last 30 days</option><option value="90" ${state.dashboardDays === 90 ? "selected" : ""}>Last 90 days</option></select><button class="btn secondary" id="dashboard-settings">${icon("sliders-horizontal")}<span class="hide-narrow">Customize Dashboard</span><span class="show-narrow">Customize</span></button></div></section>` +
-      `<div class="widget-grid">${widgets.map((item) => `<section class="widget size-${item.width} widget-${widgetDefinition(item.widget_id)?.kind || "insight"}" data-widget="${item.widget_id}"><header class="widget-header"><div><span class="widget-kicker">${esc(widgetDefinition(item.widget_id)?.kind || "overview")}</span><h2>${esc(WIDGET_NAMES[item.widget_id])}</h2></div>${DASHBOARD_DRILL[item.widget_id] ? `<button class="widget-drill" data-widget-drill="${item.widget_id}" aria-label="Open details for ${esc(WIDGET_NAMES[item.widget_id])}">View</button>` : ""}</header>${widgetContent(item.widget_id, data, manager)}</section>`).join("")}</div>`,
+      renderTieredWidgets(widgets, data, manager),
   );
   qs(".dashboard-controls")?.insertAdjacentHTML(
     "beforeend",
@@ -812,7 +924,20 @@ async function renderDashboard(manager = false) {
       }),
   );
   qsa("[data-page]").forEach(
-    (button) => (button.onclick = () => go(button.dataset.page)),
+    (button) =>
+      (button.onclick = () => {
+        // The mobile sidebar drawer and its backdrop are recreated fresh
+        // (closed) on every shell() render, but document.body itself is not -
+        // classList.toggle("nav-open", true) from opening the drawer sticks
+        // on body forever if the user navigates via a link instead of the
+        // drawer's own close button/backdrop, since nothing else ever clears
+        // it. Its only CSS effect is `overflow: hidden`, but that's real:
+        // the page becomes permanently unable to scroll on mobile after the
+        // drawer's been opened once. Clear it unconditionally here - a no-op
+        // when it wasn't set.
+        document.body.classList.remove("nav-open");
+        go(button.dataset.page);
+      }),
   );
 }
 function renderDashboardSettings(layout, manager) {
@@ -1285,6 +1410,11 @@ async function renderApplications(params = new URLSearchParams()) {
         `<button class="filter-chip" type="button" data-remove-filter="${esc(key)}" aria-label="Remove ${esc(pretty(key))} filter">${esc(pretty(key))}: ${esc(value)} <span aria-hidden="true">×</span></button>`,
     )
     .join("");
+  const currentQuickFilter = activeQuickFilter(params);
+  const quickFiltersHtml = `<div class="quick-filters" role="group" aria-label="Quick filters">${QUICK_FILTERS.map(
+    (filter) =>
+      `<button type="button" class="chip-toggle ${currentQuickFilter === filter.id ? "active" : ""}" data-quick-filter="${filter.id}" aria-pressed="${currentQuickFilter === filter.id}">${esc(filter.label)}</button>`,
+  ).join("")}</div>`;
   const performance = overview.performance || {};
   const applicationSummary = [
     ["Total Applications", data.total],
@@ -1302,7 +1432,7 @@ async function renderApplications(params = new URLSearchParams()) {
       `${data.total} applications`,
       `<div class="actions"><div class="view-switcher" role="group" aria-label="Applications view"><button class="btn small ${view === "table" ? "" : "secondary"}" data-view="table" aria-pressed="${view === "table"}">${icon("table-2")}Table</button><button class="btn small ${view === "kanban" ? "" : "secondary"}" data-view="kanban" aria-pressed="${view === "kanban"}">${icon("kanban-square")}Kanban</button></div><button class="btn" data-page="quick-add">${icon("plus")}Quick Add</button><button class="btn secondary" id="open-export">${icon("download")}Export</button></div>`,
     ) +
-      `<section class="card full application-workspace"><div class="toolbar applications-meta"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select><span class="result-count num" role="status">${data.total} result${data.total === 1 ? "" : "s"}</span><select id="application-sort" aria-label="Sort applications"><option value="updated_at:desc">Recently updated</option><option value="company:asc">Company A–Z</option><option value="company:desc">Company Z–A</option><option value="job_title:asc">Job title A–Z</option><option value="job_title:desc">Job title Z–A</option><option value="date_applied:desc">Application date: newest</option><option value="date_applied:asc">Application date: oldest</option><option value="salary_min:desc">Salary: highest</option><option value="salary_min:asc">Salary: lowest</option></select></div><form id="app-filters" class="toolbar advanced-filter-bar"><div class="search-field">${icon("search")}<input name="search" type="search" placeholder="Search company, title, location, recruiter, notes, tags..." value="${esc(params.get("search") || "")}"></div><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option>${["High", "Medium", "Low"].map((priority) => `<option ${params.get("priority") === priority ? "selected" : ""}>${priority}</option>`).join("")}</select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">${icon("filter")}More Filters${activeFilters.length ? `<span class="num filter-count">${activeFilters.length}</span>` : ""}</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">${icon("save")}Save View</button></form><div class="active-filters" aria-label="Active filters">${filterChips}${activeFilters.length ? `<button class="link-button" type="button" id="clear-filter-chips">Clear all filters</button>` : ""}</div><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? '<div id="applications-table-root"></div>' : board}<div class="pagination applications-pagination"><button class="btn secondary small" id="prev-page" ${data.page <= 1 ? "disabled" : ""}>${icon("chevron-left")}Previous</button><span class="num muted">Page ${data.page} of ${Math.max(1, data.pages)}</span><button class="btn secondary small" id="next-page" ${data.page >= data.pages ? "disabled" : ""}>Next${icon("chevron-right")}</button></div></section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
+      `<section class="card full application-workspace"><div class="toolbar applications-meta"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((saved) => `<option value="${saved.id}">${esc(saved.name)}</option>`).join("")}</select><span class="result-count num" role="status">${data.total} result${data.total === 1 ? "" : "s"}</span><select id="application-sort" aria-label="Sort applications"><option value="updated_at:desc">Recently updated</option><option value="company:asc">Company A–Z</option><option value="company:desc">Company Z–A</option><option value="job_title:asc">Job title A–Z</option><option value="job_title:desc">Job title Z–A</option><option value="date_applied:desc">Application date: newest</option><option value="date_applied:asc">Application date: oldest</option><option value="salary_min:desc">Salary: highest</option><option value="salary_min:asc">Salary: lowest</option></select></div>${quickFiltersHtml}<form id="app-filters" class="toolbar advanced-filter-bar"><div class="search-field">${icon("search")}<input name="search" type="search" placeholder="Search company, title, location, recruiter, notes, tags..." value="${esc(params.get("search") || "")}"></div><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option>${["High", "Medium", "Low"].map((priority) => `<option ${params.get("priority") === priority ? "selected" : ""}>${priority}</option>`).join("")}</select><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="more-filters">${icon("filter")}More Filters${activeFilters.length ? `<span class="num filter-count">${activeFilters.length}</span>` : ""}</button><button type="button" class="btn small secondary" id="clear-filters">Clear All</button><button type="button" class="btn small secondary" id="save-view">${icon("save")}Save View</button></form><div class="active-filters" aria-label="Active filters">${filterChips}${activeFilters.length ? `<button class="link-button" type="button" id="clear-filter-chips">Clear all filters</button>` : ""}</div><div id="advanced-filters" hidden class="filter-panel"><div class="form-grid">${select("work_arrangement", "Work arrangement", ["", "Remote", "Hybrid", "Onsite"], params.get("work_arrangement") || "")}${select("employment_type", "Employment type", ["", "Full-time", "Part-time", "Contract", "Internship", "Temporary", "Other"], params.get("employment_type") || "")}${field("date_from", "Applied from", "date", params.get("date_from") || "")}${field("date_to", "Applied to", "date", params.get("date_to") || "")}</div></div>${view === "table" ? '<div id="applications-table-root"></div>' : board}<div class="pagination applications-pagination"><button class="btn secondary small" id="prev-page" ${data.page <= 1 ? "disabled" : ""}>${icon("chevron-left")}Previous</button><span class="num muted">Page ${data.page} of ${Math.max(1, data.pages)}</span><button class="btn secondary small" id="next-page" ${data.page >= data.pages ? "disabled" : ""}>Next${icon("chevron-right")}</button></div></section><dialog id="export-dialog"><form method="dialog" class="form-grid"><h2 class="full">Export applications</h2>${select(
         "format",
         "Format",
         [
@@ -1440,6 +1570,11 @@ async function renderApplications(params = new URLSearchParams()) {
         });
         renderApplications(params);
       }),
+  );
+  qsa("[data-quick-filter]").forEach(
+    (button) =>
+      (button.onclick = () =>
+        renderApplications(toggleQuickFilter(params, button.dataset.quickFilter))),
   );
   qs("#more-filters").onclick = () =>
     (qs("#advanced-filters").hidden = !qs("#advanced-filters").hidden);
@@ -1585,119 +1720,18 @@ async function renderApplications(params = new URLSearchParams()) {
   };
 }
 
-async function legacyRenderApplications(params = new URLSearchParams()) {
-  const [data, savedViews] = await Promise.all([
-    api(`/api/applications?${params}`),
-    api("/api/saved-views"),
-  ]);
-  state.applications = data.items;
-  const rowsHtml = data.items
-    .map(
-      (item) =>
-        `<tr class="clickable-row" data-open="${item.id}" tabindex="0"><td>${item.pinned ? "📌 " : ""}${esc(item.date_applied)}</td><td><strong>${esc(item.company)}</strong></td><td>${esc(item.job_title)}</td><td>${badge(item.stage)}</td><td>${esc(item.priority)}</td><td>${esc(item.source || "—")}</td><td>${esc(item.tags || "—")}</td><td>${item.days_inactive}d · ${esc(agingBand(item.days_inactive))}</td><td><div class="actions"><button class="btn small secondary" data-edit="${item.id}">Edit</button><button class="btn small secondary" data-pin="${item.id}" data-value="${item.pinned ? 0 : 1}">${item.pinned ? "Unpin" : "Pin"}</button><button class="btn small danger" data-archive="${item.id}">${item.archived_at ? "Restore" : "Archive"}</button></div></td></tr>`,
-    )
-    .join("");
-  shell(
-    pageHead(
-      "Applications",
-      `${data.total} records · page ${data.page} of ${Math.max(1, data.pages)}`,
-      `<div class="actions"><button class="btn" data-page="quick-add">Quick Add</button><a class="btn secondary" href="/api/exports/applications">CSV Export</a></div>`,
-    ) +
-      `<section class="card full"><div class="toolbar"><select id="saved-view"><option value="">Saved views</option>${savedViews.map((view) => `<option value="${view.id}">${esc(view.name)}</option>`).join("")}</select><button class="btn small secondary" id="delete-view" disabled>Delete View</button></div><form id="app-filters" class="toolbar"><input name="search" placeholder="Search company, title, location" value="${esc(params.get("search") || "")}"><select name="stage"><option value="">All stages</option>${STAGES.map((stage) => `<option ${params.get("stage") === stage ? "selected" : ""}>${stage}</option>`).join("")}</select><select name="priority"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select><select name="archived"><option value="">Active</option><option value="true">Archived</option><option value="all">All</option></select><label class="inline"><input type="checkbox" name="pinned" value="true"> Pinned</label><button class="btn small">Apply</button><button type="button" class="btn small secondary" id="save-view">Save View</button></form>${table(["Applied", "Company", "Job title", "Stage", "Priority", "Source", "Tags", "Aging", "Actions"], rowsHtml, "No applications match these filters")}</section><div class="pagination"><button class="btn secondary" id="prev-page" ${data.page <= 1 ? "disabled" : ""}>Previous</button><button class="btn secondary" id="next-page" ${data.page >= data.pages ? "disabled" : ""}>Next</button></div>`,
-  );
-  qs("#app-filters").onsubmit = (e) => {
-    e.preventDefault();
-    renderApplications(new URLSearchParams(new FormData(e.currentTarget)));
-  };
-  qs("#save-view").onclick = async () => {
-    const name = prompt("Saved view name");
-    if (name) {
-      await api("/api/saved-views", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          filters: Object.fromEntries(new FormData(qs("#app-filters"))),
-        }),
-      });
-      toast("View saved");
-    }
-  };
-  qs("#saved-view").onchange = (event) => {
-    const view = savedViews.find(
-      (item) => item.id === Number(event.target.value),
-    );
-    qs("#delete-view").disabled = !view;
-    if (view)
-      renderApplications(new URLSearchParams(JSON.parse(view.filters_json)));
-  };
-  qs("#delete-view").onclick = async () => {
-    const id = qs("#saved-view").value;
-    if (id && confirm("Delete this saved view?")) {
-      await api(`/api/saved-views/${id}`, { method: "DELETE" });
-      renderApplications(params);
-    }
-  };
-  qsa("[data-open]").forEach((row) => {
-    row.onclick = (e) => {
-      if (!e.target.closest("button,a")) go(`detail:${row.dataset.open}`);
-    };
-    row.onkeydown = (e) => {
-      if (e.key === "Enter") go(`detail:${row.dataset.open}`);
-    };
-  });
-  qsa("[data-edit]").forEach(
-    (button) =>
-      (button.onclick = () => {
-        state.editing = state.applications.find(
-          (item) => item.id === Number(button.dataset.edit),
-        );
-        go("add");
-      }),
-  );
-  qsa("[data-pin]").forEach(
-    (button) =>
-      (button.onclick = async () => {
-        await api(`/api/applications/${button.dataset.pin}/pin`, {
-          method: "POST",
-          body: JSON.stringify({ pinned: Number(button.dataset.value) }),
-        });
-        renderApplications(params);
-      }),
-  );
-  qsa("[data-archive]").forEach(
-    (button) =>
-      (button.onclick = async () => {
-        const item = state.applications.find(
-          (value) => value.id === Number(button.dataset.archive),
-        );
-        await api(
-          `/api/applications/${item.id}/${item.archived_at ? "restore" : "archive"}`,
-          { method: "POST", body: "{}" },
-        );
-        renderApplications(params);
-      }),
-  );
-  qs("#prev-page").onclick = () => {
-    params.set("page", data.page - 1);
-    renderApplications(params);
-  };
-  qs("#next-page").onclick = () => {
-    params.set("page", data.page + 1);
-    renderApplications(params);
-  };
-}
-
 async function renderDetail(id) {
   const data = await api(`/api/applications/${id}/detail`),
     item = data.application,
-    form = await applicationForm(item);
+    form = await applicationForm(item),
+    jobUrlHref = safeExternalUrl(item.job_url);
   shell(
     pageHead(
       `${item.company} — ${item.job_title}`,
       "Application details, decisions, and complete history",
       `<div class="actions"><button class="btn secondary" id="pin-detail">${item.pinned ? "Unpin" : "Pin"}</button><button class="btn secondary" id="archive-detail">${item.archived_at ? "Restore" : "Archive"}</button><button class="btn danger" id="delete-detail">Delete</button></div>`,
     ) +
-      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${item.job_url ? `<a href="${esc(item.job_url)}" target="_blank" rel="noopener">Open posting</a>` : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
+      `<section class="application-header">${badge(item.stage)}<span class="badge">${esc(item.priority)}</span><span>${esc(item.location || "Location not set")}</span><span>${esc(item.work_arrangement || "Arrangement not set")}</span><span>Applied ${esc(item.date_applied)}</span><span class="health health-${item.health.toLowerCase().replaceAll(" ", "-")}">Workflow health: ${esc(item.health)}</span></section><section class="card full quick-actions"><strong>Workflow actions</strong><select id="detail-stage" aria-label="Change application stage">${STAGES.map((stage) => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><button class="btn small" data-related-page="interviews">Add Interview</button><button class="btn small" data-related-page="follow_ups">Add Follow-Up</button><button class="btn small danger" id="mark-rejected">Mark Rejected</button><button class="btn small secondary" data-related-page="networking_contacts">Link Contact</button></section><section class="next-action-card"><div><div class="eyebrow">Next action</div><h2>${esc(item.next_action || "No next action")}</h2><p>${item.next_action_date ? `Due ${esc(item.next_action_date)} · ${remaining(item.next_action_date)}` : "Choose a due date to activate reminders"}</p></div><button class="btn" id="complete-next" ${item.next_action ? "" : "disabled"}>Complete</button></section>${timelineView(data.timeline, id)}<section class="card full"><h2>Application Summary</h2><div class="summary-grid"><p><strong>Source</strong><br>${esc(item.source || "—")}</p><p><strong>Resume Version</strong><br>${esc(item.resume_version || "No resume specified")}</p><p><strong>Job URL</strong><br>${jobUrlHref ? `<a href="${esc(jobUrlHref)}" target="_blank" rel="noopener noreferrer">Open posting</a>` : item.job_url ? esc(item.job_url) : "—"}</p><p><strong>Tags</strong><br>${item.tags.map((tag) => `<span class="badge">${esc(tag.name)}</span>`).join(" ") || "—"}</p></div></section>${detailTabs(data)}${applicationTasksView(data.tasks, date())}${applicationNotesView(data.notes)}${networkingContactsView(data.networking)}<section class="card full"><details><summary><strong>Edit complete application</strong></summary><form id="application-form">${form}<div id="form-error"></div><div class="actions"><button class="btn">Save</button><button type="button" class="btn secondary" id="cancel-edit">Cancel</button></div></form></details></section><section class="card full"><h2>Related applications at ${esc(item.company)}</h2>${data.related.map((rel) => `<button class="related-card" data-detail="${rel.id}">${esc(rel.job_title)} ${badge(rel.stage)} · ${rel.date_applied}</button>`).join("") || empty("No other applications at this company")}</section><div class="previous-next">${data.previous ? `<button class="btn secondary" data-detail="${data.previous}">← Previous</button>` : "<span></span>"}${data.next ? `<button class="btn secondary" data-detail="${data.next}">Next →</button>` : ""}</div>`,
   );
   bindApplicationForm(item);
   qsa("[data-detail]").forEach(
@@ -1752,9 +1786,11 @@ async function renderDetail(id) {
   };
   bindTimeline(id);
   bindChecklist(id);
+  bindDetailTasks(id);
+  bindDetailNotes(id);
 }
 function timelineView(events, id) {
-  return `<section class="card full timeline-section"><div class="section-head"><h2>Visual Timeline</h2><div class="actions"><select id="timeline-filter"><option value="all">All</option><option value="stage">Stage changes</option><option value="interview">Interviews</option><option value="follow_up">Follow-ups</option><option value="recruiter">Recruiter activity</option><option value="rejection">Rejections</option><option value="offer">Offers</option><option value="notes">Notes</option><option value="automatic">Automatic</option><option value="manual">Manual</option></select><select id="timeline-sort"><option value="desc">Newest</option><option value="asc">Oldest</option></select><a class="btn small secondary" id="timeline-csv" href="/api/applications/${id}/timeline/csv">CSV</a><a class="btn small secondary" id="timeline-json" href="/api/applications/${id}/timeline/json">JSON</a></div></div><div class="timeline">${events.map((event) => `<article class="timeline-event ${STAGE_CLASS[event.stage] || ""}"><time>${esc(event.event_date)} ${esc(event.event_time || "")}</time><div><span class="badge">${esc(event.category)}</span><h3>${esc(event.title)}</h3><p>${esc(event.description || "")}</p><small>${esc(event.source)} · ${esc(event.actor_username || "")}</small></div></article>`).join("") || empty("No timeline events")}</div><details><summary>Add manual timeline event</summary><form id="timeline-form" class="form-grid">${field("event_date", "Event date", "date", date(), "required")}${field("event_time", "Time", "time")}${select("category", "Category", ["recruiter", "assessment", "interview", "follow_up", "offer", "notes"], "notes")}${select("event_type", "Event type", ["recruiter_viewed", "recruiter_called", "recruiter_emailed", "assessment_received", "assessment_submitted", "hiring_manager_contacted", "reference_requested", "reference_submitted", "background_check_started", "documents_requested", "verbal_offer", "custom"], "custom")}${field("title", "Title", "text", "", "required")}${field("contact_person", "Contact")}${select("stage", "Optional stage", ["", ...STAGES], "")}<label class="full">Note<textarea name="description"></textarea></label>${field("next_action", "Next action")}${field("next_action_date", "Next-action date", "date")}<button class="btn">Add Event</button></form></details></section>`;
+  return `<section class="card full timeline-section"><div class="section-head"><h2>Visual Timeline</h2><div class="actions"><select id="timeline-filter" aria-label="Filter timeline"><option value="all">All</option><option value="stage">Stage changes</option><option value="interview">Interviews</option><option value="follow_up">Follow-ups</option><option value="recruiter">Recruiter activity</option><option value="rejection">Rejections</option><option value="offer">Offers</option><option value="notes">Notes</option><option value="automatic">Automatic</option><option value="manual">Manual</option></select><select id="timeline-sort" aria-label="Sort timeline"><option value="desc">Newest</option><option value="asc">Oldest</option></select><a class="btn small secondary" id="timeline-csv" href="/api/applications/${id}/timeline/csv">CSV</a><a class="btn small secondary" id="timeline-json" href="/api/applications/${id}/timeline/json">JSON</a></div></div><div class="timeline">${events.map((event) => `<article class="timeline-event ${STAGE_CLASS[event.stage] || ""}"><time>${esc(event.event_date)} ${esc(event.event_time || "")}</time><div><span class="badge">${esc(event.category)}</span><h3>${esc(event.title)}</h3><p>${esc(event.description || "")}</p><small>${esc(event.source)} · ${esc(event.actor_username || "")}</small></div></article>`).join("") || empty("No timeline events")}</div><details><summary>Add manual timeline event</summary><form id="timeline-form" class="form-grid">${field("event_date", "Event date", "date", date(), "required")}${field("event_time", "Time", "time")}${select("category", "Category", ["recruiter", "assessment", "interview", "follow_up", "offer", "notes"], "notes")}${select("event_type", "Event type", ["recruiter_viewed", "recruiter_called", "recruiter_emailed", "assessment_received", "assessment_submitted", "hiring_manager_contacted", "reference_requested", "reference_submitted", "background_check_started", "documents_requested", "verbal_offer", "custom"], "custom")}${field("title", "Title", "text", "", "required")}${field("contact_person", "Contact")}${select("stage", "Optional stage", ["", ...STAGES], "")}<label class="full">Note<textarea name="description"></textarea></label>${field("next_action", "Next action")}${field("next_action_date", "Next-action date", "date")}<button class="btn">Add Event</button></form></details></section>`;
 }
 function bindTimeline(id) {
   const update = async () => {
@@ -1788,28 +1824,140 @@ function bindTimeline(id) {
     go(`detail:${id}`);
   };
 }
+function networkingContactsView(contacts) {
+  const linkButton = `<button type="button" class="btn small secondary" data-related-page="networking_contacts">${contacts.length ? "Link Another Contact" : "Link Contact"}</button>`;
+  return `<section class="card full"><h2>Networking Contacts</h2>${
+    contacts.length
+      ? `<ul class="contact-list">${contacts
+          .map((contact) => {
+            const linkedin = safeExternalUrl(contact.linkedin_url);
+            const overdue = isFollowUpOverdue(contact.next_follow_up_date);
+            return `<li class="contact-card"><strong>${esc(contactLabel(contact))}</strong>${contact.networking_stage ? ` <span class="badge">${esc(contact.networking_stage)}</span>` : ""}<div class="contact-meta muted">${[
+              contact.email
+                ? `<a href="mailto:${esc(contact.email)}">${esc(contact.email)}</a>`
+                : "",
+              linkedin
+                ? `<a href="${esc(linkedin)}" target="_blank" rel="noopener noreferrer">LinkedIn</a>`
+                : "",
+              contact.next_follow_up_date
+                ? `Follow up ${esc(contact.next_follow_up_date)}${overdue ? ` <span class="tone-chip tone-warning">Overdue</span>` : ""}`
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" · ")}</div>${contact.notes ? `<p class="muted">${esc(contact.notes)}</p>` : ""}</li>`;
+          })
+          .join("")}</ul>`
+      : empty("No networking contacts linked to this application yet")
+  }${linkButton}</section>`;
+}
+function checklistItemHtml(item) {
+  return `<li class="checklist-item" data-checklist-row="${item.id}"><label><input type="checkbox" data-checklist="${item.id}" ${item.completed ? "checked" : ""} aria-label="Mark '${esc(item.label)}' ${item.completed ? "not complete" : "complete"}"><span>${esc(item.label)}</span></label>${item.note ? `<small class="checklist-note">${esc(item.note)}</small>` : ""}<div class="actions"><button type="button" class="btn small secondary" data-checklist-up="${item.id}" aria-label="Move '${esc(item.label)}' up">↑</button><button type="button" class="btn small secondary" data-checklist-down="${item.id}" aria-label="Move '${esc(item.label)}' down">↓</button><button type="button" class="btn small secondary" data-checklist-edit="${item.id}" aria-label="Edit '${esc(item.label)}'">Edit</button><button type="button" class="btn small danger" data-checklist-delete="${item.id}" aria-label="Delete '${esc(item.label)}'">Delete</button></div></li>`;
+}
+function checklistView(data) {
+  const { completed, total, percent } = checklistProgress(data.checklist);
+  const groups = groupChecklistItems(data.checklist);
+  return `<h2>Application Checklist</h2><p role="status">${completed} of ${total} complete${total ? ` (${percent}%)` : ""}</p><progress value="${completed}" max="${total || 1}"></progress><div id="checklist">${
+    total
+      ? groups
+          .map(
+            (group) =>
+              `<section class="checklist-group"><h3>${esc(group.label)}</h3><ul>${group.items.map(checklistItemHtml).join("")}</ul></section>`,
+          )
+          .join("")
+      : empty("No checklist items yet — add one below")
+  }</div><form id="checklist-add" class="toolbar"><input name="label" placeholder="Custom checklist item" required maxlength="200"><button class="btn small">Add</button></form>`;
+}
 function detailTabs(data) {
-  const progress = data.checklist.filter((item) => item.completed).length;
-  return `<section class="card full"><div class="tabs" role="tablist"><button>Overview</button><button>Timeline</button><button>Interviews (${data.interviews.length})</button><button>Follow-Ups (${data.follow_ups.length})</button><button>Networking (${data.networking.length})</button><button>Resume</button><button>Checklist</button><button>Notes</button>${data.audit ? "<button>Audit History</button>" : ""}</div><div class="tab-content"><h2>Application Checklist</h2><p>${progress} of ${data.checklist.length} complete</p><progress value="${progress}" max="${data.checklist.length || 1}"></progress><div id="checklist">${data.checklist.map((item) => `<label class="checklist-item"><input type="checkbox" data-checklist="${item.id}" ${item.completed ? "checked" : ""}> ${esc(item.label)} <small>${esc(item.note || "")}</small></label>`).join("")}</div><form id="checklist-add" class="toolbar"><input name="label" placeholder="Custom checklist item" required><button class="btn small">Add</button></form>${data.audit ? `<details><summary>Manager audit history</summary>${data.audit.map((item) => `<p>${esc(item.created_at)} · ${esc(item.actor_username)} · ${esc(item.action)} ${esc(item.details || "")}</p>`).join("")}</details>` : ""}</div></section>`;
+  return `<section class="card full"><div class="tabs" role="tablist"><button>Overview</button><button>Timeline</button><button>Interviews (${data.interviews.length})</button><button>Follow-Ups (${data.follow_ups.length})</button><button>Networking (${data.networking.length})</button><button>Resume</button><button>Checklist</button><button>Notes</button>${data.audit ? "<button>Audit History</button>" : ""}</div><div class="tab-content"><div id="checklist-panel">${checklistView(data)}</div>${data.audit ? `<details><summary>Manager audit history</summary>${data.audit.map((item) => `<p>${esc(item.created_at)} · ${esc(item.actor_username)} · ${esc(item.action)} ${esc(item.details || "")}</p>`).join("")}</details>` : ""}</div></section>`;
 }
 function bindChecklist(id) {
+  const refresh = async () => {
+    try {
+      const data = await api(`/api/applications/${id}/detail`);
+      qs("#checklist-panel").innerHTML = checklistView(data);
+      bindChecklist(id);
+    } catch {
+      toast("Could not refresh the checklist — try again");
+    }
+  };
   qsa("[data-checklist]").forEach(
     (input) =>
-      (input.onchange = () =>
-        api(`/api/applications/${id}/checklist/${input.dataset.checklist}`, {
-          method: "POST",
-          body: JSON.stringify({ completed: input.checked }),
-        })),
+      (input.onchange = async () => {
+        const wasChecked = !input.checked;
+        try {
+          await api(`/api/applications/${id}/checklist/${input.dataset.checklist}`, {
+            method: "PATCH",
+            body: JSON.stringify({ completed: input.checked }),
+          });
+          await refresh();
+        } catch {
+          input.checked = wasChecked;
+          toast("Could not update that item — try again");
+        }
+      }),
+  );
+  qsa("[data-checklist-edit]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        const row = button.closest("[data-checklist-row]"),
+          current = row.querySelector("label span").textContent,
+          label = prompt("Edit checklist item", current);
+        if (label === null || label.trim() === current) return;
+        try {
+          await api(`/api/applications/${id}/checklist/${button.dataset.checklistEdit}`, {
+            method: "PATCH",
+            body: JSON.stringify({ label }),
+          });
+          await refresh();
+        } catch {
+          toast("Could not save that change — try again");
+        }
+      }),
+  );
+  qsa("[data-checklist-delete]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        if (!confirm("Delete this checklist item?")) return;
+        try {
+          await api(`/api/applications/${id}/checklist/${button.dataset.checklistDelete}`, {
+            method: "DELETE",
+          });
+          await refresh();
+        } catch {
+          toast("Could not delete that item — try again");
+        }
+      }),
+  );
+  qsa("[data-checklist-up],[data-checklist-down]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        const itemId = button.dataset.checklistUp || button.dataset.checklistDown,
+          direction = button.dataset.checklistUp ? "up" : "down";
+        try {
+          await api(`/api/applications/${id}/checklist/${itemId}/move`, {
+            method: "PATCH",
+            body: JSON.stringify({ direction }),
+          });
+          await refresh();
+        } catch {
+          toast("Could not reorder that item — try again");
+        }
+      }),
   );
   qs("#checklist-add").onsubmit = async (event) => {
     event.preventDefault();
-    await api(`/api/applications/${id}/checklist`, {
-      method: "POST",
-      body: JSON.stringify(
-        Object.fromEntries(new FormData(event.currentTarget)),
-      ),
-    });
-    go(`detail:${id}`);
+    const form = event.currentTarget,
+      label = new FormData(form).get("label");
+    try {
+      await api(`/api/applications/${id}/checklist`, {
+        method: "POST",
+        body: JSON.stringify({ label }),
+      });
+      await refresh();
+      form.reset();
+    } catch {
+      toast("Could not add that item — try again");
+    }
   };
 }
 
@@ -1831,14 +1979,20 @@ const jsonExample = JSON.stringify(
   2,
 );
 const textExample = `company: ABC Technologies\njob_title: QA Engineer\ndate_applied: ${date()}\nsource: LinkedIn\nstage: Applied\npriority: High\nresume_used: Test 35\ntags: QA, Remote\npinned: true`;
+const csvExample = `Company Name,Title,Applied Date,Source,Stage,Priority,Resume Version\nABC Technologies,QA Engineer,${date()},LinkedIn,Applied,High,QA36`;
+const importExamples = {
+  json: jsonExample,
+  structured_text: textExample,
+  csv: csvExample,
+};
 async function renderBulk() {
   const owner = await managerOwner();
   shell(
     pageHead(
       "Bulk Import",
-      "Preview, validate, and import JSON or structured text",
+      "Preview, validate, and import CSV, JSON, or structured text",
     ) +
-      `<section class="card full"><form id="bulk-form"><div class="form-grid">${owner}${select("format", "Format", ["json", "structured_text"], "json")}${select(
+      `<section class="card full"><form id="bulk-form"><div class="form-grid">${owner}${select("format", "Format", ["json", "csv", "structured_text"], "json")}${select(
         "import_mode",
         "Mode",
         [
@@ -1853,8 +2007,7 @@ async function renderBulk() {
   );
   const form = qs("#bulk-form");
   form.elements.format.onchange = () =>
-    (form.elements.text.value =
-      form.elements.format.value === "json" ? jsonExample : textExample);
+    (form.elements.text.value = importExamples[form.elements.format.value]);
   qs("#copy-example").onclick = () =>
     navigator.clipboard
       .writeText(form.elements.text.value)
@@ -1888,7 +2041,7 @@ async function renderBulk() {
           result.rows
             .map(
               (row) =>
-                `<tr><td>${row.row_number}</td><td>${esc(row.data.company)}</td><td>${esc(row.data.job_title)}</td><td>${esc(row.data.date_applied)}</td><td>${badge(row.data.stage)}</td><td>${esc(row.data.resume_version || "No resume specified")}</td><td>${esc(row.result)}</td><td>${esc(row.errors.join("; ") || (row.duplicate ? `Matches #${row.duplicate_id}` : "Ready"))}</td></tr>`,
+                `<tr><td>${row.row_number}</td><td>${esc(row.data.company)}</td><td>${esc(row.data.job_title)}</td><td>${esc(row.data.date_applied)}</td><td>${badge(row.data.stage)}</td><td>${esc(row.data.resume_version || "No resume specified")}</td><td>${esc(row.result)}</td><td>${esc(previewRowMessage(row))}</td></tr>`,
             )
             .join(""),
         );
@@ -1897,9 +2050,7 @@ async function renderBulk() {
           method: "POST",
           body: JSON.stringify(input),
         });
-        toast(
-          `${result.created_rows} created · ${result.updated_rows} updated · ${result.skipped_rows} skipped`,
-        );
+        toast(summarizeImportResult(result));
         go("applications");
       }
     } catch (error) {
@@ -1949,6 +2100,7 @@ const trackerMeta = {
   networking_contacts: {
     title: "Networking",
     fields: [
+      "application_id",
       "contact_name",
       "company",
       "job_title",
@@ -1961,6 +2113,25 @@ const trackerMeta = {
     ],
   },
 };
+function trackerCellHtml(name, item, appsById) {
+  if (name === "application_id") {
+    const app = appsById.get(item.application_id);
+    return app
+      ? `<button class="link-button" type="button" data-open-application="${app.id}">${esc(app.company)} — ${esc(app.job_title)}</button>`
+      : "—";
+  }
+  if (name === "email" && item.email)
+    return `<a href="mailto:${esc(item.email)}">${esc(item.email)}</a>`;
+  if (name === "linkedin_url" && item.linkedin_url) {
+    const href = safeExternalUrl(item.linkedin_url);
+    return href
+      ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(item.linkedin_url)}</a>`
+      : esc(item.linkedin_url);
+  }
+  if (name === "next_follow_up_date" && item.next_follow_up_date)
+    return `${esc(item.next_follow_up_date)}${isFollowUpOverdue(item.next_follow_up_date) ? ` <span class="tone-chip tone-warning">Overdue</span>` : ""}`;
+  return esc(item[name] ?? "—");
+}
 async function renderTracker(type) {
   const meta = trackerMeta[type],
     [items, apps] = await Promise.all([
@@ -1974,6 +2145,7 @@ async function renderTracker(type) {
       label: `${item.company} — ${item.job_title}`,
     })),
   ];
+  const appsById = new Map(apps.items.map((item) => [item.id, item]));
   const controls = meta.fields
     .map((name) => {
       if (name === "application_id")
@@ -2023,6 +2195,22 @@ async function renderTracker(type) {
           "Referred",
           "Closed",
         ]);
+      if (name === "relationship_type")
+        // A datalist, not a <select>: relationship_type is a free-text
+        // column with no existing controlled values, so a hard dropdown
+        // would silently misrepresent (or block editing) any contact whose
+        // stored value doesn't match one of these suggestions. This keeps
+        // full backward compatibility while still nudging toward consistency.
+        return `<label>${esc(pretty(name))}<input name="${name}" list="relationship-type-options"></label><datalist id="relationship-type-options">${[
+          "Recruiter",
+          "Hiring Manager",
+          "Interviewer",
+          "Referral",
+          "Employee Connection",
+          "Other",
+        ]
+          .map((option) => `<option value="${esc(option)}">`)
+          .join("")}</datalist>`;
       const inputType =
         name === "scheduled_at"
           ? "datetime-local"
@@ -2030,9 +2218,11 @@ async function renderTracker(type) {
             ? "date"
             : name === "linkedin_url"
               ? "url"
-              : name === "eligible_for_reapplication"
-                ? "checkbox"
-                : "text";
+              : name === "email"
+                ? "email"
+                : name === "eligible_for_reapplication"
+                  ? "checkbox"
+                  : "text";
       return field(
         name,
         pretty(name),
@@ -2053,9 +2243,25 @@ async function renderTracker(type) {
       );
     })
     .join("");
+  // Round 5 built this edit machinery (form population, PATCH-vs-POST
+  // dispatch, cancel/reset) fully generically off meta.fields, but scoped
+  // its use to networking_contacts only, deliberately leaving the identical
+  // "no edit in UI" gap open for interviews/rejections/follow_ups (the
+  // backend already supported PATCH for all of them even then). Final round
+  // gap audit: closing it here costs one line, since nothing below this
+  // point is networking_contacts-specific.
+  const editable = true;
   shell(
     pageHead(meta.title, "Owned records linked to your application workflow") +
-      `<div class="grid"><section class="card wide">${table(["ID", ...meta.fields, "Owner", "Actions"], items.map((item) => `<tr><td>${item.id}</td>${meta.fields.map((name) => `<td>${esc(item[name] ?? "—")}</td>`).join("")}<td>${esc(item.owner_username || "")}</td><td><button class="btn small danger" data-delete="${item.id}">Delete</button></td></tr>`).join(""))}</section><section class="card"><h2>Add ${meta.title.replace(/s$/, "")}</h2><form id="tracker-form" class="form-grid">${await managerOwner()}${controls}<label class="full">Notes<textarea name="notes"></textarea></label><button class="btn full">Save</button><div id="tracker-error" class="full"></div></form></section></div>`,
+      `<div class="grid"><section class="card wide">${table(
+        ["ID", ...meta.fields, "Owner", "Actions"],
+        items
+          .map(
+            (item) =>
+              `<tr><td>${item.id}</td>${meta.fields.map((name) => `<td>${trackerCellHtml(name, item, appsById)}</td>`).join("")}<td>${esc(item.owner_username || "")}</td><td><div class="actions">${editable ? `<button type="button" class="btn small secondary" data-edit="${item.id}">Edit</button>` : ""}<button class="btn small danger" data-delete="${item.id}">Delete</button></div></td></tr>`,
+          )
+          .join(""),
+      )}</section><section class="card"><h2 id="tracker-form-heading">Add ${meta.title.replace(/s$/, "")}</h2><form id="tracker-form" class="form-grid">${await managerOwner()}${controls}<label class="full">Notes<textarea name="notes"></textarea></label><div class="actions full"><button class="btn">Save</button><button type="button" class="btn secondary" id="tracker-cancel-edit" hidden>Cancel</button></div><div id="tracker-error" class="full"></div></form></section></div>`,
   );
   if (type === "follow_ups")
     qs("select[name=application_id]").onchange = async (event) => {
@@ -2068,16 +2274,68 @@ async function renderTracker(type) {
         qs("input[name=due_date]").value = result.suggested_first_follow_up;
       }
     };
-  qs("#tracker-form").onsubmit = async (event) => {
+  qsa("[data-open-application]").forEach(
+    (button) => (button.onclick = () => go(`detail:${button.dataset.openApplication}`)),
+  );
+  let editingId = null;
+  const form = qs("#tracker-form"),
+    cancelButton = qs("#tracker-cancel-edit");
+  const resetForm = () => {
+    editingId = null;
+    form.reset();
+    qs("#tracker-form-heading").textContent = `Add ${meta.title.replace(/s$/, "")}`;
+    form.querySelector("button.btn:not(.secondary)").textContent = "Save";
+    cancelButton.hidden = true;
+    state.relatedAppId = "";
+  };
+  if (editable)
+    qsa("[data-edit]").forEach(
+      (button) =>
+        (button.onclick = () => {
+          const item = items.find((row) => row.id === Number(button.dataset.edit));
+          editingId = item.id;
+          for (const name of meta.fields)
+            if (form.elements[name]) {
+              // Checkboxes (only eligible_for_reapplication today) reflect
+              // state via .checked, never .value - and an unchecked
+              // checkbox is silently omitted from FormData entirely, which
+              // would make "uncheck it, then Save" a no-op PATCH. Both ends
+              // of that round trip need the checkbox case handled
+              // explicitly (see the submit handler below).
+              if (form.elements[name].type === "checkbox")
+                form.elements[name].checked = Boolean(item[name]);
+              else form.elements[name].value = item[name] ?? "";
+            }
+          if (form.elements.notes) form.elements.notes.value = item.notes ?? "";
+          qs("#tracker-form-heading").textContent = `Edit ${meta.title.replace(/s$/, "")}`;
+          form.querySelector("button.btn:not(.secondary)").textContent =
+            "Save changes";
+          cancelButton.hidden = false;
+          form.scrollIntoView({ behavior: "smooth", block: "start" });
+        }),
+    );
+  cancelButton.onclick = resetForm;
+  form.onsubmit = async (event) => {
     event.preventDefault();
+    const payload = Object.fromEntries(new FormData(event.currentTarget));
+    // An unchecked checkbox is omitted from FormData entirely, not sent as
+    // false - fine for create (the server already defaults it), but would
+    // make unchecking a previously-true value a silent no-op on PATCH.
+    for (const name of meta.fields)
+      if (form.elements[name]?.type === "checkbox")
+        payload[name] = form.elements[name].checked ? 1 : 0;
+    // Ownership can never be changed via update (the backend rejects it
+    // outright) - only relevant when a manager edits another user's record.
+    if (editingId) delete payload.target_user_id;
     try {
-      await api(`/api/${type}`, {
-        method: "POST",
-        body: JSON.stringify(
-          Object.fromEntries(new FormData(event.currentTarget)),
-        ),
-      });
-      toast("Record saved");
+      await api(
+        editingId ? `/api/${type}/${editingId}` : `/api/${type}`,
+        {
+          method: editingId ? "PATCH" : "POST",
+          body: JSON.stringify(payload),
+        },
+      );
+      toast(editingId ? "Record updated" : "Record saved");
       state.relatedAppId = "";
       renderTracker(type);
     } catch (error) {
@@ -2172,6 +2430,531 @@ async function renderResumes() {
   };
 }
 
+function taskRowHtml(item, appsById, today) {
+  const app = item.application_id ? appsById.get(item.application_id) : null;
+  const overdue = isOverdue(item, today);
+  return `<li class="task-row" data-task-row="${item.id}"><label><input type="checkbox" data-task-toggle="${item.id}" ${item.status === "completed" ? "checked" : ""} aria-label="Mark '${esc(item.title)}' ${item.status === "completed" ? "not complete" : "complete"}"><span>${esc(item.title)}</span></label><div class="task-meta muted">${priorityBadge(item.priority)} <span class="${overdue ? "tone-chip tone-warning" : ""}">${esc(dueDateLabel(item, today))}</span>${item.recurrence ? ` · ${esc(recurrenceLabel(item.recurrence))}` : ""}${app ? ` · <button type="button" class="link-button" data-open-application="${app.id}">${esc(app.company)} — ${esc(app.job_title)}</button>` : ""}</div>${item.notes ? `<p class="muted">${esc(item.notes)}</p>` : ""}<div class="actions"><button type="button" class="btn small danger" data-task-delete="${item.id}">Delete</button></div></li>`;
+}
+function bindTaskActions(after) {
+  qsa("[data-open-application]").forEach(
+    (button) =>
+      (button.onclick = () => go(`detail:${button.dataset.openApplication}`)),
+  );
+  qsa("[data-task-toggle]").forEach(
+    (input) =>
+      (input.onchange = async () => {
+        const wasChecked = !input.checked;
+        try {
+          await api(`/api/tasks/${input.dataset.taskToggle}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              status: input.checked ? "completed" : "open",
+            }),
+          });
+          await after();
+        } catch {
+          input.checked = wasChecked;
+          toast("Could not update that task — try again");
+        }
+      }),
+  );
+  qsa("[data-task-delete]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        if (!confirm("Delete this task?")) return;
+        try {
+          await api(`/api/tasks/${button.dataset.taskDelete}`, {
+            method: "DELETE",
+          });
+          await after();
+        } catch {
+          toast("Could not delete that task — try again");
+        }
+      }),
+  );
+}
+async function renderTasks() {
+  const view = TASK_VIEWS.includes(state.taskView) ? state.taskView : "today";
+  state.taskView = view;
+  const today = date();
+  const [items, apps] = await Promise.all([
+    api(`/api/tasks?view=${view}`),
+    api("/api/applications?page_size=100&archived=all"),
+  ]);
+  const appsById = new Map(apps.items.map((item) => [item.id, item]));
+  const appOptions = [
+    { value: "", label: "No linked application" },
+    ...apps.items.map((item) => ({
+      value: item.id,
+      label: `${item.company} — ${item.job_title}`,
+    })),
+  ];
+  const recurrenceOptions = [
+    { value: "", label: "Does not repeat" },
+    ...TASK_RECURRENCES.map((value) => ({
+      value,
+      label: recurrenceLabel(value),
+    })),
+  ];
+  const tabs = TASK_VIEWS.map(
+    (id) =>
+      `<button class="btn small ${id === view ? "" : "secondary"}" data-task-view="${id}" aria-pressed="${id === view}">${pretty(id)}</button>`,
+  ).join("");
+  shell(
+    pageHead(
+      "Tasks",
+      "A fast to-do layer for job-search and personal work",
+      `<div class="actions">${tabs}</div>`,
+    ) +
+      `<div class="grid"><section class="card wide"><div id="task-list">${
+        items.length
+          ? `<ul class="task-list">${items.map((item) => taskRowHtml(item, appsById, today)).join("")}</ul>`
+          : empty(emptyStateMessage(view))
+      }</div></section><section class="card"><h2>Add task</h2><form id="task-form" class="form-grid">${field("title", "Title", "text", "", "required maxlength='200'")}${field("due_date", "Due date", "date")}${select("priority", "Priority", TASK_PRIORITIES, "Medium")}${select("application_id", "Link to application", appOptions, state.relatedAppId)}${select("recurrence", "Repeat", recurrenceOptions, "")}<label class="full">Notes<textarea name="notes" maxlength="4000"></textarea></label><button class="btn full">Add Task</button></form></section></div>`,
+  );
+  qsa("[data-task-view]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        state.taskView = button.dataset.taskView;
+        renderTasks();
+      }),
+  );
+  qs("#task-form").onsubmit = async (event) => {
+    event.preventDefault();
+    const input = Object.fromEntries(new FormData(event.currentTarget));
+    if (!input.application_id) delete input.application_id;
+    if (!input.due_date) delete input.due_date;
+    if (!input.recurrence) delete input.recurrence;
+    try {
+      await api("/api/tasks", { method: "POST", body: JSON.stringify(input) });
+      state.relatedAppId = "";
+      toast("Task added");
+      renderTasks();
+    } catch (error) {
+      toast(error.message);
+    }
+  };
+  bindTaskActions(renderTasks);
+}
+function applicationTasksView(tasks, today) {
+  return `<section class="card full"><div class="section-head"><h2>Linked Tasks</h2><button type="button" class="btn small secondary" id="add-detail-task">Add Task</button></div>${
+    tasks.length
+      ? `<ul class="task-list">${tasks
+          .map(
+            (item) =>
+              `<li class="task-row" data-task-row="${item.id}"><label><input type="checkbox" data-task-toggle="${item.id}" aria-label="Mark '${esc(item.title)}' complete"><span>${esc(item.title)}</span></label><span class="muted">${esc(dueDateLabel(item, today))}</span></li>`,
+          )
+          .join("")}</ul>`
+      : empty("No open tasks linked to this application")
+  }</section>`;
+}
+function bindDetailTasks(id) {
+  qs("#add-detail-task").onclick = () => {
+    state.relatedAppId = String(id);
+    go("tasks");
+  };
+  bindTaskActions(() => go(`detail:${id}`));
+}
+function habitRowHtml(habit) {
+  const control =
+    habit.target_count === 1
+      ? `<input type="checkbox" data-habit-toggle="${habit.id}" data-value="${habit.period_value}" ${habit.completed ? "checked" : ""} aria-label="Mark '${esc(habit.name)}' ${habit.completed ? "not complete" : "complete"}">`
+      : `<div class="habit-count" role="group" aria-label="Progress for ${esc(habit.name)}"><button type="button" class="btn small secondary" data-habit-decrement="${habit.id}" data-value="${habit.period_value}" aria-label="Decrease progress for '${esc(habit.name)}'">−</button><span class="num">${habit.period_value} / ${habit.target_count}</span><button type="button" class="btn small secondary" data-habit-increment="${habit.id}" data-value="${habit.period_value}" aria-label="Increase progress for '${esc(habit.name)}'">+</button></div>`;
+  return `<li class="habit-row ${habit.active ? "" : "inactive"}" data-habit-row="${habit.id}">${control}<div class="habit-meta"><strong>${esc(habit.name)}</strong><span class="muted">${esc(frequencyLabel(habit.frequency))} · ${esc(progressLabel(habit))} · ${esc(streakLabel(habit))}${habit.active ? "" : " · Archived"}</span>${habit.description ? `<p class="muted">${esc(habit.description)}</p>` : ""}</div><div class="actions"><button type="button" class="btn small secondary" data-habit-edit="${habit.id}">Edit</button>${habit.active ? `<button type="button" class="btn small secondary" data-habit-archive="${habit.id}">Archive</button>` : `<button type="button" class="btn small secondary" data-habit-reactivate="${habit.id}">Reactivate</button>`}<button type="button" class="btn small secondary" data-habit-view-history="${habit.id}">History</button><button type="button" class="btn small danger" data-habit-delete="${habit.id}">Delete</button></div></li>`;
+}
+function bindHabitActions(after) {
+  qsa("[data-habit-toggle]").forEach(
+    (input) =>
+      (input.onchange = async () => {
+        const wasChecked = !input.checked;
+        try {
+          await api(`/api/habits/${input.dataset.habitToggle}/progress`, {
+            method: "PUT",
+            body: JSON.stringify({
+              completion_date: date(),
+              value: input.checked ? 1 : 0,
+            }),
+          });
+          await after();
+        } catch {
+          input.checked = wasChecked;
+          toast("Could not update that habit — try again");
+        }
+      }),
+  );
+  qsa("[data-habit-increment],[data-habit-decrement]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        const id = button.dataset.habitIncrement || button.dataset.habitDecrement,
+          delta = button.dataset.habitIncrement ? 1 : -1,
+          next = Math.max(0, Number(button.dataset.value) + delta);
+        try {
+          await api(`/api/habits/${id}/progress`, {
+            method: "PUT",
+            body: JSON.stringify({ completion_date: date(), value: next }),
+          });
+          await after();
+        } catch {
+          toast("Could not update that habit — try again");
+        }
+      }),
+  );
+  qsa("[data-habit-archive]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        try {
+          await api(`/api/habits/${button.dataset.habitArchive}`, {
+            method: "PATCH",
+            body: JSON.stringify({ active: false }),
+          });
+          toast("Habit archived");
+          await after();
+        } catch {
+          toast("Could not archive that habit — try again");
+        }
+      }),
+  );
+  qsa("[data-habit-reactivate]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        try {
+          await api(`/api/habits/${button.dataset.habitReactivate}`, {
+            method: "PATCH",
+            body: JSON.stringify({ active: true }),
+          });
+          toast("Habit reactivated");
+          await after();
+        } catch {
+          toast("Could not reactivate that habit — try again");
+        }
+      }),
+  );
+  qsa("[data-habit-delete]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        if (!confirm("Permanently delete this habit and its history?")) return;
+        try {
+          await api(`/api/habits/${button.dataset.habitDelete}`, {
+            method: "DELETE",
+          });
+          toast("Habit deleted");
+          await after();
+        } catch {
+          toast("Could not delete that habit — try again");
+        }
+      }),
+  );
+  qsa("[data-habit-view-history]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        state.habitView = "history";
+        state.habitHistoryId = button.dataset.habitViewHistory;
+        renderHabits();
+      }),
+  );
+  qsa("[data-habit-edit]").forEach(
+    (button) =>
+      (button.onclick = () => editHabitPrompt(button.dataset.habitEdit, after)),
+  );
+}
+async function editHabitPrompt(id, after) {
+  const habits = await api("/api/habits?active=all");
+  const habit = habits.find((item) => String(item.id) === String(id));
+  if (!habit) return;
+  const name = prompt("Habit name", habit.name);
+  if (name === null || !name.trim()) return;
+  const description = prompt("Description (optional)", habit.description || "");
+  if (description === null) return;
+  const frequency = prompt(
+    "Frequency: daily, weekdays, or weekly",
+    habit.frequency,
+  );
+  if (!frequency || !["daily", "weekdays", "weekly"].includes(frequency.trim()))
+    return toast("Frequency must be daily, weekdays, or weekly");
+  const targetInput = prompt("Target count", habit.target_count);
+  if (targetInput === null) return;
+  const target_count = Number(targetInput);
+  if (!Number.isInteger(target_count) || target_count < 1)
+    return toast("Target count must be a whole number of 1 or more");
+  try {
+    await api(`/api/habits/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: name.trim(),
+        description,
+        frequency: frequency.trim(),
+        target_count,
+      }),
+    });
+    toast("Habit updated");
+    await after();
+  } catch (error) {
+    toast(error.message);
+  }
+}
+async function renderHabits() {
+  const view = ["today", "all", "history"].includes(state.habitView)
+    ? state.habitView
+    : "today";
+  state.habitView = view;
+  const tabs = ["today", "all", "history"]
+    .map(
+      (id) =>
+        `<button class="btn small ${id === view ? "" : "secondary"}" data-habit-view="${id}" aria-pressed="${id === view}">${pretty(id === "all" ? "All Habits" : id)}</button>`,
+    )
+    .join("");
+
+  if (view === "history") {
+    const habits = await api("/api/habits?active=all");
+    if (
+      state.habitHistoryId &&
+      !habits.some((item) => String(item.id) === String(state.habitHistoryId))
+    )
+      state.habitHistoryId = "";
+    const logs = state.habitHistoryId
+      ? await api(`/api/habits/${state.habitHistoryId}/history?days=30`)
+      : [];
+    const options = habits.map((item) => ({
+      value: item.id,
+      label: `${item.name}${item.active ? "" : " (archived)"}`,
+    }));
+    shell(
+      pageHead(
+        "Habits",
+        "A fast, simple tracker for recurring behaviors",
+        `<div class="actions">${tabs}</div>`,
+      ) +
+        `<div class="grid"><section class="card wide"><h2>History</h2>${
+          habits.length
+            ? select(
+                "habit_id",
+                "Habit",
+                options,
+                state.habitHistoryId,
+                'id="habit-history-select"',
+              )
+            : empty("Create a habit first")
+        }<div id="habit-history-list">${
+          !state.habitHistoryId
+            ? ""
+            : logs.length
+              ? `<ul class="habit-history-list">${logs
+                  .map(
+                    (log) =>
+                      `<li>${esc(log.completion_date)} — ${log.value}</li>`,
+                  )
+                  .join("")}</ul>`
+              : empty(habitEmptyStateMessage("history"))
+        }</div></section></div>`,
+    );
+    qsa("[data-habit-view]").forEach(
+      (button) =>
+        (button.onclick = () => {
+          state.habitView = button.dataset.habitView;
+          renderHabits();
+        }),
+    );
+    if (habits.length)
+      qs("#habit-history-select").onchange = (event) => {
+        state.habitHistoryId = event.target.value;
+        renderHabits();
+      };
+    return;
+  }
+
+  const habits = await api(
+    view === "today" ? "/api/habits?view=today" : "/api/habits?active=all",
+  );
+  shell(
+    pageHead(
+      "Habits",
+      "A fast, simple tracker for recurring behaviors",
+      `<div class="actions">${tabs}</div>`,
+    ) +
+      `<div class="grid"><section class="card wide"><div id="habit-list">${
+        habits.length
+          ? `<ul class="habit-list">${habits.map(habitRowHtml).join("")}</ul>`
+          : empty(habitEmptyStateMessage(view))
+      }</div></section><section class="card"><h2>Add habit</h2><form id="habit-form" class="form-grid">${field("name", "Name", "text", "", "required maxlength='120'")}${select("frequency", "Frequency", [{ value: "daily", label: "Daily" }, { value: "weekdays", label: "Weekdays" }, { value: "weekly", label: "Weekly" }], "daily")}${field("target_count", "Target count", "number", "1", "min='1' max='1000' required")}<label class="full">Description<textarea name="description" maxlength="1000"></textarea></label><button class="btn full">Add Habit</button></form></section></div>`,
+  );
+  qsa("[data-habit-view]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        state.habitView = button.dataset.habitView;
+        renderHabits();
+      }),
+  );
+  qs("#habit-form").onsubmit = async (event) => {
+    event.preventDefault();
+    const input = Object.fromEntries(new FormData(event.currentTarget));
+    if (!input.description) delete input.description;
+    input.target_count = Number(input.target_count);
+    try {
+      await api("/api/habits", { method: "POST", body: JSON.stringify(input) });
+      toast("Habit added");
+      renderHabits();
+    } catch (error) {
+      toast(error.message);
+    }
+  };
+  bindHabitActions(renderHabits);
+}
+function noteCardHtml(item) {
+  return `<li class="note-card"><button type="button" class="note-card-open" data-note-open="${item.id}"><div class="note-card-head"><strong>${esc(displayTitle(item))}</strong>${item.pinned ? ` <span class="badge">Pinned</span>` : ""} <span class="badge">${esc(typeLabel(item.note_type))}</span></div><p class="muted">${esc(item.body_preview || "—")}</p><div class="muted note-card-meta">${item.application_company ? `${esc(item.application_company)} — ${esc(item.application_job_title)} · ` : ""}Updated ${esc((item.updated_at || "").slice(0, 10))}</div></button></li>`;
+}
+async function renderNotes() {
+  if (state.notesView === "editor") return renderNoteEditor();
+  const params = new URLSearchParams();
+  if (state.notesFilters.search) params.set("search", state.notesFilters.search);
+  if (state.notesFilters.type) params.set("type", state.notesFilters.type);
+  if (state.notesFilters.pinned) params.set("pinned", state.notesFilters.pinned);
+  const items = await api(`/api/notes?${params}`);
+  const typeOptions = [
+    { value: "", label: "All types" },
+    ...NOTE_TYPES.map((value) => ({ value, label: typeLabel(value) })),
+  ];
+  shell(
+    pageHead(
+      "Journal & Notes",
+      "Capture, search, and revisit your job-search notes",
+      `<button class="btn small" id="new-note">New Note</button>`,
+    ) +
+      `<section class="card full"><form id="note-filters" class="toolbar"><input type="search" name="search" placeholder="Search title or body" value="${esc(state.notesFilters.search)}" aria-label="Search notes">${select("type", "Type", typeOptions, state.notesFilters.type)}<label><input type="checkbox" name="pinned" ${state.notesFilters.pinned === "true" ? "checked" : ""}> Pinned only</label></form><ul class="note-list">${
+        items.length
+          ? items.map(noteCardHtml).join("")
+          : empty(
+              notesEmptyStateMessage(
+                state.notesFilters.type === "daily_journal" ? "daily_journal" : "all",
+              ),
+            )
+      }</ul></section>`,
+  );
+  qs("#new-note").onclick = () => {
+    state.notesEditingId = null;
+    state.notesView = "editor";
+    renderNotes();
+  };
+  qsa("[data-note-open]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        state.notesEditingId = button.dataset.noteOpen;
+        state.notesView = "editor";
+        renderNotes();
+      }),
+  );
+  const filterForm = qs("#note-filters");
+  const applyFilters = () => {
+    const data = Object.fromEntries(new FormData(filterForm));
+    state.notesFilters = {
+      search: data.search || "",
+      type: data.type || "",
+      pinned: data.pinned ? "true" : "",
+    };
+    renderNotes();
+  };
+  let searchTimer;
+  filterForm.querySelector('input[name="search"]').oninput = (event) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.notesFilters = { ...state.notesFilters, search: event.target.value };
+      renderNotes();
+    }, 300);
+  };
+  filterForm.querySelector('select[name="type"]').onchange = applyFilters;
+  filterForm.querySelector('input[name="pinned"]').onchange = applyFilters;
+}
+async function renderNoteEditor() {
+  const editingId = state.notesEditingId;
+  const [note, apps] = await Promise.all([
+    editingId ? api(`/api/notes/${editingId}`) : Promise.resolve(null),
+    api("/api/applications?page_size=100&archived=all"),
+  ]);
+  const appOptions = [
+    { value: "", label: "No linked application" },
+    ...apps.items.map((item) => ({
+      value: item.id,
+      label: `${item.company} — ${item.job_title}`,
+    })),
+  ];
+  const typeOptions = NOTE_TYPES.map((value) => ({ value, label: typeLabel(value) }));
+  shell(
+    pageHead(
+      note ? "Edit Note" : "New Note",
+      "Plain text, safely rendered — no formatting markup needed",
+      `<button class="btn secondary" id="cancel-note">Back to Notes</button>`,
+    ) +
+      `<section class="card full"><form id="note-form" class="form-grid">${field("title", "Title", "text", note?.title || "", "maxlength='200'")}${select("note_type", "Type", typeOptions, note?.note_type || "general")}${field("entry_date", "Date", "date", note?.entry_date || "")}${select("application_id", "Link to application", appOptions, note?.application_id || state.relatedAppId || "")}<label class="full checkbox-field"><input type="checkbox" name="pinned" ${note?.pinned ? "checked" : ""}> Pin this note</label><label class="full">Body<textarea name="body" class="note-body-input" rows="14" maxlength="20000">${esc(note?.body || "")}</textarea></label><div id="note-form-error"></div><div class="actions full"><button class="btn">Save</button>${note ? `<button type="button" class="btn danger" id="delete-note">Delete</button>` : ""}</div></form></section>`,
+  );
+  qs("#cancel-note").onclick = () => {
+    state.notesEditingId = null;
+    state.relatedAppId = "";
+    state.notesView = "list";
+    renderNotes();
+  };
+  qs("#note-form").onsubmit = async (event) => {
+    event.preventDefault();
+    const input = Object.fromEntries(new FormData(event.currentTarget));
+    input.pinned = event.currentTarget.pinned.checked;
+    if (!input.entry_date) delete input.entry_date;
+    if (!input.application_id) delete input.application_id;
+    try {
+      if (editingId)
+        await api(`/api/notes/${editingId}`, {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        });
+      else await api("/api/notes", { method: "POST", body: JSON.stringify(input) });
+      toast(editingId ? "Note updated" : "Note added");
+      state.notesEditingId = null;
+      state.relatedAppId = "";
+      state.notesView = "list";
+      renderNotes();
+    } catch (error) {
+      qs("#note-form-error").innerHTML = errorBox(error);
+    }
+  };
+  if (note)
+    qs("#delete-note").onclick = async () => {
+      if (!confirm("Delete this note?")) return;
+      try {
+        await api(`/api/notes/${editingId}`, { method: "DELETE" });
+        toast("Note deleted");
+        state.notesEditingId = null;
+        state.notesView = "list";
+        renderNotes();
+      } catch (error) {
+        toast(error.message);
+      }
+    };
+}
+function applicationNotesView(notes) {
+  return `<section class="card full"><div class="section-head"><h2>Notes</h2><button type="button" class="btn small secondary" id="add-detail-note">Add Note</button></div>${
+    notes.length
+      ? `<ul class="note-list">${notes
+          .map(
+            (item) =>
+              `<li class="note-card"><button type="button" class="note-card-open" data-open-note="${item.id}"><div class="note-card-head"><strong>${esc(displayTitle(item))}</strong>${item.pinned ? ` <span class="badge">Pinned</span>` : ""} <span class="badge">${esc(typeLabel(item.note_type))}</span></div><p class="muted">${esc((item.body || "").slice(0, 160) || "—")}</p></button></li>`,
+          )
+          .join("")}</ul>`
+      : empty(notesEmptyStateMessage("application"))
+  }</section>`;
+}
+function bindDetailNotes(id) {
+  qs("#add-detail-note").onclick = () => {
+    state.relatedAppId = String(id);
+    state.notesEditingId = null;
+    state.notesView = "editor";
+    go("notes");
+  };
+  qsa("[data-open-note]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        state.notesEditingId = button.dataset.openNote;
+        state.notesView = "editor";
+        go("notes");
+      }),
+  );
+}
 async function renderReminders() {
   const [items, categories] = await Promise.all([
     api("/api/reminders"),
@@ -2189,7 +2972,7 @@ async function renderReminders() {
       "One place for due, overdue, snoozed, and completed work",
       `<button class="btn secondary" id="manage-categories">Manage Categories</button>`,
     ) +
-      `<div class="grid"><section class="card wide"><div class="toolbar"><select id="reminder-filter"><option value="">All categories</option>${options.map((item) => `<option value="${item.value}">${esc(item.label)}</option>`).join("")}</select></div><div id="reminder-list">${items.map((item) => `<article class="reminder" data-category="${item.category_id}"><div><span class="badge">${esc(item.calculated_status)}</span><span class="badge">${esc(item.priority)}</span><h3>${esc(item.title)}</h3><p>${esc(item.due_date)} ${esc(item.due_time || "")} · ${esc(item.description || "")}</p></div><div class="actions"><button class="btn small" data-complete-reminder="${item.id}">Complete</button><button class="btn small secondary" data-snooze="${item.id}" data-days="1">Tomorrow</button><button class="btn small secondary" data-snooze="${item.id}" data-days="7">One week</button><button class="btn small danger" data-delete-reminder="${item.id}">Delete</button></div></article>`).join("") || empty("No reminders")}</div></section><section class="card"><h2>Add reminder</h2><form id="reminder-form" class="form-grid">${select("category_id", "Category", options, "", "required")}${field("title", "Title", "text", "", "required")}${field("due_date", "Due date", "date", date(), "required")}${field("due_time", "Due time", "time", "09:00")}${select("priority", "Priority", ["Low", "Medium", "High"], "Medium")}<label class="full">Description<textarea name="description"></textarea></label><button class="btn full">Save</button></form></section></div>`,
+      `<div class="grid"><section class="card wide"><div class="toolbar"><select id="reminder-filter" aria-label="Filter by category"><option value="">All categories</option>${options.map((item) => `<option value="${item.value}">${esc(item.label)}</option>`).join("")}</select></div><div id="reminder-list">${items.map((item) => `<article class="reminder" data-category="${item.category_id}"><div><span class="badge">${esc(item.calculated_status)}</span><span class="badge">${esc(item.priority)}</span><h3>${esc(item.title)}</h3><p>${esc(item.due_date)} ${esc(item.due_time || "")} · ${esc(item.description || "")}</p></div><div class="actions"><button class="btn small" data-complete-reminder="${item.id}">Complete</button><button class="btn small secondary" data-snooze="${item.id}" data-days="1">Tomorrow</button><button class="btn small secondary" data-snooze="${item.id}" data-days="7">One week</button><button class="btn small danger" data-delete-reminder="${item.id}">Delete</button></div></article>`).join("") || empty("No reminders")}</div></section><section class="card"><h2>Add reminder</h2><form id="reminder-form" class="form-grid">${select("category_id", "Category", options, "", "required")}${field("title", "Title", "text", "", "required")}${field("due_date", "Due date", "date", date(), "required")}${field("due_time", "Due time", "time", "09:00")}${select("priority", "Priority", ["Low", "Medium", "High"], "Medium")}<label class="full">Description<textarea name="description"></textarea></label><button class="btn full">Save</button></form></section></div>`,
   );
   qs("#manage-categories").onclick = () => renderCategories(categories);
   qs("#reminder-filter").onchange = (event) =>
@@ -2479,6 +3262,63 @@ async function renderCompleteStageAnalytics() {
       .join("")}</div><p class="muted">${esc(metrics.note)}</p></section>`,
   );
 }
+async function renderAnalytics() {
+  const days = state.analyticsDays;
+  const range = `date_from=${addClientDays(date(), -days)}&date_to=${date()}`;
+  const [funnel, source, resume] = await Promise.all([
+    api(`/api/analytics/funnel?${range}`),
+    api(`/api/analytics/source?${range}`),
+    api(`/api/analytics/resume?${range}`),
+  ]);
+  const totals = summarizeRates(source);
+  const rateRow = (label, numerator) =>
+    `<p><strong>${esc(label)}</strong><br>${esc(rateLabel(numerator, totals.applications))}</p>`;
+  shell(
+    pageHead(
+      "Analytics",
+      "Trustworthy job-search metrics — every rate shown with its sample size",
+      `<select id="analytics-range" aria-label="Analytics date range">${[30, 90, 180, 365]
+        .map(
+          (value) =>
+            `<option value="${value}" ${days === value ? "selected" : ""}>Last ${value} days</option>`,
+        )
+        .join("")}</select>`,
+    ) +
+      `<div class="grid"><section class="card wide"><h2>Overview</h2><div class="summary-grid"><p><strong>Applications</strong><br>${totals.applications}</p>${rateRow("Response rate", totals.responses)}${rateRow("Interview rate", totals.interviews)}${rateRow("Offer rate", totals.offers)}</div><p class="muted">A response/interview/offer counts an application that ever reached that point, regardless of its current stage.</p></section><section class="card wide"><h2>Pipeline</h2><div class="bar-chart">${
+        funnel.stages.filter((item) => item.count).length
+          ? funnel.stages
+              .filter((item) => item.count)
+              .map(
+                (item) =>
+                  `<div><span>${esc(item.stage)}</span>${hBar(item.percentage, `${item.stage}: ${item.count} applications, ${item.percentage}% of ${funnel.total}`)}<strong class="num">${item.count} (${item.percentage}%)</strong></div>`,
+              )
+              .join("")
+          : empty("No applications in this range")
+      }</div></section><section class="card full"><h2>By Source</h2>${table(
+        ["Source", "Applications", "Response rate", "Interview rate", "Offer rate"],
+        source
+          .map(
+            (row) =>
+              `<tr><td>${esc(row.source)}</td><td>${row.applications}</td><td>${esc(rateLabel(row.responses, row.applications))}</td><td>${esc(rateLabel(row.interviews, row.applications))}</td><td>${esc(rateLabel(row.offers, row.applications))}</td></tr>`,
+          )
+          .join(""),
+        "No applications in this range",
+      )}</section><section class="card full"><h2>By Resume Version</h2>${table(
+        ["Version", "Applications", "Response rate", "Interview rate", "Offer rate"],
+        resume
+          .map(
+            (row) =>
+              `<tr><td>${esc(row.version_name)}</td><td>${row.applications}</td><td>${esc(rateLabel(row.responses, row.applications))}</td><td>${esc(rateLabel(row.interviews, row.applications))}</td><td>${esc(rateLabel(row.offers, row.applications))}</td></tr>`,
+          )
+          .join(""),
+        "No resumes recorded yet",
+      )}</section></div>`,
+  );
+  qs("#analytics-range").onchange = (event) => {
+    state.analyticsDays = Number(event.target.value);
+    renderAnalytics();
+  };
+}
 function renderExports() {
   shell(
     pageHead(
@@ -2492,6 +3332,9 @@ function renderExports() {
         ["follow_ups", "Follow-Ups CSV"],
         ["networking", "Networking CSV"],
         ["reminders", "Reminders CSV"],
+        ["tasks", "Tasks CSV"],
+        ["habits", "Habits CSV"],
+        ["notes", "Notes CSV"],
         ["resume-analytics", "Resume Analytics CSV"],
         ["goals", "Goal History CSV"],
         ["aging", "Aging Report CSV"],
@@ -2667,15 +3510,38 @@ async function renderImports() {
           "Skipped",
           "Rejected",
           "Status",
-          "Created",
+          "Created At",
+          "Actions",
         ],
         items
           .map(
             (item) =>
-              `<tr><td>${item.id}</td><td>${esc(item.owner_username || item.user_id)}</td><td>${item.input_format}</td><td>${item.import_mode}</td><td>${item.total_rows}</td><td>${item.created_rows}</td><td>${item.updated_rows}</td><td>${item.skipped_rows}</td><td>${item.rejected_rows}</td><td>${item.status}</td><td>${item.created_at}</td></tr>`,
+              `<tr><td>${item.id}</td><td>${esc(item.owner_username || item.user_id)}</td><td>${item.input_format}</td><td>${item.import_mode}</td><td>${item.total_rows}</td><td>${item.created_rows}</td><td>${item.updated_rows}</td><td>${item.skipped_rows}</td><td>${item.rejected_rows}</td><td>${item.status}</td><td>${item.created_at}</td><td><button type="button" class="btn small secondary" data-import-rows="${item.id}">View Rows</button></td></tr>`,
           )
           .join(""),
-      ),
+      ) +
+      `<section id="import-rows-detail" aria-live="polite"></section>`,
+  );
+  // Round 6: import_rows (row_number/status/per-row messages) already
+  // existed for every batch - this is the first UI that ever reads it back,
+  // rather than only the aggregate counts in the table above.
+  qsa("[data-import-rows]").forEach(
+    (button) =>
+      (button.onclick = async () => {
+        const rowsForBatch = await api(
+          `/api/import/history/${button.dataset.importRows}/rows`,
+        );
+        qs("#import-rows-detail").innerHTML = `<h2>Batch #${button.dataset.importRows} rows</h2>${table(
+          ["Row", "Status", "Messages"],
+          rowsForBatch
+            .map(
+              (row) =>
+                `<tr><td>${row.row_number}</td><td>${esc(row.status)}</td><td>${esc(row.messages.join("; "))}</td></tr>`,
+            )
+            .join(""),
+        )}`;
+        qs("#import-rows-detail").scrollIntoView({ behavior: "smooth" });
+      }),
   );
 }
 async function renderAudit() {
