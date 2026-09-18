@@ -5,22 +5,28 @@ document.** Written at the end of Round 10 (Analytics + Capstone Hardening) to
 prepare for a future, separately-approved integration. Do not execute the steps
 below without explicit sign-off from the project owner.
 
+**Re-audited post-merge** (PR #17 merged into `development` as commit `41f3cd2`,
+a real two-parent merge commit): every conclusion below was re-verified against
+the actual, current state of the repository — not assumed to still hold from when
+this document was first written — and nothing changed.
+
 ## 1. Divergence summary
 
-As of this round (`feature/010-final-analytics-hardening`, branched off
-`development` at commit `ed84be5`, after Round 9's PR #16 merged):
+As of the integrated `development` branch (`41f3cd2`, Round 10 merged in):
 
-- `main..development`: **71 commits** — every product round from Round 2 (frontend
-  build tooling) through Round 9 (Journal & Notes), plus this round's work once it
-  lands. All additive: new features, new tests, new docs.
-- `development..main`: **3 commits**, all a single logical change: the Neon
-  connection-crash fix (`481c00b`, "handle pg connection errors to prevent crash on
-  Neon compute suspend") and its merge commit.
-- **This fix is not missing from `development`** — confirmed by diffing the actual
-  file content: `backend/src/postgres-worker.js` is byte-identical between `main`
-  and `development` today. `development` independently carries the same fix (applied
-  during an earlier round), so the two branches converged on identical content even
-  though the commit graphs differ. No action needed for this file.
+- `main..development`: **87 commits** — every product round from Round 2 (frontend
+  build tooling) through Round 10 (this round, now merged). All additive: new
+  features, new tests, new docs.
+- `development..main`: **3 commits**, unchanged from before the merge — all a
+  single logical change: the Neon connection-crash fix (`481c00b`, "handle pg
+  connection errors to prevent crash on Neon compute suspend") and its merge
+  commit.
+- **This fix is not missing from `development`** — re-confirmed post-merge by
+  diffing the actual file content: `backend/src/postgres-worker.js` is still
+  byte-identical between `main` and `development`. `development` independently
+  carries the same fix (applied during an earlier round), so the two branches
+  converged on identical content even though the commit graphs differ. No action
+  needed for this file.
 
 ## 2. Conflict risk: verified, not assumed
 
@@ -32,9 +38,12 @@ already fully converged (see `postgres-worker.js` above). A standard merge commi
 (`git merge development` from `main`) is expected to apply cleanly with no conflict
 markers.
 
-This was re-verified as part of this round; re-run the same dry-run command
-immediately before the actual merge, since `main` may have received further
-hotfixes since this plan was written.
+This was re-verified twice this round: once before merging `feature/010-final-
+analytics-hardening` into `development`, and again after, against the real,
+integrated `development` (`41f3cd2`) vs. the current `main` (`7b674f4`) — same
+result both times, 0 files needing resolution. Re-run the same dry-run command
+immediately before the actual `main` merge regardless, since `main` may receive
+further hotfixes between now and whenever that step is approved.
 
 ## 3. Main-only changes to preserve
 
