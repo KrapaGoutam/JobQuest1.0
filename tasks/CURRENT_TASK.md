@@ -1,68 +1,52 @@
 # Current task
 
-**Status: Round 10 (FINAL — Analytics + Capstone Hardening) implemented locally,
-all 9 internal phases (10A–10I) complete and independently committed, all local
-checks green, not yet pushed / no PR open yet.** See
-[docs/FEATURE_UPGRADE_10_FINAL.md](../docs/FEATURE_UPGRADE_10_FINAL.md) for full
-detail, [docs/FINAL_MAIN_INTEGRATION_PLAN.md](../docs/FINAL_MAIN_INTEGRATION_PLAN.md)
-and [docs/RELEASE_NOTES_V2.md](../docs/RELEASE_NOTES_V2.md) for the future
-`development` → `main` step (not authorized yet).
-
-Branch: `feature/010-final-analytics-hardening`, based on `development` (which now
-includes the merged Round 9 PR #16 — regular merge, per convention).
+**Status: FINAL RELEASE INTEGRATION — Round 10 merged into `development`; a
+`development → main` release-candidate PR is open (PR #18), validated, and
+waiting for explicit user approval before merge.** This is not a feature round —
+no new features, no speculative refactoring, no UI redesign were done or are
+in scope from here through release.
 
 ## What just happened
 
-This was the largest single round of the project: analytics plus a full release-
-hardening capstone (backlog reconciliation, UI/UX, accessibility, security,
-performance, refactoring, regression validation, and release-readiness docs), done
-as 9 independently committed/tested internal phases rather than one large change:
-
-1. **10A** — Audited existing analytics before building; the backend mostly already
-   existed (`funnel`/`source`/`stage-duration`/etc.), so only closed the real gap
-   (a `resume` analytics kind) and built one new Analytics page reusing the existing
-   dependency-free SVG chart primitives — no new chart library.
-2. **10B** — Reconciled the full Rounds 3–9 backlog against a P0–P3 scheme; closed
-   the one clearly high-value, low-risk gap (tracker edit UI for Interviews/
-   Rejections/Follow-ups/Networking/Goals), which surfaced and fixed two real,
-   previously-untested bugs (checkbox handling, API response shape).
-3. **10C** — UI/UX + design-system capstone; normalized a couple of safe token
-   drifts, no risky global rewrite.
-4. **10D** — Full accessibility audit. Fixed the `#toast` contrast issue at the
-   root this time (a `visibility`-transition fix), not excluded again; the same
-   investigation found and fixed two more real issues (calendar contrast, a missing
-   filter label). Every existing scan exclusion individually re-justified or
-   removed.
-5. **10E** — Formal final security audit (authorization matrix, SQL injection trace,
-   CSRF/XSS/CSV-injection/logging/CSP/session checks). No unresolved CRITICAL/HIGH
-   findings.
-6. **10F** — Performance audit; closed one real gap (a missing `import_rows`
-   index); evaluated and explicitly declined a CDN/load-balancer/Redis/server-cache,
-   none justified at current scale.
-7. **10G** — Refactor/dead-code pass. Re-verified (not assumed) the old Round 3
-   claim that `GET /api/applications` is callerless — it's false, three frontend
-   pages and the whole test suite call it, nothing removed. Removed genuinely dead
-   code found by direct trace (one unused icon, several CSS declarations
-   permanently overridden by a later same-specificity rule).
-8. **10H** — Full regression + release-candidate validation against real Postgres
-   and real Chromium, replicating every CI job locally. Found and fixed three real,
-   previously-undiscovered timing bugs during the full browser-suite run (a
-   `#toast` axe-scan race, and two variants of the mobile-nav transition race, one
-   rooted in a real, unawaited re-render in `app.js`). Also root-caused and fixed
-   the long-standing Round 6 PIN-hash test flake (a flawed, non-security-relevant
-   assertion) and closed a small Round 9 gap (untested `habits/format.js`).
-9. **10I** — Audited `development`-vs-`main` divergence (71 commits ahead, 3 behind
-   — that one is a fix `development` already independently carries; a dry-run merge
-   found zero conflicts). Wrote `docs/FINAL_MAIN_INTEGRATION_PLAN.md` and
-   `docs/RELEASE_NOTES_V2.md`, updated `docs/SECURITY.md` with the final report, did
-   the complete technical-debt triage (every backlog item resolved to FIXED/
-   ACCEPTED V2 DEBT/MOVE TO V2.1/OBSOLETE/DUPLICATE), and added a brief, non-
-   implementing future-framework-migration note to `docs/ARCHITECTURE.md`.
+1. Verified PR #17 (`feature/010-final-analytics-hardening` → `development`)
+   matched its previously-reported state exactly (head commit, CI, mergeability,
+   no conflicts) before touching anything.
+2. Merged PR #17 into `development` via a regular merge commit (`41f3cd2`,
+   confirmed two parents — not a fast-forward, not a squash).
+3. Ran the full release-gate list against the actual **integrated** `development`
+   branch (not just the feature branch) with real PostgreSQL 17 and real
+   Chromium: reproducible install, lint, typecheck, both builds, the full
+   backend/frontend/integration/e2e matrix, the SQLite→Postgres migration test,
+   and the full browser+visual suite (5 viewports) — all clean.
+4. Validated the full migration chain two ways: a fresh database applying
+   001→012 in order, and a representative upgrade (a database seeded with only
+   `main`'s historical 001–008, then incrementally migrated to 012) — both clean,
+   correct ordering, no re-application of already-applied migrations.
+5. Re-audited `development` vs `main` against the current, post-merge repository
+   state (not assumed to still match the pre-merge report): 87 commits ahead, 3
+   behind (still just the one Neon-crash fix `development` already independently
+   carries, byte-identical file content re-confirmed). Zero merge conflicts on a
+   fresh dry-run `git merge-tree`.
+6. Verified Render readiness (build command, Vite output path, health check,
+   env vars, CSP, sessions, Neon-suspend resilience, no secrets in the bundle,
+   no rebuild-on-restart) and Neon readiness (unchanged connection layer, no
+   destructive/incompatible migrations) — both **PASS**.
+7. Re-confirmed the final security/accessibility/performance gates directly
+   against the integrated code (zero `.exclude()` calls remain in the E2E spec,
+   `#toast` fix present, CSP backend-owned, session cookies unchanged).
+8. Opened PR #18 (`development` → `main`, title "release: JobQuest V2") with the
+   full release-notes-structured description. **Not merged.**
+9. **Found something worth the user's attention**: the pre-existing Postgres
+   worker RPC request-correlation gap (first found on PR #17's CI) recurred
+   independently on PR #18's CI, on a different code path — now confirmed twice,
+   not a single fluke. Still not fixed (rushed changes to core, concurrency-
+   sensitive DB communication code are exactly the kind of risk this
+   release-integration phase should avoid), but elevated from "rare" to
+   "recurring, should be prioritized promptly in V2.1" in the debt record.
 
 ## Next safe action
 
-Update `brain/PROJECT_STATE.md` and `brain/AGENT_HANDOFF_LOG.md`, then push the
-branch, open a PR into `development` (never `main`), wait for CI, fix any real
-failures at root cause, then produce the final 45-point implementation report and
-**stop** per the round's explicit stop condition — do not merge into `development`
-or `main`, do not deploy, without the user's separate, explicit approval.
+Wait for PR #18's CI to finish on its current head commit. Once confirmed green
+(or with only the already-documented, non-blocking recurring RPC flake), produce
+the JOBQUEST V2 FINAL MAIN-INTEGRATION REPORT and **stop**. Do not merge PR #18
+into `main`. Do not deploy. Wait for the user's explicit approval before either.

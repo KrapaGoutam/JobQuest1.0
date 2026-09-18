@@ -375,3 +375,86 @@ it further without new evidence it's gotten worse. **This was the last product
 round before a `development` → `main` integration** - do not merge into
 `development` or `main`, and do not deploy, without the user's separate, explicit
 approval, even though the integration plan itself is now fully written.
+
+## 2026-09-18 (same day, continued session) — Claude Code (Claude Sonnet 5) — FINAL RELEASE INTEGRATION
+
+User gave explicit, detailed authorization to merge PR #17 into `development` and
+prepare (not merge) a `development` -> `main` release PR, per a structured
+release-integration task. This is release integration, not a feature round - no
+new features, no speculative refactoring, no redesign.
+
+Verified PR #17 matched its own previously-reported state exactly (head commit
+`5d1b954`, CI green, `mergeStateStatus: CLEAN`, `mergeable: MERGEABLE`,
+`development` unmoved since the branch point) before touching anything - nothing
+had drifted. Merged via `gh pr merge --merge` (regular merge commit, confirmed two
+parents via `git show --format="%H %P"`, not a fast-forward or squash): `41f3cd2`.
+
+Ran the full release-gate list against the actual integrated `development` branch,
+not just the feature branch, with real PostgreSQL 17 and real Chromium:
+reproducible `npm ci`, lint, typecheck, both builds, the full backend/frontend/
+integration/e2e matrix (33/44/33/33), the SQLite->Postgres migration test (1/1),
+and the full browser+visual suite (63 passed, 0 failed, 7 skipped) - all clean.
+
+Validated the migration chain two ways, both real, both against real Postgres:
+(1) a fresh database applying 001->012 in order, and (2) a representative upgrade
+- temporarily moved migrations 009-012 out of the directory, applied 001-008
+(simulating `main`'s actual historical production state), restored 009-012, and
+re-ran migrate:postgres to confirm the incremental upgrade path works cleanly on
+top of an already-008 database (confirmed via `schema_migrations` timestamps:
+001-008 applied first, 009-012 applied ~6s later on the second run, no
+re-application). This is exactly what will happen to the real production database
+on the eventual `main` merge, so it was worth simulating precisely rather than
+just trusting the fresh-database case.
+
+Re-audited `development` vs `main` against the current, post-merge state (not
+assumed to still match the pre-merge report) - unchanged conclusion: 87 commits
+ahead (was 71 pre-merge, +15 +1 merge commit checks out), 3 behind (still the one
+Neon-crash fix `development` already independently carries, byte-identical file
+content re-confirmed via `diff`), zero conflicts on a fresh dry-run
+`git merge-tree`. Also checked CI workflow diff, package.json/lockfile diff (one
+new devDependency, `vite`, no backend runtime dependency changes), and grepped for
+any new `process.env.*` references (none) - nothing surprising.
+
+Verified Render readiness directly against the integrated code, not by assumption:
+build command, `frontendDir` path matches Vite's actual output location, `/api/
+health` is fast and DB-independent (won't false-fail during a Neon suspend/
+reconnect cycle - a deliberate, correct design choice), env var names unchanged
+from `main`'s own `render.yaml`, no `import.meta.env`/`VITE_*` usage anywhere
+(confirms no env-based secret-exposure surface) and no secret/connection-string
+strings in the actual built `dist/` bundle, CSP still server-set, session cookies
+unchanged, and confirmed there's no `prestart` hook that could trigger a rebuild
+on every crash-restart (only `predev`, which is local-dev-only). Render readiness:
+PASS. Neon readiness: PASS (connection layer byte-identical to `main`, all four
+V2 migrations are pure additive DDL, no new extensions, no credentials in the
+bundle).
+
+Opened PR #18 (`development` -> `main`, "release: JobQuest V2") with the exact
+section structure requested (Summary/Major Features/Architecture/Database/
+Security/Accessibility/Performance/Testing/Render/Neon/Main divergence
+reconciliation/Accepted V2 Debt/Rollback). Not merged.
+
+**Found something worth flagging clearly, not burying**: PR #18's own CI hit the
+same pre-existing Postgres worker RPC `JSON.parse` failure already documented from
+PR #17 - this time on a different code path (`listApplications` vs. the earlier
+resume-analytics query), which rules out anything query-specific and points at
+the shared RPC mechanism itself. This is the second confirmed occurrence, not a
+single fluke - upgraded the debt record from "rare, one-off" to "recurring,
+should be prioritized promptly in V2.1," while still not attempting a fix during
+release integration (a rushed change to core, concurrency-sensitive, synchronous
+cross-thread DB communication code is exactly the wrong risk to take under this
+kind of time pressure - if it needs fixing under pressure, that pressure should
+come from a real incident, not a self-imposed deadline). Note also: the CI
+workflow triggers on both `push` (to `development`/`main`) and `pull_request`
+(targeting either), so a push to `development` while a PR against `main` is open
+produces two parallel runs of the same commit - this is pre-existing CI config,
+not something this session introduced, and explains why PR #18's check list shows
+duplicate entries per job name.
+
+**For the next agent**: the release-candidate PR (#18) is the artifact to act on
+next, once the user approves. Do not re-run CI indefinitely chasing a clean run of
+the RPC flake - it's pre-existing, understood, and doesn't block the PR's own
+validity (the check tied to the PR's own `pull_request`-triggered CI run, not a
+duplicate `push`-triggered one, is what actually matters for merge-readiness).
+**Do not merge PR #18 into `main`, and do not deploy, without the user's separate,
+explicit approval** - this session's instructions were unusually explicit and
+detailed about this exact point.
