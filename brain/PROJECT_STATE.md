@@ -13,7 +13,9 @@ Last updated: 2026-09-18, by Claude Sonnet 5 (Claude Code).
   build/build:frontend/migrate:check), security (dependency audits + secret scan),
   the backend/frontend/integration/e2e test matrix (33/43/33/33), the sqlite-to-
   postgres migration test (1/1), and the full browser-and-visual suite (all 5
-  viewports). Not yet pushed — no CI run on this branch yet.
+  viewports). **Pushed; PR #17 open into `development`; all 8 CI checks green on
+  the first run** (static-quality, security, backend/frontend/integration/e2e
+  tests, sqlite-postgres-migration, browser-and-visual).
 
 ## What's done
 
@@ -59,13 +61,11 @@ detail per phase. Highlights:
 
 ## Incomplete / not started
 
-- Not yet pushed; no PR open yet for Round 10 as of this note. Push, open PR into
-  `development` (never `main`), watch CI, fix any real failures at root cause, then
-  produce the final implementation report and stop per this round's explicit stop
-  condition (no merge into `development` or `main`, no deploy, without separate
-  explicit approval).
-- The actual `development` → `main` merge itself — planned in
-  `docs/FINAL_MAIN_INTEGRATION_PLAN.md`, not executed, not authorized by this round.
+- PR #17 is open and green; the final implementation report has been delivered.
+  What remains is entirely the user's call: merging PR #17 into `development`, and
+  later, separately, `development` into `main` per
+  `docs/FINAL_MAIN_INTEGRATION_PLAN.md`. Neither has happened and neither is
+  authorized by this round.
 
 ## Known state to be aware of
 

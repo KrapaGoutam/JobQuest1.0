@@ -684,8 +684,12 @@ was reverted.
 
 ## CI
 
-_Filled in once CI has run on the final PR — see `brain/PROJECT_STATE.md` if this
-section is stale._
+**PR #17** (`feature/010-final-analytics-hardening` → `development`), opened
+2026-09-18. All 8 checks green on the first run — `static-quality`, `security`,
+`tests (backend)`, `tests (frontend)`, `tests (integration)`, `tests (e2e)`,
+`sqlite-postgres-migration`, `browser-and-visual` — confirming the local
+Phase 10H validation (including the three real timing-bug fixes) reproduced
+cleanly in the actual CI environment, not just locally.
 
 ## Render Impact
 
@@ -732,4 +736,11 @@ None this phase.
 
 ## Final Completion Notes
 
-_Filled in at the end of Phase 10I._
+All 9 internal phases (10A–10I) complete, each independently committed (10 commits
+total on this branch) and tested before moving to the next. PR #17 opened into
+`development`, all 8 CI checks green on the first run. This closes the V2 feature
+set: `docs/FINAL_MAIN_INTEGRATION_PLAN.md` and `docs/RELEASE_NOTES_V2.md` are ready
+for whenever the project owner decides to take the separate, explicitly-approved
+step of merging `development` into `main`. No merge into `development` or `main`,
+and no deploy, has happened as part of this round — per the round's own explicit
+stop condition, that step waits for the user.
