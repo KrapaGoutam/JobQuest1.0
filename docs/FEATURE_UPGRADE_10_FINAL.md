@@ -464,7 +464,7 @@ applies) / **DUPLICATE** (same underlying item logged more than once).
 | Residual mobile-nav transition flake (rare, post-fix) | Round 10 (root-caused in Phase 10A, still present) | ACCEPTED V2 DEBT — root cause understood and primary trigger fixed twice over (Phase 10A, Phase 10H); a much rarer residual remains under maximum load, honestly documented rather than chased for diminishing returns. |
 | Latent `getByText("Northstar Labs")` locator ambiguity vs. a `<select>` option, and a related "click landed somewhere unexpected" symptom (both only observed while probing an unrelated fix, Phase 10H) | Round 10 | MOVE TO V2.1 — neither confirmed to affect any currently-passing, currently-exercised path (the test line that could trigger either was reverted), but both are real enough to be worth a dedicated look rather than assuming they can't recur. |
 | `#toast` mid-transition axe-scan race, CI-only instances beyond the one Phase 10H fixed locally | Round 10 | FIXED — found via PR #17's own CI (not local testing), root-caused to the same class as Phase 10H bug 1; generalized into a shared `toastSettled()` helper applied to every unprotected full-page scan in the spec, rather than patched call-site-by-call-site. |
-| `postgres-db.js`/`postgres-worker.js` RPC protocol has no request-correlation ID, allowing a late response from an already-timed-out call to corrupt a later call's shared buffer | Pre-existing (untouched by any commit on this branch — found via CI on PR #17) | MOVE TO V2.1 — real architectural gap, root-caused, but reproduced only once across 5 CI runs and 0 local runs; fixing core synchronous cross-thread DB RPC code under this round's remaining time pressure risks a worse, harder-to-detect bug than the current rare failure mode. Needs a properly scoped, carefully tested pass of its own. |
+| `postgres-db.js`/`postgres-worker.js` RPC protocol has no request-correlation ID, allowing a late response from an already-timed-out call to corrupt a later call's shared buffer | Pre-existing (untouched by any commit on this branch — found via CI on PR #17, confirmed again independently on PR #18) | MOVE TO V2.1, **prioritize promptly** — real architectural gap, root-caused, confirmed twice on two different code paths across 7 total CI runs (0 local runs, dozens attempted); fixing core synchronous cross-thread DB RPC code under this round's remaining time pressure risks a worse, harder-to-detect bug than the current occasional failure mode, so still not attempted now, but the second occurrence means this is more than a one-off and should not sit indefinitely. Needs a properly scoped, carefully tested pass of its own. |
 
 **Net result**: 10 items FIXED this round (beyond the 6 already counted in the
 Remaining PRD Gap Audit summary above, once duplicates and the newly-closed
@@ -760,20 +760,26 @@ None this phase.
   (letting the caller move on), the worker keeps processing that query in the
   background regardless, and when it eventually finishes and calls `publish()`, it
   writes into the *same* shared buffer/header a *later*, unrelated `rpc()` call may
-  already be waiting on — with nothing to detect the mismatch. Observed once on
-  GitHub Actions (`PR #17`, one CI attempt out of five) as
-  `SyntaxError: Unexpected end of JSON input` inside `rpc()`, which left one E2E
-  test's dashboard load failing to render; did not reproduce on an immediate
-  re-run, nor in any local run this round (dozens of full-suite runs total) — a
-  genuinely rare timing condition, not a systematic failure, consistent with CI's
-  own runners having measurably less and more variable CPU headroom than local dev
-  (already evidenced twice this round by CI-only toast-timing flakes). **Not
-  attempted as a fix in this round**: this is core, concurrency-sensitive database
-  communication infrastructure — Render/Neon-adjacent, "protected" in spirit even
-  though this specific file isn't infra-config — and a rushed change to a
-  synchronous cross-thread RPC protocol under time pressure risks introducing a
-  *worse*, harder-to-detect data-correctness bug than the current rare crash-and-
-  recover behavior. **Recommended for V2.1, properly scoped**: add a request
+  already be waiting on — with nothing to detect the mismatch. **Confirmed twice on
+  GitHub Actions across the release process** — once on PR #17 (1 of 5 CI attempts,
+  a resume-analytics-adjacent query) and again independently on PR #18 (1 of 2 CI
+  runs for the same commit, this time on a completely different code path,
+  `listApplications`) — both times the identical `SyntaxError: Unexpected end of
+  JSON input` inside `rpc()`, both times on a *different* triggering query, which
+  rules out anything specific to one query and points squarely at the shared RPC
+  mechanism itself. Neither occurrence reproduced on an immediate re-run, and it
+  has never reproduced in any local run this round (dozens of full-suite runs
+  total) — real, and more than a single fluke, but still occasional and
+  environment-load-dependent rather than a systematic failure, consistent with
+  CI's own runners having measurably less and more variable CPU headroom than
+  local dev (already evidenced separately by CI-only toast-timing flakes this
+  round). **Still not attempted as a fix**: this is core, concurrency-sensitive
+  database communication infrastructure — Render/Neon-adjacent, "protected" in
+  spirit even though this specific file isn't infra-config — and a rushed change
+  to a synchronous cross-thread RPC protocol under release time pressure risks
+  introducing a *worse*, harder-to-detect data-correctness bug than the current
+  occasional crash-and-recover behavior. Given it has now recurred, **this should
+  be prioritized promptly in V2.1**, not left indefinitely: add a request
   correlation ID to the RPC message/response pair (e.g. an incrementing counter
   written into a third `header` slot) so a stale, late-arriving response can be
   detected and discarded instead of being read as if it belonged to the current
