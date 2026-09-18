@@ -619,18 +619,21 @@ failures — a test-harness mistake, not a real bug, confirmed by a clean re-run
   `npm test` run without `TEST_DATABASE_URL`; confirmed it actually passes for real,
   not just untested).
 - **browser-and-visual** (`npm run test:browser`: full E2E + visual suite, real
-  Chromium, real Postgres, all 5 viewports): found and fixed three real,
-  previously-undiscovered bugs during validation — see below. Official run after all
-  three fixes: 62 passed, 7 skipped (visual-baseline-only projects), 1 failed — the
-  1 failure (`notes`, small-mobile, a *different* `toast()` assertion than the one
-  fixed in bug 1 below — see Known Deferred Debt) reproduced only 67 tests deep into
-  the full sequential run and passed cleanly 3/3 in isolated re-runs immediately
+  Chromium, real Postgres, all 5 viewports): found and fixed four real,
+  previously-undiscovered bugs during validation — three locally, one CI caught
+  after this document first called Phase 10H done — see below. Official local run
+  after all four fixes: 63 passed, 7 skipped (visual-baseline-only projects), 0
+  failed. Before the fourth fix, a separate one-off failure (`notes`, small-mobile,
+  a *different* `toast()` assertion than the one fixed in bug 1 below — see Known
+  Deferred Debt) reproduced only 67 tests deep into one full sequential run and
+  passed cleanly 3/3 in isolated re-runs immediately
   after, confirming it's a load-dependent timing artifact of the same class as the
   already-documented mobile-nav flake, not a logic defect.
 
-### Three real bugs found and fixed during Phase 10H's browser-and-visual validation
+### Three real bugs found and fixed during Phase 10H's browser-and-visual validation,
+### plus a fourth CI caught after this document first called the round done
 
-All three were caught by running the *entire* suite for real, back to back, under
+All four were caught by running the *entire* suite for real, back to back, under
 real load — exactly the kind of issue a scoped or partial run wouldn't have surfaced,
 and the reason this phase exists.
 
@@ -668,6 +671,29 @@ and the reason this phase exists.
    Classification rather than fixed here, since auditing every `toast(); render*()`
    call site in `app.js` for the same pattern is a larger, separate piece of work
    than this validation phase should absorb.
+4. **The same `#toast` mid-transition race as bug 1, but CI-only — PR #17's
+   `browser-and-visual` check passed on its first run, then failed on a docs-only
+   follow-up push with the exact same violation shape, this time in the tasks
+   test.** Bug 1's fix (`toastSettled()`) had only been applied to the one call
+   site that had actually failed locally, not to every unprotected `AxeBuilder`
+   scan in the file — and GitHub Actions' runners have measurably less CPU headroom
+   than local dev, making an unfired 2600ms `setTimeout` more likely to still be
+   pending by the time *any* test's scan runs, not just the one that happened to
+   catch it first. Rather than patch call sites one at a time as CI found them,
+   extracted `toastSettled()` into a shared helper and applied it before every
+   full-page `AxeBuilder` scan in the spec except the two that must not have it
+   (the scoped `#checklist-panel`-only scan, which never evaluates `#toast` at all,
+   and the dedicated toast test, which needs precise control over toast state).
+   While tracing this, also found and fixed a real, separate, previously-unnoticed
+   product bug: `document.body`'s `nav-open` class (set when the mobile drawer
+   opens) was only ever cleared by the drawer's own close button or backdrop click
+   — never by navigating via an ordinary nav link — so a real mobile user who opens
+   the drawer and then taps a link is left with a permanently unscrollable page
+   (`nav-open`'s only CSS effect is `overflow: hidden` on `body`) for the rest of
+   the session. Fixed in `app.js` by clearing the class unconditionally in the
+   shared `[data-page]` click handler. Re-validated with a full local
+   `test:browser` run post-fix: 63 passed, 0 failed, 7 skipped — clean, including
+   no recurrence of the usual residual mobile-nav flake.
 
 Two earlier attempts at fixing bug 3 are worth recording because they surfaced two
 *more* real, separate, pre-existing issues by shifting the test's timing: switching

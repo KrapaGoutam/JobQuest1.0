@@ -268,7 +268,20 @@ function shell(content) {
     '<div class="sidebar-backdrop" id="sidebar-backdrop"></div>',
   );
   qsa("[data-page]").forEach(
-    (button) => (button.onclick = () => go(button.dataset.page)),
+    (button) =>
+      (button.onclick = () => {
+        // The mobile sidebar drawer and its backdrop are recreated fresh
+        // (closed) on every shell() render, but document.body itself is not -
+        // classList.toggle("nav-open", true) from opening the drawer sticks
+        // on body forever if the user navigates via a link instead of the
+        // drawer's own close button/backdrop, since nothing else ever clears
+        // it. Its only CSS effect is `overflow: hidden`, but that's real:
+        // the page becomes permanently unable to scroll on mobile after the
+        // drawer's been opened once. Clear it unconditionally here - a no-op
+        // when it wasn't set.
+        document.body.classList.remove("nav-open");
+        go(button.dataset.page);
+      }),
   );
   const navRoot = qs("aside nav");
   const groupedNavigation = [
@@ -911,7 +924,20 @@ async function renderDashboard(manager = false) {
       }),
   );
   qsa("[data-page]").forEach(
-    (button) => (button.onclick = () => go(button.dataset.page)),
+    (button) =>
+      (button.onclick = () => {
+        // The mobile sidebar drawer and its backdrop are recreated fresh
+        // (closed) on every shell() render, but document.body itself is not -
+        // classList.toggle("nav-open", true) from opening the drawer sticks
+        // on body forever if the user navigates via a link instead of the
+        // drawer's own close button/backdrop, since nothing else ever clears
+        // it. Its only CSS effect is `overflow: hidden`, but that's real:
+        // the page becomes permanently unable to scroll on mobile after the
+        // drawer's been opened once. Clear it unconditionally here - a no-op
+        // when it wasn't set.
+        document.body.classList.remove("nav-open");
+        go(button.dataset.page);
+      }),
   );
 }
 function renderDashboardSettings(layout, manager) {

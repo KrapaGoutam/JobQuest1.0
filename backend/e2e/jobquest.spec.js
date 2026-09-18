@@ -87,6 +87,23 @@ async function selectTab(page, name) {
   );
 }
 
+// #toast's Round 9 color-contrast finding is fixed (styles.css) for both its
+// settled states - shown and at-rest - but toast() auto-hides itself via a
+// 2600ms setTimeout (app.js), and axe's analyze() walks the live DOM rather
+// than a snapshot: if that timer is still pending (or fires mid-scan) when a
+// full-page scan runs, axe can observe the in-flight opacity transition
+// itself, whose blended colors represent neither real, presented state - a
+// CI-observed failure (slower/more loaded runners than local dev make an
+// unfired 2600ms timer more likely by the time a test reaches its scan, even
+// long after the toast's own triggering action). Call this before any
+// full-page scan that isn't the dedicated toast test itself, which needs
+// precise control over toast state and checks both real states directly.
+async function toastSettled(page) {
+  await expect(page.locator("#toast")).toHaveCSS("visibility", "hidden", {
+    timeout: 5_000,
+  });
+}
+
 test.beforeEach(async ({ page }, testInfo) => {
   await authenticatedPage(page, testInfo);
 });
@@ -124,6 +141,7 @@ test("applications table controls, filter dialog, preview drawer, and accessibil
   // obsolete: this scan runs on the Applications page, where that Dashboard
   // widget was never even present in the DOM being scanned - confirmed by
   // running unscoped (zero violations either way).
+  await toastSettled(page);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
@@ -417,6 +435,7 @@ test("networking contacts: link to an application, edit, show on application det
 
   // Same .goal-chart audit as the Applications test above - obsolete on
   // this (Networking) page too.
+  await toastSettled(page);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
@@ -455,6 +474,7 @@ test("bulk import: CSV format, preview, and import; Import History reachable by 
   await expect(page.getByText(/Batch #\d+ rows/)).toBeVisible();
   await expect(page.locator("tbody").getByText("created")).toBeVisible();
 
+  await toastSettled(page);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
@@ -571,6 +591,7 @@ test("tasks: backlog/today/upcoming/completed views, application linking, and re
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByText("Update resume project section")).toHaveCount(0);
 
+  await toastSettled(page);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
@@ -712,6 +733,7 @@ test("habits: boolean and count completion, weekly progress, streaks, archive/re
     .click();
   await expect(page.getByText("Networking outreach")).toHaveCount(0);
 
+  await toastSettled(page);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
@@ -868,18 +890,7 @@ test("notes: create/edit/delete, journal entries, search, application linking, p
   ).toBeVisible();
   await expect(page.getByText("Resume ideas")).toHaveCount(0);
 
-  // #toast's Round 9 color-contrast finding is fixed (styles.css) for both
-  // its settled states - shown and at-rest - but toast() auto-hides itself
-  // via a 2600ms setTimeout (app.js), and axe's analyze() walks the live DOM
-  // rather than a snapshot: if that timer fires mid-scan, axe can observe the
-  // brief in-flight opacity transition itself, whose blended colors are not
-  // representative of either real, presented state (see the dedicated toast
-  // test above, which scans both settled states directly and passes clean).
-  // Waiting for the toast to finish its full auto-hide cycle first lands the
-  // scan on a genuinely stable state, matching that test's approach.
-  await expect(page.locator("#toast")).toHaveCSS("visibility", "hidden", {
-    timeout: 5_000,
-  });
+  await toastSettled(page);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
@@ -919,6 +930,7 @@ test("analytics: overview, pipeline, source, and resume breakdowns render with r
     page.getByRole("heading", { name: "Analytics", exact: true }),
   ).toBeVisible();
 
+  await toastSettled(page);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
@@ -958,6 +970,7 @@ test("rejections: edit was a Round 5 known gap (backend already supported PATCH,
   expect(saved).toBeTruthy();
   expect(saved.eligible_for_reapplication).toBe(0);
 
+  await toastSettled(page);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 });
@@ -1020,6 +1033,7 @@ test("accessibility sweep: pages with no prior dedicated scan", async ({
     await expect(
       page.getByRole("button", { name: label, exact: true }),
     ).toHaveClass(/\bactive\b/);
+    await toastSettled(page);
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations, `violations on "${label}"`).toEqual([]);
   }
