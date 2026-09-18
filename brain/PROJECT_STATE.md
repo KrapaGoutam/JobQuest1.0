@@ -13,9 +13,13 @@ Last updated: 2026-09-18, by Claude Sonnet 5 (Claude Code).
   build/build:frontend/migrate:check), security (dependency audits + secret scan),
   the backend/frontend/integration/e2e test matrix (33/43/33/33), the sqlite-to-
   postgres migration test (1/1), and the full browser-and-visual suite (all 5
-  viewports). **Pushed; PR #17 open into `development`; all 8 CI checks green on
-  the first run** (static-quality, security, backend/frontend/integration/e2e
-  tests, sqlite-postgres-migration, browser-and-visual).
+  viewports). **Pushed; PR #17 open into `development`; all 8 CI checks green as
+  of the final push.** `browser-and-visual` passed on the first CI run, then hit
+  three distinct real issues across follow-up pushes/re-runs — two CI-only
+  toast-timing races (fixed) and one rare, pre-existing Postgres RPC
+  infrastructure gap (investigated, confirmed untouched by this branch, logged as
+  V2.1 debt rather than rushed) — each individually root-caused, not dismissed;
+  see `docs/FEATURE_UPGRADE_10_FINAL.md`'s CI section for the full history.
 
 ## What's done
 
