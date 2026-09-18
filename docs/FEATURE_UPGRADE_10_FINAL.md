@@ -2,10 +2,13 @@
 
 ## Status
 
-In progress. Branch `feature/010-final-analytics-hardening`, off `development` (which
-now includes the merged Round 9 PR #16). This document is built up phase by phase as
-each internal phase completes, per the round's own instruction to work phase-by-phase
-rather than as one undifferentiated change.
+All 9 internal phases (10A–10I) complete. Branch `feature/010-final-analytics-hardening`,
+off `development` (which includes the merged Round 9 PR #16). This document was
+built up phase by phase as each internal phase completed, per the round's own
+instruction to work phase-by-phase rather than as one undifferentiated change. Next:
+push the branch, open a PR into `development`, wait for CI, deliver the final
+implementation report, and **stop** — no merge into `development` or `main`, no
+deploy, without separate explicit approval.
 
 ## Goals
 
@@ -114,7 +117,8 @@ deliberately left as documented V2 debt, exactly as they were found.
 | 6 | JSON restore for the full-workspace backup | ACCEPTED V2 DEBT | P2 | Genuinely separate, higher-risk feature work (restoring across 14+ FK-related tables) — correctly deferred, still true. |
 | 6 | Error-report CSV download for import batches | DEFERRED | P3 | Small, real, but no evidence of need beyond the existing in-UI row detail. |
 | 6 | `import_rows` missing an index on `batch_id` | **FIXED** | P3 | Trivial, safe — added in Phase 10F (Performance Hardening). |
-| 6 | PIN-hash test flake | INVESTIGATED, OBSOLETE | — | Re-checked in Phase 10H; remains non-reproducible and coincidental (a substring-in-hash assertion), not a real bug. |
+| 6 | PIN-hash test flake | **FIXED** | P3 | Root-caused in Phase 10I prep: the flaky assertion checked that a scrypt hash never coincidentally contains the raw PIN as a substring — not a real security property, since a hash is expected to look like random noise. Removed; the two assertions that test the actual property (really hashed, never returned in the API response) stay. |
+| 9 | `frontend/src/features/habits/format.js` never unit-tested | **FIXED** | P3 | Closed in Phase 10I prep alongside the PIN-hash fix — small, zero-risk, explicitly backlogged. |
 | 7 | Task tags, subtasks, dashboard widget | DEFERRED | P3 | No evidence of need; explicitly out of scope per the Round 7 brief. |
 | 7 | Completed Tasks view has no "load more" | ACCEPTED V2 DEBT | P3 | Server-capped at 100 rows, fine at current scale — same pattern accepted for Habits/Notes. |
 | 8 | `habits_due_today` nav badge is daily-only | ACCEPTED V2 DEBT | P3 | No safe cross-dialect weekday SQL function exists; the Habits page itself is correct, only the badge is approximate. |
@@ -125,13 +129,14 @@ deliberately left as documented V2 debt, exactly as they were found.
 | 9 | Single-phrase search (not multi-word AND) | ACCEPTED V2 DEBT | P3 | Simpler, sufficient for expected note volume. |
 | 9 | `#toast` color-contrast violation | **FIXED (required)** | P0 | See Phase 10D — the round's explicit, non-negotiable requirement. |
 
-**Summary**: 1 item already complete before this audit, 4 items fixed this round
+**Summary**: 1 item already complete before this audit, 6 items fixed this round
 (checklist edit — already done; tracker edit gap; `#detail-stage` label;
-`import_rows` index; `#toast` contrast), 1 item partially addressed (broader
-accessibility coverage), 2 items re-investigated and confirmed still correctly
-deferred/obsolete, and the remainder — all genuinely low-value or genuinely
-higher-risk — carried forward as documented, classified V2 debt rather than
-implemented reflexively.
+`import_rows` index; `#toast` contrast; PIN-hash test flake; habits format unit
+tests), 1 item partially addressed (broader accessibility coverage), and the
+remainder — all genuinely low-value or genuinely higher-risk — carried forward as
+documented, classified V2 debt rather than implemented reflexively. See Technical
+Debt Classification for the final, complete triage using this round's required
+FIXED/ACCEPTED V2 DEBT/MOVE TO V2.1/OBSOLETE/DUPLICATE taxonomy.
 
 ## UI/UX Audit
 
@@ -418,15 +423,115 @@ further extraction candidates:
 
 ## Technical Debt Classification
 
-_Filled in during Phase 10I (final triage)._
+Final triage of every open item from `tasks/BACKLOG.md` (Rounds 3–9) plus everything
+this round itself found, using the round's required taxonomy: **FIXED** / **ACCEPTED
+V2 DEBT** (real, understood, deliberately not fixed for V2) / **MOVE TO V2.1**
+(real, worth doing, just not this round) / **OBSOLETE** (the premise no longer
+applies) / **DUPLICATE** (same underlying item logged more than once).
+
+| Item | Source | Classification |
+|---|---|---|
+| Checklist add/edit UI control | Round 4 | OBSOLETE — already shipped in Round 4 itself; the backlog note predated its own resolution. |
+| `#detail-stage` missing accessible name | Round 4 | FIXED — Phase 10D. |
+| Cross-group checklist reorder has no visible effect | Round 4 | ACCEPTED V2 DEBT — documented by-design quirk, not a bug. |
+| Stage-aware checklist generation | Round 4 | ACCEPTED V2 DEBT — needs a schema change to do safely; no measured need. |
+| Configurable checklist templates | Round 4 | ACCEPTED V2 DEBT — no evidence of need beyond the one fixed set. |
+| Dashboard checklist-progress integration | Round 4 | MOVE TO V2.1 — real, wanted, just needs a deliberate non-N+1 query shape. |
+| Edit UI gap (interviews/rejections/follow_ups/daily_goals/weekly_goals) | Round 5 | FIXED — Phase 10B. |
+| Round 6's "edit-UI gap still open" note | Round 6 | DUPLICATE — same item as the Round 5 entry above, now FIXED. |
+| No accessibility audit of other `renderTracker` pages | Round 5 | ACCEPTED V2 DEBT — partially covered by the Phase 10D broader sweep (Interviews/Rejections exercised via other E2E tests' axe scans); a fully exhaustive per-page audit of every `renderTracker` type was not completed and isn't blocking release. |
+| Contact search/filter/sort, duplicate-contact detection | Round 5 | ACCEPTED V2 DEBT — no evidence of need at current scale. |
+| Interviews-this-week / follow-ups-due quick filters | Round 3 | ACCEPTED V2 DEBT — the existing advanced filter panel already covers this need. |
+| Salary-range filter | Round 3 | ACCEPTED V2 DEBT — blocked on a real product decision (currency/period normalization), not a code gap. |
+| Legacy `GET /api/applications` "callerless" claim | Round 3 | OBSOLETE — the premise was false; re-verified in Phase 10G that it has three live frontend callers plus the full test suite. Nothing to deprecate. |
+| `import_rows` missing an index | Round 6 | FIXED — Phase 10F. |
+| JSON restore for the full-workspace backup | Round 6 | MOVE TO V2.1 — real, separate, higher-risk feature work across 14+ FK-related tables; worth scoping properly as its own round. |
+| Error-report CSV download for import batches | Round 6 | MOVE TO V2.1 — small, real, additive; no blocker, just never sequenced. |
+| PIN-hash test flake | Round 6 | FIXED — Phase 10I prep; root-caused as a flawed, non-security-relevant assertion and removed. |
+| Task tags, subtasks, dashboard widget | Round 7 | ACCEPTED V2 DEBT — no evidence of need; explicitly out of scope since Round 7. |
+| Completed Tasks view has no "load more" | Round 7 | ACCEPTED V2 DEBT — same server-cap pattern accepted for Habits/Notes; fine at current scale. |
+| `habits_due_today` nav badge is daily-only | Round 8 | ACCEPTED V2 DEBT — no safe cross-dialect weekday SQL function exists; a secondary nav affordance only. |
+| `users.week_start` unused by calendar/goal-snapshot | Round 8 | MOVE TO V2.1 — real consistency gap, touches two other mature features' date math; deliberately not rushed. |
+| 365-day streak lookback bound | Round 8 | ACCEPTED V2 DEBT — documented, currently-irrelevant trade-off. |
+| `prompt()`-based quick edits | Round 8 (habits), broadened this round | ACCEPTED V2 DEBT — evaluated in Phase 10G across all 11 call sites app-wide (not just habits); consistent, deliberate, dependency-free pattern. A shared modal component is a real V2.1+ candidate, not a defect. |
+| Notes pagination, tags/contact/task/habit linking, archive | Round 9 | ACCEPTED V2 DEBT — explicitly out of scope since Round 9; no evidence of need. |
+| Single-phrase note search (not multi-word AND) | Round 9 | ACCEPTED V2 DEBT — simpler, sufficient for expected note volume. |
+| `#toast` color-contrast violation | Round 9 | FIXED — Phase 10D, this round's explicit non-negotiable requirement. |
+| `habits/format.js` never unit-tested | Round 9 | FIXED — Phase 10I prep. |
+| Dead icon/CSS (see Refactoring Audit) | Round 10 | FIXED — Phase 10G. |
+| Unawaited `renderTasks()` (and likely siblings) in `app.js` | Round 10 | MOVE TO V2.1 — real, confirmed application-level debt (Phase 10H, bug 3); the concrete failures it caused in this round's own tests are fixed, but a full `toast(); render*();` audit across `app.js` is separate, larger work. |
+| Toast auto-hide racing a `toBeVisible` assertion under heavy sequential E2E load | Round 10 | ACCEPTED V2 DEBT — Phase 10H; load-only, reproduces 0/3 in isolation, same class as the mobile-nav flake below. |
+| Residual mobile-nav transition flake (rare, post-fix) | Round 10 (root-caused in Phase 10A, still present) | ACCEPTED V2 DEBT — root cause understood and primary trigger fixed twice over (Phase 10A, Phase 10H); a much rarer residual remains under maximum load, honestly documented rather than chased for diminishing returns. |
+| Latent `getByText("Northstar Labs")` locator ambiguity vs. a `<select>` option, and a related "click landed somewhere unexpected" symptom (both only observed while probing an unrelated fix, Phase 10H) | Round 10 | MOVE TO V2.1 — neither confirmed to affect any currently-passing, currently-exercised path (the test line that could trigger either was reverted), but both are real enough to be worth a dedicated look rather than assuming they can't recur. |
+
+**Net result**: 9 items FIXED this round (beyond the 6 already counted in the
+Remaining PRD Gap Audit summary above, once duplicates and the newly-closed
+PIN-hash/habits-test items are folded in), 4 items MOVE TO V2.1 (each real,
+scoped, and none release-blocking), 2 items OBSOLETE, 1 DUPLICATE, and the rest
+ACCEPTED V2 DEBT — deliberately not fixed, with the reasoning recorded rather than
+silently dropped. Nothing in this table is a release blocker.
 
 ## Release Readiness
 
-_Filled in during Phase 10I._
+- All 9 internal phases complete, each independently committed and tested.
+- Full CI-equivalent gate list passed locally against real Postgres and real
+  Chromium (Phase 10H): static-quality, security, the backend/frontend/integration/
+  e2e test matrix, the sqlite-to-postgres migration test, and the full browser/
+  visual suite.
+- No unresolved CRITICAL or HIGH security findings (Security Audit, reconfirmed in
+  `docs/SECURITY.md`'s final report).
+- No release-blocking accessibility violations (Accessibility Audit; the required
+  `#toast` fix landed at the root, not as an exclusion).
+- Technical Debt Classification is complete and final — every backlog item resolved
+  to FIXED / ACCEPTED V2 DEBT / MOVE TO V2.1 / OBSOLETE / DUPLICATE; nothing left
+  unclassified.
+- `docs/FINAL_MAIN_INTEGRATION_PLAN.md` and `docs/RELEASE_NOTES_V2.md` are written.
+- **Verdict: ready for a PR into `development`**, per this round's actual scope.
+  Integration into `main` is a separate, later, explicitly-approved step — see
+  Development-vs-Main Divergence below and the integration plan's own explicit stop
+  condition.
 
 ## Development-vs-Main Divergence
 
-_Filled in during Phase 10I — see `docs/FINAL_MAIN_INTEGRATION_PLAN.md`._
+Full detail in `docs/FINAL_MAIN_INTEGRATION_PLAN.md`. Summary: `development` is 71
+commits ahead of `main` (every product round since the build-tooling migration) and
+3 commits behind (a single logical fix — Neon connection-crash handling — that
+`development` already carries independently; confirmed by diffing actual file
+content, not just commit graphs, and the two versions are byte-identical). A dry-run
+three-way merge (`git merge-tree`) found **zero files requiring conflict
+resolution**. Four new migrations, all purely additive. One `render.yaml` line
+required (the Vite frontend build step). No Neon schema-breaking change. This is a
+plan for a future merge, not an action taken now — no merge into `main` has
+happened or is authorized by this round.
+
+## Acceptance Criteria
+
+- [x] Analytics implemented on top of existing infrastructure, no new chart
+      dependency, rates cross-checked against real seeded data.
+- [x] Full backlog (Rounds 3–9) reconciled against a P0–P3 priority scheme; every
+      item resolved, not just the ones implemented.
+- [x] No risky global UI rewrite; only verified, low-risk design-token
+      normalization.
+- [x] Every accessibility-scan exclusion individually justified or removed; the
+      `#toast` finding fixed at the root as required.
+- [x] Formal security audit across every listed domain; authorization matrix
+      written; zero unresolved CRITICAL/HIGH findings.
+- [x] Performance audit complete; the one real gap (`import_rows` index) closed;
+      every proposed infrastructure addition (CDN/load balancer/Redis/server cache)
+      evaluated and explicitly rejected for lack of justification.
+- [x] Refactor/dead-code pass verified claims before acting (the Round 3
+      "callerless" claim was checked and found false) and only removed
+      concretely-verified dead code.
+- [x] Full regression + release-candidate validation against real Postgres and real
+      Chromium, covering the full E2E matrix the round specified.
+- [x] `development`-vs-`main` divergence audited, integration plan and release
+      notes written, final security report and technical-debt triage complete.
+- [x] Every phase independently committed and tested, not one undifferentiated
+      change.
+- [ ] PR opened from `feature/010-final-analytics-hardening` into `development`,
+      CI green — pending, next step after this document.
+- [ ] Explicit approval obtained before any merge into `development` or `main`, and
+      before any deploy — by design, not yet requested.
 
 ## Architecture Changes
 
@@ -452,15 +557,15 @@ columns; no migration.
 
 ## Implementation Phases
 
-1. **10A — Analytics** (this section) — done.
-2. **10B — Remaining PRD gap-close** — in progress.
-3. **10C — Global UI/UX + design-system capstone.**
-4. **10D — Full accessibility audit (including the required `#toast` fix).**
-5. **10E — Security hardening pass.**
-6. **10F — Performance hardening pass.**
+1. **10A — Analytics** — done.
+2. **10B — Remaining PRD gap-close** — done.
+3. **10C — Global UI/UX + design-system capstone** — done.
+4. **10D — Full accessibility audit (including the required `#toast` fix)** — done.
+5. **10E — Security hardening pass** — done.
+6. **10F — Performance hardening pass** — done.
 7. **10G — Code quality / refactor / dead-code pass** — done.
 8. **10H — Full regression + release-candidate validation** — done.
-9. **10I — development-vs-main divergence audit + integration plan + release notes.**
+9. **10I — development-vs-main divergence audit + integration plan + release notes** — done.
 
 ## Acceptance Criteria
 

@@ -35,6 +35,44 @@ This is already a mature posture. New rounds extend it; they do not redesign it.
 - [ ] Migrations are additive; no round drops or destructively alters existing
       production data without an explicit, separately-approved migration plan.
 
+## Final security report (Round 10, pre-V2-release)
+
+A formal audit closing out the V2 feature set, covering every domain the round
+required: authorization, mass assignment, CSRF, XSS, SQL injection, CSV injection,
+logging, CSP, and session handling. Full detail (including the per-domain trace and
+authorization matrix) is in `docs/FEATURE_UPGRADE_10_FINAL.md`'s Security Audit
+section; this is the durable summary for anyone who lands on this file directly.
+
+- **Authorization**: every domain table (Applications, Interviews/Rejections/
+  Follow-ups/Networking/Goals, Checklist items, Import batches/rows, Tasks, Habits,
+  Notes, Resumes, Exports) enforces owner-scoped list/get/create/update/delete, with
+  cross-owner links (e.g. a Task or Note referencing an Application) independently
+  re-checked against the same user, not inferred from the parent record alone.
+  Managers act cross-user only through an explicit `user_id`/`target_user_id`
+  parameter — never implicitly.
+- **Mass assignment**: every create/update path rejects client-supplied ownership
+  fields (`user_id`, `target_user_id`, `owner_id`) server-side, regardless of what
+  the request body contains.
+- **SQL injection**: every `${...}`-interpolated SQL fragment across `backend/src/`
+  is either a `?`-bound value or a column/table/sort-direction name drawn from a
+  hardcoded, regex-anchored whitelist — never raw user input. No injectable path.
+- **CSRF**: every mutating route requires `requireAuth(context, { csrf: true })`.
+- **Stored XSS**: every user-text field renders through the shared `esc()` helper;
+  directly verified with `<script>`/`<img onerror>`-shaped content at both the API
+  and E2E layers (Notes).
+- **CSV formula injection**: `safeCell()` covers every export path, including every
+  tracker type added across the V2 rounds.
+- **Sensitive logging**: no request body, password, or PIN is ever logged; 500-level
+  errors log server-side only, and the client always receives a generic message.
+- **Session/cookie/CSP**: unchanged since Round 1 and still covered by a passing
+  test — see "Current posture" above.
+- **Dependencies**: `npm audit --audit-level=high` clean on both `backend` and
+  `frontend`. One pre-existing MODERATE advisory (`uuid`, transitive via `exceljs`,
+  only reachable via a breaking `exceljs` downgrade) is below the release gate and
+  accepted as tracked debt, not forced.
+
+**Result: no unresolved CRITICAL or HIGH findings. Not a release blocker.**
+
 ## Open questions to resolve per round, not blanket-answered here
 
 - Round 6 (import/export): duplicate-detection and partial-failure handling must never
