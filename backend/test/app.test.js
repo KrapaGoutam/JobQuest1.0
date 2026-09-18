@@ -110,7 +110,14 @@ test("PIN validation accepts leading zero and rejects non-four-digit values", as
     .prepare("SELECT password_hash,pin_hash FROM users WHERE username=?")
     .get("leadingzero");
   assert.ok(stored.pin_hash.startsWith("scrypt$"));
-  assert.equal(stored.pin_hash.includes("0007"), false);
+  // A prior version of this test also asserted the hash never contains "0007" as a
+  // literal substring - a scrypt hash is expected to look like random noise, so
+  // that had a small but real (Round 6-observed) chance of a coincidental
+  // substring match, unrelated to any actual security property. The two
+  // assertions above (it's really hashed, and never appears in the API response)
+  // are what this test needs to prove; that third check tested nothing real and
+  // was a source of non-deterministic failures. Root-caused and removed, not
+  // silently ignored - see docs/FEATURE_UPGRADE_10_FINAL.md Phase 10H.
   assert.equal(JSON.stringify(valid.data).includes("pin_hash"), false);
 });
 

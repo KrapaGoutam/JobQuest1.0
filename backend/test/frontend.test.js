@@ -63,6 +63,13 @@ import {
   validateProgress,
 } from "../src/habits.js";
 import {
+  frequencyLabel,
+  periodNoun,
+  progressLabel,
+  streakLabel,
+  emptyStateMessage as habitsEmptyStateMessage,
+} from "../../frontend/src/features/habits/format.js";
+import {
   isOverdue,
   dueDateLabel,
   emptyStateMessage,
@@ -665,6 +672,44 @@ test("validateProgress rejects negative/non-integer values and future dates", ()
   const ok = validateProgress({ completion_date: "2020-01-01", value: 5 });
   assert.deepEqual(ok.errors, []);
   assert.equal(ok.data.value, 5);
+});
+
+test("frequencyLabel, periodNoun, progressLabel, and streakLabel cover both completion models and all three frequencies (Round 9 gap: never unit-tested)", () => {
+  assert.equal(frequencyLabel("daily"), "Daily");
+  assert.equal(frequencyLabel("weekdays"), "Weekdays");
+  assert.equal(frequencyLabel("weekly"), "Weekly");
+  assert.equal(frequencyLabel("unknown"), "unknown");
+
+  assert.equal(periodNoun("daily"), "today");
+  assert.equal(periodNoun("weekdays"), "today");
+  assert.equal(periodNoun("weekly"), "this week");
+
+  assert.equal(
+    progressLabel({ frequency: "daily", target_count: 1, completed: true }),
+    "Completed today",
+  );
+  assert.equal(
+    progressLabel({ frequency: "daily", target_count: 1, completed: false }),
+    "Not yet completed today",
+  );
+  assert.equal(
+    progressLabel({
+      frequency: "weekly",
+      target_count: 3,
+      period_value: 2,
+      completed: false,
+    }),
+    "2 of 3 completed this week",
+  );
+
+  assert.equal(streakLabel({ streak: 0 }), "No current streak");
+  assert.equal(streakLabel({ streak: 4, frequency: "daily" }), "4-day streak");
+  assert.equal(streakLabel({ streak: 2, frequency: "weekly" }), "2-week streak");
+
+  assert.equal(habitsEmptyStateMessage("today"), "No habits scheduled for today.");
+  assert.equal(habitsEmptyStateMessage("all"), "Create your first habit.");
+  assert.equal(habitsEmptyStateMessage("history"), "No habit history yet.");
+  assert.equal(habitsEmptyStateMessage("unknown-view"), "No habits");
 });
 
 test("notePreview truncates long bodies with an ellipsis and passes short ones through", () => {
