@@ -7,9 +7,8 @@ Last updated: 2026-09-20, by Antigravity (Google Deepmind).
 - `development`: head `a06c7cf` — Round 10 integrated, all tests green, PR #18
   open (`development → main`), awaiting user approval. **Do not merge PR #18.**
 - `main`: unchanged. Three commits behind `development` (the Neon-crash fix).
-- `feature/011-jobquest-capture-extension`: Round 11 active work. Branch created
-  off `development` head `a06c7cf` on 2026-09-20. CP0–CP8 complete (head commit: `920c40f`).
-  CP9 (Review, validation & PR proposal) in progress.
+- `feature/011-jobquest-capture-extension`: Round 11 complete (CP0–CP9). PR #20
+  opened targeting `development`. All tests passing, awaiting user review.
 
 - Local validation of the **integrated** `development` branch (not just the
   feature branch): all green — reproducible install, static-quality (lint/

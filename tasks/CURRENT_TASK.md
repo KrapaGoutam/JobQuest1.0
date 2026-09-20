@@ -16,32 +16,27 @@ approval. Do not merge PR #18 without explicit instruction.
 # Round 11 — Browser Capture Extension (ACTIVE)
 
 **Branch**: `feature/011-jobquest-capture-extension` (off `development`)
-**Checkpoint**: CP8 complete, CP9 in progress.
+**Checkpoint**: CP9 complete — PR #20 open into `development`.
 **Feature doc**: `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`
 **Extension handoff**: `extension/HANDOFF.md`
+**PR**: #20 (`feature/011-jobquest-capture-extension` &rarr; `development`)
 
-## What just happened (Round 11 CP7 & CP8 — Antigravity, 2026-09-20)
+## What just happened (Round 11 CP9 — Antigravity, 2026-09-20)
 
-- Implemented `backend/e2e/extension.spec.js`: Playwright E2E suite covering:
-  - Settings extension token generation, one-time raw token display, and token revocation.
-  - Extension bearer authentication, extraction ingestion, duplicate detection levels 1 and 2, and live UI reflection.
-  - Verified across all 5 responsive viewports (`desktop`, `compact-desktop`, `tablet`, `mobile`, `small-mobile`) with 10/10 passing tests.
-- Updated `.github/workflows/ci.yml`: added `extension` test suite to CI matrix.
-- Created `extension/README.md`: comprehensive guide covering unpacked installation, configuration, multi-tier extractor features, duplicate detection, and testing.
-- Verified test matrix:
-  - Backend: 49/49 pass.
-  - Frontend: 44/44 pass.
-  - Extension unit tests: 6/6 pass.
-  - Playwright E2E suite: 10/10 pass across all 5 viewports.
-  - Linting & typecheck: clean across all JS files.
+- Completed full validation sweep:
+  - Backend tests: 49/49 passed.
+  - Frontend unit tests: 44/44 passed.
+  - Extension unit tests: 6/6 passed.
+  - Playwright E2E suite: 10/10 passed across all 5 responsive viewports.
+  - Linting & typecheck: clean across backend, frontend, and extension JS files.
+  - Production build: Vite bundle built cleanly.
+- Updated documentation across `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`, `extension/README.md`, `extension/HANDOFF.md`, `brain/PROJECT_STATE.md`, and `brain/AGENT_HANDOFF_LOG.md`.
+- Pushed branch `feature/011-jobquest-capture-extension` to origin.
+- Opened Pull Request #20 targeting `development`: "Round 11: JobQuest Capture Browser Extension".
 
 ## Next exact action
 
-Implement CP9 (Review, Final Docs & PR Proposal):
-1. Update `brain/PROJECT_STATE.md` and `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`.
-2. Run full validation sweep across repo (`npm run lint`, `npm run typecheck`, `npm run test:backend`, `npm run test:frontend`, `npm run test:extension`).
-3. Commit and push `feature/011-jobquest-capture-extension` to origin.
-4. Prepare and propose PR into `development` (preserving PR #18 on hold).
+Awaiting user review and CI completion on PR #20. Do not merge without user approval. Do not touch `main` or deploy.
 
 ## Decisions made this session
 

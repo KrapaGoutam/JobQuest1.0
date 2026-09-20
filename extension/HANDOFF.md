@@ -29,7 +29,7 @@ feature/011-jobquest-capture-extension
 development (head: a61e26e)
 
 ## Current Checkpoint
-CP8 completed. CP9 in progress.
+CP9 completed. PR #20 opened targeting `development`.
 
 ## Current Objective
 Implement the JobQuest V2.1 Browser Capture Extension — a Manifest V3 Chrome/Edge extension for capturing job postings and saving them to JobQuest.
@@ -44,18 +44,19 @@ Implement the JobQuest V2.1 Browser Capture Extension — a Manifest V3 Chrome/E
 - CP6: Duplicate detection UX (Level-1 exact URL and Level-2 company+title duplicate warnings in popup with real-time field evaluation)
 - CP7: Playwright E2E tests (`backend/e2e/extension.spec.js`, covering settings token UI, capture auth, duplicate check, and workspace UI reflection across 5 viewports — 10/10 passed)
 - CP8: CI integration (`.github/workflows/ci.yml` matrix updated) and extension documentation (`extension/README.md`)
+- CP9: Final verification sweep, documentation sync, branch pushed to origin, and PR #20 opened targeting `development`
 
 ## Partially Complete
 - None
 
 ## Currently In Progress
-- CP9: Review, final docs, and PR to development
+- Awaiting user review and CI completion on PR #20
 
 ## Pending
-- CP9: Review + PR to development
+- PR #20 review and eventual merge by user into `development`
 
 ## Roadmap Remaining
-1. CP9: Final verification sweep, documentation sync, and PR to `development`
+- Round 11 complete. All checkpoints CP0–CP9 fulfilled.
 
 ## Files Currently Being Modified
 - (none yet — CP1 about to begin)
@@ -147,16 +148,16 @@ git switch -c feature/011-jobquest-capture-extension
 N/A
 
 ## Last Commit
-8f9fccd feat(extension): implement capture popup and duplicate detection UX [CP5, CP6]
+5415396 docs(extension): update project state, feature upgrade tracking, and agent handoff log [CP9]
 
 ## Current CI Status
 All local CI checks passing (backend, frontend, extension, e2e, lint, typecheck)
 
 ## Current PR Status
-Pending completion of CP9
+PR #20 open against `development`: https://github.com/KrapaGoutam/JobQuest1.0/pull/20
 
 ## Next Exact Action
-Commit CP7/CP8 work, update docs (PROJECT_STATE.md, FEATURE_UPGRADE_11_BROWSER_EXTENSION.md), run final test sweep, push to origin, and create PR into `development`.
+Await CI completion and user review/merge of PR #20. Do not merge without user approval. Do not touch `main`.
 
 ## Do Not Change
 - Work only in KrapaGoutam/JobQuest1.0.

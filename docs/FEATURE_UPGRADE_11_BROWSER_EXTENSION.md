@@ -256,7 +256,7 @@ Playwright extension E2E added to existing `browser-and-visual` job.
 | CP6 | ✅ Done | Duplicate detection UX | `8f9fccd` |
 | CP7 | ✅ Done | Playwright E2E tests | `920c40f` |
 | CP8 | ✅ Done | CI integration + extension docs | `920c40f` |
-| CP9 | 🔄 In Progress | Review + PR to development | Pending |
+| CP9 | ✅ Done | Review + PR to development (PR #20) | `5415396` |
 
 ### Tool / MCP Readiness
 
