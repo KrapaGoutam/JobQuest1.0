@@ -2,51 +2,49 @@
 
 **Status: FINAL RELEASE INTEGRATION — Round 10 merged into `development`; a
 `development → main` release-candidate PR is open (PR #18), validated, and
-waiting for explicit user approval before merge.** This is not a feature round —
-no new features, no speculative refactoring, no UI redesign were done or are
-in scope from here through release.
+waiting for explicit user approval before merge.** PR #18 is on hold pending
+user approval — it does not block Round 11 work.
 
-## What just happened
+## Round 10 / Release Integration summary
 
-1. Verified PR #17 (`feature/010-final-analytics-hardening` → `development`)
-   matched its previously-reported state exactly (head commit, CI, mergeability,
-   no conflicts) before touching anything.
-2. Merged PR #17 into `development` via a regular merge commit (`41f3cd2`,
-   confirmed two parents — not a fast-forward, not a squash).
-3. Ran the full release-gate list against the actual **integrated** `development`
-   branch (not just the feature branch) with real PostgreSQL 17 and real
-   Chromium: reproducible install, lint, typecheck, both builds, the full
-   backend/frontend/integration/e2e matrix, the SQLite→Postgres migration test,
-   and the full browser+visual suite (5 viewports) — all clean.
-4. Validated the full migration chain two ways: a fresh database applying
-   001→012 in order, and a representative upgrade (a database seeded with only
-   `main`'s historical 001–008, then incrementally migrated to 012) — both clean,
-   correct ordering, no re-application of already-applied migrations.
-5. Re-audited `development` vs `main` against the current, post-merge repository
-   state (not assumed to still match the pre-merge report): 87 commits ahead, 3
-   behind (still just the one Neon-crash fix `development` already independently
-   carries, byte-identical file content re-confirmed). Zero merge conflicts on a
-   fresh dry-run `git merge-tree`.
-6. Verified Render readiness (build command, Vite output path, health check,
-   env vars, CSP, sessions, Neon-suspend resilience, no secrets in the bundle,
-   no rebuild-on-restart) and Neon readiness (unchanged connection layer, no
-   destructive/incompatible migrations) — both **PASS**.
-7. Re-confirmed the final security/accessibility/performance gates directly
-   against the integrated code (zero `.exclude()` calls remain in the E2E spec,
-   `#toast` fix present, CSP backend-owned, session cookies unchanged).
-8. Opened PR #18 (`development` → `main`, title "release: JobQuest V2") with the
-   full release-notes-structured description. **Not merged.**
-9. **Found something worth the user's attention**: the pre-existing Postgres
-   worker RPC request-correlation gap (first found on PR #17's CI) recurred
-   independently on PR #18's CI, on a different code path — now confirmed twice,
-   not a single fluke. Still not fixed (rushed changes to core, concurrency-
-   sensitive DB communication code are exactly the kind of risk this
-   release-integration phase should avoid), but elevated from "rare" to
-   "recurring, should be prioritized promptly in V2.1" in the debt record.
+See [brain/PROJECT_STATE.md](../brain/PROJECT_STATE.md) for full detail.
+Key: PR #18 (`development → main`) is open and green, not merged, awaiting user
+approval. Do not merge PR #18 without explicit instruction.
 
-## Next safe action
+---
 
-Wait for PR #18's CI to finish on its current head commit. Once confirmed green
-(or with only the already-documented, non-blocking recurring RPC flake), produce
-the JOBQUEST V2 FINAL MAIN-INTEGRATION REPORT and **stop**. Do not merge PR #18
-into `main`. Do not deploy. Wait for the user's explicit approval before either.
+# Round 11 — Browser Capture Extension (ACTIVE)
+
+**Branch**: `feature/011-jobquest-capture-extension` (off `development`)
+**Checkpoint**: CP0 complete, CP1 in progress.
+**Feature doc**: `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`
+**Extension handoff**: `extension/HANDOFF.md`
+
+## What just happened (Round 11 CP0 — Antigravity, 2026-09-20)
+
+- `feature/011-jobquest-capture-extension` created off `development` (head `a06c7cf`).
+- `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md` written (full feature spec).
+- `extension/HANDOFF.md` written (initial state, CP1 pending).
+- `tasks/CURRENT_TASK.md` and `brain/PROJECT_STATE.md` updated.
+- Note: Codex was given the extension master prompt (`JobQuestExtensionV1.md`)
+  but never executed it. Antigravity is implementing from scratch — this is
+  correct, not a lost session.
+
+## Next exact action
+
+Implement CP1:
+1. Write `backend/jobsearch/migrations/013_extension_tokens.sql`
+2. Write `backend/src/extension.js` (7 routes + authenticateExtension helper)
+3. Wire `handleExtension` into `backend/src/server.js`
+4. Add extension test cases to `backend/test/app.test.js`
+5. Run `npm run lint` + `npm run test:backend`
+6. Commit: `feat(api): add extension token auth and capture endpoints [CP1]`
+
+## Decisions made this session
+
+- Auth: Extension bearer tokens (`extension_tokens` table, migration 013), NOT
+  session cookie reuse. See `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`.
+- Duplicate detection: Level 1 (exact normalized URL) + Level 2 (company+title).
+- Resume selection: User must choose explicitly; never auto-inferred.
+- Extension store: Load-unpacked only; no Chrome Web Store publication this round.
+- No React, no new frontend framework (vanilla JS throughout).

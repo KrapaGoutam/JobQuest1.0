@@ -1,14 +1,15 @@
 # Project state
 
-Last updated: 2026-09-18, by Claude Sonnet 5 (Claude Code).
+Last updated: 2026-09-20, by Antigravity (Google Deepmind).
 
 ## Branch / commit
 
-- `development`: integrated Round 10. Merge commit `41f3cd2` (PR #17, two real
-  parents, not fast-forwarded/squashed), followed by two small docs-only commits
-  (`97f1614`, `a06c7cf`) re-auditing divergence and elevating a CI finding.
-  Current `development` head: `a06c7cf`.
-- `main`: unchanged. A release-candidate PR is open — see below.
+- `development`: head `a06c7cf` — Round 10 integrated, all tests green, PR #18
+  open (`development → main`), awaiting user approval. **Do not merge PR #18.**
+- `main`: unchanged. Three commits behind `development` (the Neon-crash fix).
+- `feature/011-jobquest-capture-extension`: Round 11 active work. Branch created
+  off `development` head `a06c7cf` on 2026-09-20. CP0 complete.
+
 - Local validation of the **integrated** `development` branch (not just the
   feature branch): all green — reproducible install, static-quality (lint/
   typecheck/build/build:frontend/migrate:check), security (audits + secret
