@@ -16,26 +16,27 @@ approval. Do not merge PR #18 without explicit instruction.
 # Round 11 — Browser Capture Extension (ACTIVE)
 
 **Branch**: `feature/011-jobquest-capture-extension` (off `development`)
-**Checkpoint**: CP1 complete, CP2 in progress.
+**Checkpoint**: CP2 complete, CP3 in progress.
 **Feature doc**: `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`
 **Extension handoff**: `extension/HANDOFF.md`
 
-## What just happened (Round 11 CP1 — Antigravity, 2026-09-20)
+## What just happened (Round 11 CP2 — Antigravity, 2026-09-20)
 
-- Wrote `backend/jobsearch/migrations/013_extension_tokens.sql`.
-- Wrote `backend/src/extension.js` (7 routes + bearer-token authentication helper).
-- Wired `handleExtension` in `backend/src/server.js`.
-- Added 16 comprehensive extension test cases to `backend/test/app.test.js`.
-- All 49 backend test cases passing (100% green). Lint and typecheck clean.
+- Added Browser Extension token management section to Settings in `frontend/src/app.js`.
+- Implemented token generation with label, displaying raw token once in warning banner with copy button.
+- Implemented active tokens listing (label, created_at, last_used_at) with Revoke button.
+- Added "Browser Extension" button in Settings tabs for quick navigation.
+- Verified frontend build with Vite (0 errors), backend lint/typecheck, and 44 frontend unit tests.
 
 ## Next exact action
 
-Implement CP2 (Frontend settings token manager):
-1. Locate Settings view in `frontend/index.html` and `frontend/src/`
-2. Add "Browser Extension" token management section in Settings
-3. Implement token list, generate token modal (displaying raw token once with Copy), and revoke token action
-4. Verify token creation/revocation UI and integration
-5. Commit: `feat(settings): add extension token management UI [CP2]`
+Implement CP3 (Extension skeleton + options page):
+1. Create `extension/` directory structure with `manifest.json` (MV3)
+2. Create icons (`extension/icons/icon16.png`, `icon48.png`, `icon128.png`)
+3. Create `extension/options.html`, `extension/options.js`, and `extension/options.css`
+4. Implement connection testing (`GET /api/extension/me`) and settings persistence (`chrome.storage.local`)
+5. Create minimal `extension/background.js` (service worker)
+6. Commit: `feat(extension): add MV3 manifest, options page, and storage layer [CP3]`
 
 ## Decisions made this session
 

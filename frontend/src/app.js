@@ -3348,17 +3348,18 @@ function renderExports() {
         .join("")}</div>`,
   );
 }
-async function renderSettings() {
-  const [settings, tags] = await Promise.all([
+async function renderSettings(newTokenData = null) {
+  const [settings, tags, extTokens] = await Promise.all([
     api("/api/settings"),
     api("/api/tags?archived=all"),
+    api("/api/extension/tokens").catch(() => []),
   ]);
   shell(
     pageHead(
       "Settings",
       "Profile, security, appearance, dashboard, goals, reminders, follow-ups, and application defaults",
     ) +
-      `<nav class="settings-tabs" aria-label="Settings sections"><button class="btn small secondary" data-page="profile">Profile</button><button class="btn small secondary" id="security-settings">PIN & Security</button><button class="btn small secondary" id="dashboard-settings-link">Dashboard Settings</button><button class="btn small secondary" data-page="goals">Goal Settings</button><button class="btn small secondary" data-page="reminders">Reminder Settings</button></nav><section class="card wide"><h2>Appearance and workflow defaults</h2><form id="settings-form" class="form-grid">${select("theme", "Theme", ["light", "dark", "system"], settings.theme)}${select(
+      `<nav class="settings-tabs" aria-label="Settings sections"><button class="btn small secondary" data-page="profile">Profile</button><button class="btn small secondary" id="security-settings">PIN & Security</button><button class="btn small secondary" id="dashboard-settings-link">Dashboard Settings</button><button class="btn small secondary" data-page="goals">Goal Settings</button><button class="btn small secondary" data-page="reminders">Reminder Settings</button><button class="btn small secondary" id="extension-settings-link">Browser Extension</button></nav><section class="card wide"><h2>Appearance and workflow defaults</h2><form id="settings-form" class="form-grid">${select("theme", "Theme", ["light", "dark", "system"], settings.theme)}${select(
         "week_start",
         "Week starts",
         [
@@ -3374,7 +3375,7 @@ async function renderSettings() {
           { value: "calendar", label: "Calendar days" },
         ],
         settings.follow_up_day_type,
-      )}${field("default_reminder_time", "Default reminder time", "time", settings.default_reminder_time)}<label class="check full"><input type="checkbox" name="auto_create_follow_up_reminder" value="true" ${settings.auto_create_follow_up_reminder ? "checked" : ""}> Automatically create follow-up reminders</label><button class="btn">Save Settings</button></form></section><section class="card full"><h2>Tag Management</h2><form id="tag-form" class="toolbar">${field("name", "Tag name", "text", "", "required")}${field("color", "Color", "color", "#3157d5")}<button class="btn small">Create Tag</button></form>${tags.map((tag) => `<article class="category-row"><i style="background:${esc(tag.color)}"></i><strong>${esc(tag.name)}</strong><span>${tag.archived_at ? "Archived" : "Active"}</span><div class="actions"><button class="btn small secondary" data-tag-rename="${tag.id}" data-name="${esc(tag.name)}">Rename</button><button class="btn small secondary" data-tag-archive="${tag.id}" data-archived="${tag.archived_at ? 0 : 1}">${tag.archived_at ? "Restore" : "Archive"}</button></div></article>`).join("") || empty("No tags yet")}</section>`,
+      )}${field("default_reminder_time", "Default reminder time", "time", settings.default_reminder_time)}<label class="check full"><input type="checkbox" name="auto_create_follow_up_reminder" value="true" ${settings.auto_create_follow_up_reminder ? "checked" : ""}> Automatically create follow-up reminders</label><button class="btn">Save Settings</button></form></section><section class="card full"><h2>Tag Management</h2><form id="tag-form" class="toolbar">${field("name", "Tag name", "text", "", "required")}${field("color", "Color", "color", "#3157d5")}<button class="btn small">Create Tag</button></form>${tags.map((tag) => `<article class="category-row"><i style="background:${esc(tag.color)}"></i><strong>${esc(tag.name)}</strong><span>${tag.archived_at ? "Archived" : "Active"}</span><div class="actions"><button class="btn small secondary" data-tag-rename="${tag.id}" data-name="${esc(tag.name)}">Rename</button><button class="btn small secondary" data-tag-archive="${tag.id}" data-archived="${tag.archived_at ? 0 : 1}">${tag.archived_at ? "Restore" : "Archive"}</button></div></article>`).join("") || empty("No tags yet")}</section><section class="card full" id="extension-tokens-section"><h2>Browser Extension</h2><p class="muted">Generate secure access tokens for the JobQuest browser extension to capture jobs directly from job boards.</p><form id="ext-token-form" class="toolbar" style="margin-top: 1rem;">${field("label", "Token label", "text", "Browser Extension", "required maxlength='80'")}<button class="btn small">Generate Token</button></form>${newTokenData ? `<div class="card" style="margin-top: 1rem; border-left: 4px solid var(--accent, #3157d5); background: var(--bg-card-hover, rgba(0,0,0,0.03));"><p><strong>⚠️ Copy your new extension token now</strong></p><p class="muted" style="margin: 0.25rem 0 0.5rem 0;">This token will not be displayed again. Paste it into the extension Options page.</p><div class="toolbar"><input type="text" readonly value="${esc(newTokenData.token)}" id="new-ext-token-input" style="font-family: monospace; font-size: 0.9rem; width: 100%;"><button class="btn small" type="button" id="copy-ext-token-btn">Copy</button></div></div>` : ""}<h3 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Active Extension Tokens</h3>${table(["Label", "Created", "Last Used", "Actions"], extTokens.filter((t) => !t.revoked_at).map((t) => `<tr><td><strong>${esc(t.label)}</strong></td><td>${t.created_at ? t.created_at.slice(0, 10) : "—"}</td><td>${t.last_used_at ? t.last_used_at.slice(0, 10) : "Never"}</td><td><button class="btn small danger" data-token-revoke="${t.id}" data-label="${esc(t.label)}">Revoke</button></td></tr>`).join(""), "No active extension tokens. Generate one above to use the extension.")}</section>`,
   );
   qs("#settings-form").onsubmit = async (event) => {
     event.preventDefault();
@@ -3397,6 +3398,9 @@ async function renderSettings() {
     state.page = "dashboard";
     renderDashboard();
     setTimeout(() => qs("#dashboard-settings")?.click(), 0);
+  };
+  qs("#extension-settings-link").onclick = () => {
+    qs("#extension-tokens-section")?.scrollIntoView({ behavior: "smooth" });
   };
   qs("#tag-form").onsubmit = async (event) => {
     event.preventDefault();
@@ -3430,6 +3434,56 @@ async function renderSettings() {
         }),
       });
       renderSettings();
+    };
+  });
+  qs("#ext-token-form").onsubmit = async (event) => {
+    event.preventDefault();
+    const fd = new FormData(event.currentTarget);
+    const label = String(fd.get("label") || "").trim();
+    try {
+      const created = await api("/api/extension/tokens", {
+        method: "POST",
+        body: JSON.stringify({ label }),
+      });
+      toast("Extension token generated");
+      renderSettings(created);
+    } catch (err) {
+      toast(err.message);
+    }
+  };
+  const copyBtn = qs("#copy-ext-token-btn");
+  if (copyBtn) {
+    copyBtn.onclick = async () => {
+      const input = qs("#new-ext-token-input");
+      if (input) {
+        try {
+          await navigator.clipboard.writeText(input.value);
+          toast("Token copied to clipboard!");
+        } catch {
+          input.select();
+          document.execCommand("copy");
+          toast("Token copied!");
+        }
+      }
+    };
+  }
+  qsa("[data-token-revoke]").forEach((button) => {
+    button.onclick = async () => {
+      if (
+        !confirm(
+          `Revoke extension token "${button.dataset.label}"? The extension will no longer be able to save jobs with this token.`,
+        )
+      )
+        return;
+      try {
+        await api(`/api/extension/tokens/${button.dataset.tokenRevoke}`, {
+          method: "DELETE",
+        });
+        toast("Token revoked");
+        renderSettings();
+      } catch (err) {
+        toast(err.message);
+      }
     };
   });
 }
