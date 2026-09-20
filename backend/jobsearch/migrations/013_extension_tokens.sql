@@ -5,8 +5,8 @@
 -- Revoked tokens keep their row (revoked_at non-null) so last_used_at is auditable.
 
 CREATE TABLE extension_tokens (
-  id          INTEGER  PRIMARY KEY AUTOINCREMENT,
-  user_id     INTEGER  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash  TEXT     NOT NULL UNIQUE,
   label       TEXT     NOT NULL DEFAULT 'Extension',
   created_at  TEXT     NOT NULL DEFAULT CURRENT_TIMESTAMP,
