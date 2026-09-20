@@ -245,18 +245,18 @@ Playwright extension E2E added to existing `browser-and-visual` job.
 
 ### Checkpoints
 
-| CP | Status | Description |
-|----|--------|-------------|
-| CP0 | ✅ Done | Branch + planning docs |
-| CP1 | ⬜ | Migration 013 + backend extension module |
-| CP2 | ⬜ | Frontend settings token manager |
-| CP3 | ⬜ | Extension skeleton + options page |
-| CP4 | ⬜ | Extractor engine + unit tests |
-| CP5 | ⬜ | Popup core flow |
-| CP6 | ⬜ | Duplicate detection UX |
-| CP7 | ⬜ | Playwright E2E tests |
-| CP8 | ⬜ | CI integration + final docs |
-| CP9 | ⬜ | Review + PR to development |
+| CP | Status | Description | Commit |
+|----|--------|-------------|--------|
+| CP0 | ✅ Done | Branch + planning docs | `59cff25` |
+| CP1 | ✅ Done | Migration 013 + backend extension module | `bcd8e8e` |
+| CP2 | ✅ Done | Frontend settings token manager | `829dd95` |
+| CP3 | ✅ Done | Extension skeleton + options page | `c482486` |
+| CP4 | ✅ Done | Extractor engine + unit tests | `fd64fd0` |
+| CP5 | ✅ Done | Popup core flow | `8f9fccd` |
+| CP6 | ✅ Done | Duplicate detection UX | `8f9fccd` |
+| CP7 | ✅ Done | Playwright E2E tests | `920c40f` |
+| CP8 | ✅ Done | CI integration + extension docs | `920c40f` |
+| CP9 | 🔄 In Progress | Review + PR to development | Pending |
 
 ### Tool / MCP Readiness
 

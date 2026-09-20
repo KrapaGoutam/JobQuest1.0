@@ -458,3 +458,27 @@ duplicate `push`-triggered one, is what actually matters for merge-readiness).
 **Do not merge PR #18 into `main`, and do not deploy, without the user's separate,
 explicit approval** - this session's instructions were unusually explicit and
 detailed about this exact point.
+
+## 2026-09-20 — Antigravity (Google Deepmind) — Round 11 (Browser Capture Extension) CP0–CP8 implemented
+
+Implemented Round 11: Manifest V3 browser extension ("JobQuest Capture") for Chrome and Edge on branch `feature/011-jobquest-capture-extension` (off `development`).
+
+Completed:
+- CP0: Specification & feature document (`docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`).
+- CP1: Migration 013 (`extension_tokens`), 7 extension API endpoints with bearer-token authentication (`backend/src/extension.js`), wired into server, 16 test cases in `backend/test/app.test.js`.
+- CP2: Frontend token manager UI in Settings (`frontend/src/app.js`), raw token one-time display with copy button, token list, and revocation.
+- CP3: Extension skeleton (Manifest V3, icons, background service worker, options page for server URL and token management, client API library).
+- CP4: Multi-tier job extractor engine (JSON-LD schema.org JobPosting parser, Greenhouse ATS adapter, Lever ATS adapter, Indeed adapter, generic DOM/meta heuristics fallback), unit test fixtures, and extractor tests.
+- CP5: Popup capture interface (`extension/popup.html`, `popup.css`, `popup.js`), content script runner (`extension/content.js`), dynamic resume dropdown, editable pre-filled capture form, and save flow.
+- CP6: Duplicate detection UX (Level-1 exact URL and Level-2 company+role matching) with interactive warning banner and "Open Existing" / "Save Anyway" actions.
+- CP7: Playwright E2E test suite (`backend/e2e/extension.spec.js`) validating the full extension workflow across 5 viewports (`desktop`, `compact-desktop`, `tablet`, `mobile`, `small-mobile`) with 10/10 passing tests.
+- CP8: CI matrix update (`.github/workflows/ci.yml`) adding `extension` test suite; extension documentation (`extension/README.md`).
+
+Verified:
+- Backend tests: 49/49 passed.
+- Frontend tests: 44/44 passed.
+- Extension unit tests: 6/6 passed.
+- Playwright E2E suite: 10/10 passed across all 5 viewports.
+- Linting & typechecking: all JS files across backend, frontend, and extension clean.
+- Frontend production bundle build (`npm run build:frontend`): succeeded.
+
