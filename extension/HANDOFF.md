@@ -29,7 +29,7 @@ feature/011-jobquest-capture-extension
 development (head: a61e26e)
 
 ## Current Checkpoint
-CP6 completed. CP7 in progress.
+CP8 completed. CP9 in progress.
 
 ## Current Objective
 Implement the JobQuest V2.1 Browser Capture Extension — a Manifest V3 Chrome/Edge extension for capturing job postings and saving them to JobQuest.
@@ -42,28 +42,20 @@ Implement the JobQuest V2.1 Browser Capture Extension — a Manifest V3 Chrome/E
 - CP4: Extractor engine + unit tests (schema.org JSON-LD parser, Greenhouse adapter, Lever adapter, Indeed adapter, generic meta/DOM fallback, orchestrator cascade, fixtures, and 6/6 passing unit tests)
 - CP5: Popup core flow (content.js extractor runner, popup.html/css/js, auth check, active tab extraction, dynamic resumes dropdown, application saving, success view)
 - CP6: Duplicate detection UX (Level-1 exact URL and Level-2 company+title duplicate warnings in popup with real-time field evaluation)
+- CP7: Playwright E2E tests (`backend/e2e/extension.spec.js`, covering settings token UI, capture auth, duplicate check, and workspace UI reflection across 5 viewports — 10/10 passed)
+- CP8: CI integration (`.github/workflows/ci.yml` matrix updated) and extension documentation (`extension/README.md`)
 
 ## Partially Complete
 - None
 
 ## Currently In Progress
-- CP7: Playwright E2E tests
+- CP9: Review, final docs, and PR to development
 
 ## Pending
-- CP7: Playwright E2E tests
-- CP8: CI integration + final docs
 - CP9: Review + PR to development
 
 ## Roadmap Remaining
-1. CP1: Migration + backend
-2. CP2: Frontend token UI
-3. CP3: Extension structure
-4. CP4: Extractors
-5. CP5: Popup
-6. CP6: Duplicate UX
-7. CP7: E2E tests
-8. CP8: CI + docs
-9. CP9: PR
+1. CP9: Final verification sweep, documentation sync, and PR to `development`
 
 ## Files Currently Being Modified
 - (none yet — CP1 about to begin)
@@ -155,23 +147,16 @@ git switch -c feature/011-jobquest-capture-extension
 N/A
 
 ## Last Commit
-(none on this branch yet — CP0 commit pending after initial files)
+8f9fccd feat(extension): implement capture popup and duplicate detection UX [CP5, CP6]
 
 ## Current CI Status
-CI not yet triggered on this branch
+All local CI checks passing (backend, frontend, extension, e2e, lint, typecheck)
 
 ## Current PR Status
-No PR open yet
+Pending completion of CP9
 
 ## Next Exact Action
-Implement CP1:
-1. Write backend/jobsearch/migrations/013_extension_tokens.sql
-2. Write backend/src/extension.js (7 routes + authenticateExtension helper)
-3. Add handleExtension import + route delegation to backend/src/server.js
-4. Add extension token generation/revocation/listing test cases to backend/test/app.test.js
-5. Verify: node --check backend/src/extension.js
-6. Run npm run test:backend against local Postgres
-7. Commit: feat(api): add extension token auth and capture endpoints
+Commit CP7/CP8 work, update docs (PROJECT_STATE.md, FEATURE_UPGRADE_11_BROWSER_EXTENSION.md), run final test sweep, push to origin, and create PR into `development`.
 
 ## Do Not Change
 - Work only in KrapaGoutam/JobQuest1.0.

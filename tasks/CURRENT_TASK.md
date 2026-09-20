@@ -16,31 +16,32 @@ approval. Do not merge PR #18 without explicit instruction.
 # Round 11 — Browser Capture Extension (ACTIVE)
 
 **Branch**: `feature/011-jobquest-capture-extension` (off `development`)
-**Checkpoint**: CP6 complete, CP7 in progress.
+**Checkpoint**: CP8 complete, CP9 in progress.
 **Feature doc**: `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`
 **Extension handoff**: `extension/HANDOFF.md`
 
-## What just happened (Round 11 CP5 & CP6 — Antigravity, 2026-09-20)
+## What just happened (Round 11 CP7 & CP8 — Antigravity, 2026-09-20)
 
-- Implemented `extension/content.js`: dynamic content script runner for active tabs.
-- Implemented `extension/popup.html`, `extension/popup.css`, `extension/popup.js`:
-  - Loading, unconfigured (with settings shortcut), capture form, and success screens.
-  - Live connection & token validation against backend.
-  - Active resumes dropdown dynamically populated from `/api/extension/resumes` (empty default, requiring user choice).
-  - Pre-fills extracted job details into editable form.
-  - Level-1 exact URL and Level-2 company+title duplicate detection banner with real-time field evaluation.
-  - Application submission via bearer token to `/api/extension/applications`.
-  - Success screen with direct "Open in JobQuest" button.
-- Updated `backend/package.json` lint and typecheck scripts to check all extension JavaScript files.
-- All 49 backend test cases passing; all 44 frontend unit tests passing; all 6 extension tests passing; all lint/typecheck clean.
+- Implemented `backend/e2e/extension.spec.js`: Playwright E2E suite covering:
+  - Settings extension token generation, one-time raw token display, and token revocation.
+  - Extension bearer authentication, extraction ingestion, duplicate detection levels 1 and 2, and live UI reflection.
+  - Verified across all 5 responsive viewports (`desktop`, `compact-desktop`, `tablet`, `mobile`, `small-mobile`) with 10/10 passing tests.
+- Updated `.github/workflows/ci.yml`: added `extension` test suite to CI matrix.
+- Created `extension/README.md`: comprehensive guide covering unpacked installation, configuration, multi-tier extractor features, duplicate detection, and testing.
+- Verified test matrix:
+  - Backend: 49/49 pass.
+  - Frontend: 44/44 pass.
+  - Extension unit tests: 6/6 pass.
+  - Playwright E2E suite: 10/10 pass across all 5 viewports.
+  - Linting & typecheck: clean across all JS files.
 
 ## Next exact action
 
-Implement CP7 (Playwright E2E tests):
-1. Review existing Playwright tests in `backend/test/` and `playwright.config.js`
-2. Add E2E tests for extension token management workflow in settings (generate token, copy, revoke)
-3. Add E2E tests validating the capture API flow and duplicate detection
-4. Commit: `test(extension): add Playwright E2E tests for extension workflows [CP7]`
+Implement CP9 (Review, Final Docs & PR Proposal):
+1. Update `brain/PROJECT_STATE.md` and `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`.
+2. Run full validation sweep across repo (`npm run lint`, `npm run typecheck`, `npm run test:backend`, `npm run test:frontend`, `npm run test:extension`).
+3. Commit and push `feature/011-jobquest-capture-extension` to origin.
+4. Prepare and propose PR into `development` (preserving PR #18 on hold).
 
 ## Decisions made this session
 
