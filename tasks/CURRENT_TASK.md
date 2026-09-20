@@ -16,34 +16,31 @@ approval. Do not merge PR #18 without explicit instruction.
 # Round 11 — Browser Capture Extension (ACTIVE)
 
 **Branch**: `feature/011-jobquest-capture-extension` (off `development`)
-**Checkpoint**: CP4 complete, CP5 in progress.
+**Checkpoint**: CP6 complete, CP7 in progress.
 **Feature doc**: `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`
 **Extension handoff**: `extension/HANDOFF.md`
 
-## What just happened (Round 11 CP4 — Antigravity, 2026-09-20)
+## What just happened (Round 11 CP5 & CP6 — Antigravity, 2026-09-20)
 
-- Implemented 5-tier extraction engine:
-  - `extension/extractors/jsonld.js`: parses schema.org JobPosting structures, salary, telecommute/work arrangement, employment type, location.
-  - `extension/extractors/greenhouse.js`: parses Greenhouse ATS boards and URL path heuristics.
-  - `extension/extractors/lever.js`: parses Lever ATS boards, workplace types, and commitment.
-  - `extension/extractors/indeed.js`: parses Indeed job headers, company cards, and salary snippets.
-  - `extension/extractors/generic.js`: parses OpenGraph, Twitter Cards, document.title patterns, and DOM heuristics.
-  - `extension/extractors/index.js`: orchestrates cascade without fabricating missing fields.
-- Created test fixtures in `extension/fixtures/` and unit test suite in `extension/tests/`.
-- All 6 extension unit tests passing; all 49 backend test cases passing; all lint/typecheck clean.
+- Implemented `extension/content.js`: dynamic content script runner for active tabs.
+- Implemented `extension/popup.html`, `extension/popup.css`, `extension/popup.js`:
+  - Loading, unconfigured (with settings shortcut), capture form, and success screens.
+  - Live connection & token validation against backend.
+  - Active resumes dropdown dynamically populated from `/api/extension/resumes` (empty default, requiring user choice).
+  - Pre-fills extracted job details into editable form.
+  - Level-1 exact URL and Level-2 company+title duplicate detection banner with real-time field evaluation.
+  - Application submission via bearer token to `/api/extension/applications`.
+  - Success screen with direct "Open in JobQuest" button.
+- Updated `backend/package.json` lint and typecheck scripts to check all extension JavaScript files.
+- All 49 backend test cases passing; all 44 frontend unit tests passing; all 6 extension tests passing; all lint/typecheck clean.
 
 ## Next exact action
 
-Implement CP5 (Popup core flow):
-1. Create `extension/content.js` (extracts page data via orchestrator and responds to popup request)
-2. Create `extension/popup.html`, `extension/popup.css`, and `extension/popup.js`:
-   - Connection/auth verification with graceful setup screen
-   - Extraction execution on active tab
-   - Form fields pre-filled from extraction with full inline editing capability
-   - Dynamic active resumes dropdown loaded via `GET /api/extension/resumes` (empty by default, requires explicit user choice)
-   - Application save (`POST /api/extension/applications`)
-   - Success state with direct link to view application in JobQuest workspace
-3. Commit: `feat(extension): implement capture popup and content extraction flow [CP5]`
+Implement CP7 (Playwright E2E tests):
+1. Review existing Playwright tests in `backend/test/` and `playwright.config.js`
+2. Add E2E tests for extension token management workflow in settings (generate token, copy, revoke)
+3. Add E2E tests validating the capture API flow and duplicate detection
+4. Commit: `test(extension): add Playwright E2E tests for extension workflows [CP7]`
 
 ## Decisions made this session
 
