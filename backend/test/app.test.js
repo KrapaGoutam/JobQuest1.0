@@ -2494,3 +2494,325 @@ test("Final round: resume performance analytics is owner-scoped and computes cor
     false,
   );
 });
+
+// ---------------------------------------------------------------------------
+// Extension API — token management and extension-specific endpoints (CP1)
+// ---------------------------------------------------------------------------
+
+// Helper: generate an extension token for an authenticated session user
+async function generateExtToken(auth, label = "Test Extension") {
+  const result = await request("/api/extension/tokens", {
+    method: "POST",
+    input: { label },
+    auth,
+  });
+  return result;
+}
+
+// Helper: call extension bearer-token endpoint
+async function extRequest(path, { method = "GET", token, input } = {}) {
+  const response = await fetch(`${base}${path}`, {
+    method,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(input ? { "Content-Type": "application/json" } : {}),
+    },
+    body: input ? JSON.stringify(input) : undefined,
+  });
+  const data = (response.headers.get("content-type") || "").includes(
+    "application/json",
+  )
+    ? await response.json()
+    : await response.text();
+  return { status: response.status, data };
+}
+
+test("extension: generate token requires session auth", async () => {
+  const result = await request("/api/extension/tokens", {
+    method: "POST",
+    input: { label: "Home" },
+  });
+  assert.equal(result.status, 401);
+});
+
+test("extension: generate token returns raw token once", async () => {
+  const user = await register("ext_gen_user");
+  const result = await generateExtToken(user, "My Extension");
+  assert.equal(result.status, 201);
+  assert.ok(result.data.token, "raw token must be present");
+  assert.ok(result.data.id > 0);
+  assert.equal(result.data.label, "My Extension");
+});
+
+test("extension: list tokens shows metadata without raw token", async () => {
+  const user = await register("ext_list_user");
+  await generateExtToken(user, "Token A");
+  await generateExtToken(user, "Token B");
+  const list = await request("/api/extension/tokens", { auth: user });
+  assert.equal(list.status, 200);
+  assert.ok(Array.isArray(list.data));
+  assert.ok(list.data.length >= 2);
+  for (const token of list.data) {
+    assert.ok(!("token" in token), "raw token must never be listed");
+    assert.ok("id" in token);
+    assert.ok("label" in token);
+    assert.ok("created_at" in token);
+  }
+});
+
+test("extension: revoke token prevents further use", async () => {
+  const user = await register("ext_revoke_user");
+  const gen = await generateExtToken(user, "Revokable");
+  assert.equal(gen.status, 201);
+  const raw = gen.data.token;
+  const tokenId = gen.data.id;
+
+  // Token works before revocation
+  const before = await extRequest("/api/extension/me", { token: raw });
+  assert.equal(before.status, 200);
+
+  // Revoke
+  const revoke = await request(`/api/extension/tokens/${tokenId}`, {
+    method: "DELETE",
+    auth: user,
+  });
+  assert.equal(revoke.status, 200);
+
+  // Token no longer works after revocation
+  const after = await extRequest("/api/extension/me", { token: raw });
+  assert.equal(after.status, 401);
+});
+
+test("extension: cannot revoke another user's token", async () => {
+  const userA = await register("ext_revoke_a");
+  const userB = await register("ext_revoke_b");
+  const gen = await generateExtToken(userA, "A's token");
+  const tokenId = gen.data.id;
+  const result = await request(`/api/extension/tokens/${tokenId}`, {
+    method: "DELETE",
+    auth: userB,
+  });
+  assert.equal(result.status, 404);
+});
+
+test("extension: /me returns user info for valid bearer token", async () => {
+  const user = await register("ext_me_user");
+  const gen = await generateExtToken(user);
+  const me = await extRequest("/api/extension/me", { token: gen.data.token });
+  assert.equal(me.status, 200);
+  assert.equal(me.data.username, "ext_me_user");
+  assert.ok("full_name" in me.data);
+});
+
+test("extension: /me rejects invalid bearer token", async () => {
+  const me = await extRequest("/api/extension/me", { token: "bogus_token" });
+  assert.equal(me.status, 401);
+});
+
+test("extension: /resumes lists only active resumes for the token owner", async () => {
+  const userA = await register("ext_resume_a");
+  const userB = await register("ext_resume_b");
+
+  // Create resume for userA via session
+  const resumeResult = await request("/api/resumes", {
+    method: "POST",
+    input: { version_name: "Extension Resume v1", target_role: "Engineer" },
+    auth: userA,
+  });
+  assert.equal(resumeResult.status, 201);
+
+  const genA = await generateExtToken(userA);
+  const resumes = await extRequest("/api/extension/resumes", {
+    token: genA.data.token,
+  });
+  assert.equal(resumes.status, 200);
+  assert.ok(Array.isArray(resumes.data));
+  const names = resumes.data.map((r) => r.version_name);
+  assert.ok(names.includes("Extension Resume v1"));
+
+  // userB's token must not see userA's resumes
+  const genB = await generateExtToken(userB);
+  const resumesB = await extRequest("/api/extension/resumes", {
+    token: genB.data.token,
+  });
+  assert.equal(resumesB.status, 200);
+  assert.ok(!resumesB.data.map((r) => r.version_name).includes("Extension Resume v1"));
+});
+
+test("extension: duplicate-check level 1 — exact URL match", async () => {
+  const user = await register("ext_dup1_user");
+  const gen = await generateExtToken(user);
+  const token = gen.data.token;
+
+  // Create an application via session
+  const appResult = await request("/api/applications", {
+    method: "POST",
+    input: {
+      company: "Acme Corp",
+      job_title: "Software Engineer",
+      date_applied: "2026-09-01",
+      job_url: "https://acme.example.com/jobs/123?utm_source=linkedin",
+    },
+    auth: user,
+  });
+  assert.equal(appResult.status, 201);
+
+  // Exact same URL (with different utm param) should match at level 1
+  const check = await extRequest(
+    `/api/extension/duplicate-check?job_url=${encodeURIComponent("https://acme.example.com/jobs/123?utm_medium=email")}`,
+    { token },
+  );
+  assert.equal(check.status, 200);
+  assert.equal(check.data.has_duplicate, true);
+  assert.equal(check.data.matches[0].level, 1);
+  assert.equal(check.data.matches[0].match, "exact_url");
+});
+
+test("extension: duplicate-check level 2 — company+title match", async () => {
+  const user = await register("ext_dup2_user");
+  const gen = await generateExtToken(user);
+  const token = gen.data.token;
+
+  await request("/api/applications", {
+    method: "POST",
+    input: {
+      company: "  BigTech Corp  ",
+      job_title: "Senior Engineer",
+      date_applied: "2026-09-01",
+    },
+    auth: user,
+  });
+
+  // Different URL, same company+title (case insensitive, extra whitespace)
+  const check = await extRequest(
+    `/api/extension/duplicate-check?company=${encodeURIComponent("bigtech corp")}&job_title=${encodeURIComponent("SENIOR ENGINEER")}`,
+    { token },
+  );
+  assert.equal(check.status, 200);
+  assert.equal(check.data.has_duplicate, true);
+  assert.equal(check.data.matches[0].level, 2);
+  assert.equal(check.data.matches[0].match, "company_title");
+});
+
+test("extension: duplicate-check returns no match for genuinely new job", async () => {
+  const user = await register("ext_nodup_user");
+  const gen = await generateExtToken(user);
+  const token = gen.data.token;
+
+  const check = await extRequest(
+    `/api/extension/duplicate-check?job_url=${encodeURIComponent("https://newjob.example.com/unique-job-999")}&company=BrandNewCo&job_title=Wizard`,
+    { token },
+  );
+  assert.equal(check.status, 200);
+  assert.equal(check.data.has_duplicate, false);
+  assert.deepEqual(check.data.matches, []);
+});
+
+test("extension: duplicate-check is scoped to authenticated user only", async () => {
+  const userA = await register("ext_dup_scope_a");
+  const userB = await register("ext_dup_scope_b");
+
+  // userA creates an application
+  await request("/api/applications", {
+    method: "POST",
+    input: {
+      company: "Scoped Corp",
+      job_title: "Engineer",
+      date_applied: "2026-09-01",
+      job_url: "https://scoped.example.com/job",
+    },
+    auth: userA,
+  });
+
+  // userB's duplicate check must not find userA's application
+  const genB = await generateExtToken(userB);
+  const check = await extRequest(
+    `/api/extension/duplicate-check?job_url=${encodeURIComponent("https://scoped.example.com/job")}`,
+    { token: genB.data.token },
+  );
+  assert.equal(check.status, 200);
+  assert.equal(check.data.has_duplicate, false);
+});
+
+test("extension: create application via bearer token", async () => {
+  const user = await register("ext_create_user");
+  const gen = await generateExtToken(user);
+  const token = gen.data.token;
+
+  const result = await extRequest("/api/extension/applications", {
+    method: "POST",
+    token,
+    input: {
+      company: "ExtCapture Inc",
+      job_title: "Frontend Developer",
+      date_applied: "2026-09-20",
+      job_url: "https://extcapture.example.com/frontend",
+      location: "Austin, TX",
+      stage: "Applied",
+    },
+  });
+  assert.equal(result.status, 201);
+  assert.ok(result.data.id > 0);
+  assert.equal(result.data.company, "ExtCapture Inc");
+  assert.equal(result.data.job_title, "Frontend Developer");
+});
+
+test("extension: create application validates required fields", async () => {
+  const user = await register("ext_create_invalid");
+  const gen = await generateExtToken(user);
+  const token = gen.data.token;
+
+  // Missing company and job_title
+  const result = await extRequest("/api/extension/applications", {
+    method: "POST",
+    token,
+    input: { date_applied: "2026-09-20" },
+  });
+  assert.equal(result.status, 400);
+  assert.ok(Array.isArray(result.data.errors));
+});
+
+test("extension: create application rejects invalid job_url", async () => {
+  const user = await register("ext_url_invalid");
+  const gen = await generateExtToken(user);
+  const token = gen.data.token;
+
+  const result = await extRequest("/api/extension/applications", {
+    method: "POST",
+    token,
+    input: {
+      company: "Evil Corp",
+      job_title: "XSS Engineer",
+      date_applied: "2026-09-20",
+      job_url: "javascript:alert(1)",
+    },
+  });
+  assert.equal(result.status, 400);
+  assert.ok(result.data.errors.some((e) => e.includes("URL")));
+});
+
+test("extension: unauthenticated requests to extension routes get 401", async () => {
+  for (const [path, opts] of [
+    ["/api/extension/me", { method: "GET" }],
+    ["/api/extension/resumes", { method: "GET" }],
+    [
+      "/api/extension/duplicate-check?company=X&job_title=Y",
+      { method: "GET" },
+    ],
+    [
+      "/api/extension/applications",
+      {
+        method: "POST",
+        input: {
+          company: "X",
+          job_title: "Y",
+          date_applied: "2026-01-01",
+        },
+      },
+    ],
+  ]) {
+    const result = await extRequest(path, opts);
+    assert.equal(result.status, 401, `Expected 401 for ${opts.method} ${path}`);
+  }
+});
+

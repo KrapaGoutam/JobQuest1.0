@@ -16,29 +16,26 @@ approval. Do not merge PR #18 without explicit instruction.
 # Round 11 — Browser Capture Extension (ACTIVE)
 
 **Branch**: `feature/011-jobquest-capture-extension` (off `development`)
-**Checkpoint**: CP0 complete, CP1 in progress.
+**Checkpoint**: CP1 complete, CP2 in progress.
 **Feature doc**: `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`
 **Extension handoff**: `extension/HANDOFF.md`
 
-## What just happened (Round 11 CP0 — Antigravity, 2026-09-20)
+## What just happened (Round 11 CP1 — Antigravity, 2026-09-20)
 
-- `feature/011-jobquest-capture-extension` created off `development` (head `a06c7cf`).
-- `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md` written (full feature spec).
-- `extension/HANDOFF.md` written (initial state, CP1 pending).
-- `tasks/CURRENT_TASK.md` and `brain/PROJECT_STATE.md` updated.
-- Note: Codex was given the extension master prompt (`JobQuestExtensionV1.md`)
-  but never executed it. Antigravity is implementing from scratch — this is
-  correct, not a lost session.
+- Wrote `backend/jobsearch/migrations/013_extension_tokens.sql`.
+- Wrote `backend/src/extension.js` (7 routes + bearer-token authentication helper).
+- Wired `handleExtension` in `backend/src/server.js`.
+- Added 16 comprehensive extension test cases to `backend/test/app.test.js`.
+- All 49 backend test cases passing (100% green). Lint and typecheck clean.
 
 ## Next exact action
 
-Implement CP1:
-1. Write `backend/jobsearch/migrations/013_extension_tokens.sql`
-2. Write `backend/src/extension.js` (7 routes + authenticateExtension helper)
-3. Wire `handleExtension` into `backend/src/server.js`
-4. Add extension test cases to `backend/test/app.test.js`
-5. Run `npm run lint` + `npm run test:backend`
-6. Commit: `feat(api): add extension token auth and capture endpoints [CP1]`
+Implement CP2 (Frontend settings token manager):
+1. Locate Settings view in `frontend/index.html` and `frontend/src/`
+2. Add "Browser Extension" token management section in Settings
+3. Implement token list, generate token modal (displaying raw token once with Copy), and revoke token action
+4. Verify token creation/revocation UI and integration
+5. Commit: `feat(settings): add extension token management UI [CP2]`
 
 ## Decisions made this session
 

@@ -24,6 +24,7 @@ import { handleFeatureUpgrade } from "./feature-upgrade.js";
 import { handleTasks } from "./tasks.js";
 import { handleHabits } from "./habits.js";
 import { handleNotes } from "./notes.js";
+import { handleExtension } from "./extension.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Built by Vite (see ../../frontend/vite.config.js) into frontend/dist. Only the
@@ -624,6 +625,10 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
         return;
       if (
         await handleNotes(context, { json, body, requireAuth, targetOwner })
+      )
+        return;
+      if (
+        await handleExtension(context, { json, body, requireAuth, targetOwner })
       )
         return;
       if (url.pathname === "/api/applications" && request.method === "GET")
