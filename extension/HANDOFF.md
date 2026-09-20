@@ -29,7 +29,7 @@ feature/011-jobquest-capture-extension
 development (head: a61e26e)
 
 ## Current Checkpoint
-CP3 completed. CP4 in progress.
+CP4 completed. CP5 in progress.
 
 ## Current Objective
 Implement the JobQuest V2.1 Browser Capture Extension — a Manifest V3 Chrome/Edge extension for capturing job postings and saving them to JobQuest.
@@ -39,15 +39,15 @@ Implement the JobQuest V2.1 Browser Capture Extension — a Manifest V3 Chrome/E
 - CP1: Migration 013 (extension_tokens) + backend/src/extension.js (7 routes + bearer-token auth) + wired into server.js + 16 extension test cases in app.test.js (49/49 passing)
 - CP2: Frontend Settings token manager UI (generate token with raw token display + copy, list active tokens, revoke token, navigation shortcut in settings tabs)
 - CP3: Extension skeleton (Manifest V3 manifest.json, brand PNG icons 16/48/128, background service worker, options page HTML/CSS/JS with connection tester and storage persistence, API client module)
+- CP4: Extractor engine + unit tests (schema.org JSON-LD parser, Greenhouse adapter, Lever adapter, Indeed adapter, generic meta/DOM fallback, orchestrator cascade, fixtures, and 6/6 passing unit tests)
 
 ## Partially Complete
 - None
 
 ## Currently In Progress
-- CP4: Extractor engine + unit tests
+- CP5: Popup core flow (popup.html/css/js + content.js extraction runner + resume dropdown + save application)
 
 ## Pending
-- CP4: Extractor engine + unit tests
 - CP5: Popup core flow
 - CP6: Duplicate detection UX
 - CP7: Playwright E2E tests
