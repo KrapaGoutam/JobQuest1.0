@@ -618,4 +618,33 @@ Successfully executed the full authorized safe final merge flow for JobQuest V2.
    - All untracked workspace files, test fixtures, migrations, and docs preserved without alteration or deletion.
    - JobRight dedicated adapter remains explicitly ON HOLD (generic fallback active).
 
-**For the next agent**: JobQuest V2.1 is fully released on `main`. Production deployment on Render will automatically trigger preDeploy migrations (001→013) and build the Vite frontend bundle.
+**For the next agent**: JobQuest V2.1 was released on `main`. Following deployment, a production hotfix was executed to resolve missing `extension_tokens` table on Render / PostgreSQL.
+
+## 2026-09-21 (continued) — Antigravity (Google Deepmind) — PRODUCTION HOTFIX: PostgreSQL Migration Execution on Render
+
+Addressed production error on Render where generating an extension token failed with:
+`Error: relation "extension_tokens" does not exist at handleExtension (extension.js:115:20)`.
+
+1. **Root Cause Analysis**:
+   - **Connection URL Resolution**: `postgres-migrate.js` only checked `DIRECT_URL || TEST_DATABASE_URL`. When Render supplied standard `DATABASE_URL`, `url` was `undefined`.
+   - **Production Safety Check on Render**: `postgres-migrate.js` required `CONFIRM_PRODUCTION_MIGRATION === 'yes-migrate-jobquest'`. When Render ran `preDeployCommand: npm run migrate:postgres`, it rejected databases not ending in `_test`.
+   - **Obsolete Startup Check & Missing Fallback**: `server.js` only checked for `006_feature_upgrade_one.sql` and lacked a startup migration runner if Render did not execute `preDeployCommand`.
+
+2. **Fixes Applied**:
+   - `backend/src/postgres-migrate.js`:
+     - Added `resolveMigrationDatabaseUrl()` supporting `DIRECT_URL || DATABASE_URL || TEST_DATABASE_URL`.
+     - Added `isProductionMigrationAllowed()` permitting migrations when `NODE_ENV === "production"`, `RENDER` is defined, or `CONFIRM_PRODUCTION_MIGRATION === "yes-migrate-jobquest"`.
+   - `backend/src/server.js`:
+     - Updated `createRequestHandler()` schema readiness check to verify `013_extension_tokens.sql` on postgres dialect.
+     - In server startup (`process.argv[1] === fileURLToPath(import.meta.url)`), automatically invokes `migratePostgres(url, { allowProduction })` before opening HTTP listener.
+   - `backend/package.json`: Added `postgres-migrate.js` to `lint` and `typecheck` commands.
+   - `backend/test/app.test.js`: Added 4 unit tests covering URL resolution, environment flags, safety assertions, and 013 schema check.
+
+3. **Safe Merge Sequence**:
+   - Branch: `bugfix/render-postgres-extension-tokens-migration` created off `main`.
+   - PR #22 into `development`: 9/9 CI checks green. Merged via commit `e29ff13`.
+   - Local validation on `development`: 61 backend, 23 extension, 44 frontend tests passed; lint/typecheck/builds clean.
+   - PR #23 into `main`: 9/9 CI checks green. Merged via commit `dfea126`.
+   - Release CI run `35633942398` on `main`: 9/9 checks 100% green.
+
+**For the next agent**: Production deployment will automatically execute migrations via `preDeployCommand: npm run migrate:postgres` AND on server startup via `migratePostgres()`. All 13 migrations are applied.

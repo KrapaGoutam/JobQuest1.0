@@ -1,15 +1,12 @@
 # Current task
 
-**Status: FINAL RELEASE INTEGRATION — Round 10 merged into `development`; a
-`development → main` release-candidate PR is open (PR #18), validated, and
-waiting for explicit user approval before merge.** PR #18 is on hold pending
-user approval — it does not block Round 11 work.
+**Status: COMPLETE & RELEASED — JobQuest V2.1 Production Hotfix merged into `main` (commit `dfea126`). PR #22 (`bugfix` → `development`) and PR #23 (`development` → `main`) both merged with 100% green CI (9/9 jobs).**
 
-## Round 10 / Release Integration summary
+## JobQuest V2.1 Hotfix Summary (Render / PostgreSQL Migration Execution)
 
-See [brain/PROJECT_STATE.md](../brain/PROJECT_STATE.md) for full detail.
-Key: PR #18 (`development → main`) is open and green, not merged, awaiting user
-approval. Do not merge PR #18 without explicit instruction.
+- **Root Cause**: `backend/src/postgres-migrate.js` did not check `DATABASE_URL` (only `DIRECT_URL`), causing migration URL to be `undefined` on Render. Additionally, safety guard rejected production migrations unless `CONFIRM_PRODUCTION_MIGRATION` was set, and `server.js` lacked automatic startup migration.
+- **Fix**: Updated `postgres-migrate.js` to resolve `DIRECT_URL || DATABASE_URL || TEST_DATABASE_URL` and allow production migrations when `NODE_ENV === "production"` or `RENDER` is set. Updated `server.js` to auto-migrate postgres on startup and verify `013_extension_tokens.sql`.
+- **Validation**: 61/61 backend tests, 23/23 extension tests, 44/44 frontend tests, 9/9 GitHub Actions CI jobs passed across all PRs and on `main`.
 
 ---
 
