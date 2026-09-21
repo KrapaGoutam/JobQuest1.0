@@ -4,30 +4,20 @@ Last updated: 2026-09-20, by Antigravity (Google Deepmind).
 
 ## Branch / commit
 
-- `development`: head `a61e26e` — Round 10 integrated.
-- `main`: head `e07caf3` — JobQuest V2 released (PR #18 merged).
-- `feature/011-jobquest-capture-extension`: head `b9c2692` — Round 11 Pre-Merge Stabilization & Defect Fixes complete. PR #20 targeting `development` with 9/9 CI checks green. Authorized for merge into `development`.
+- `main`: head `566fc45` — JobQuest V2.1 released (PR #21 merged). All 9 CI jobs green on `main`.
+- `development`: head `ffcb3e6` — fully synchronized with `main` and Round 11.
+- `feature/011-jobquest-capture-extension`: preserved. All PR #20 work integrated via regular merge commit `b277569`.
 
-- Local validation of the **integrated** `development` branch (not just the
-  feature branch): all green — reproducible install, static-quality (lint/
-  typecheck/build/build:frontend/migrate:check), security (audits + secret
-  scan), backend/frontend/integration/e2e tests (33/44/33/33), sqlite-postgres
-  migration test (1/1), full browser-and-visual suite (63 passed, 0 failed, 7
-  skipped), fresh-database migration chain (001→012), and a representative
-  upgrade simulation (a database seeded with only `main`'s historical 001–008,
-  incrementally migrated to 012) — all clean.
+- Local and remote validation of the **integrated** `main` and `development` branches: all green — reproducible install, static-quality (lint/typecheck/build/build:frontend/migrate:check), security, backend/frontend/integration/e2e/extension tests (57/44/33/33/23), sqlite-postgres migration test, full browser-and-visual suite (all 9 CI jobs passed), fresh-database migration chain (001→013), and zero regressions across all domains.
 
 ## What's done
 
-**Round 10 merged into `development`.** PR #17 verified against its own
-previously-reported state before merging (head commit, CI, mergeability, no
-conflicts — nothing had drifted), then merged via a regular merge commit.
+**JobQuest V2.1 (Round 11 Browser Capture Extension) fully integrated and released to `main`.**
+- PR #20 (`feature/011-jobquest-capture-extension` → `development`) merged via regular merge commit `b277569` after all 9 CI jobs passed.
+- `development` verified locally across all test suites, synced with Render deployment fix (`--include=dev`), and PR #21 opened targeting `main`.
+- PR #21 (`development` → `main`) merged via regular merge commit `566fc45` after all 9 CI jobs passed.
+- All 9 GitHub Actions CI jobs passed on `main` push run `35609198962`.
 
-**Release-candidate PR open**: PR #18, `development` → `main`, titled
-"release: JobQuest V2". Full release-notes-structured description (Summary,
-Major Features, Architecture, Database, Security, Accessibility, Performance,
-Testing, Render, Neon, Main divergence reconciliation, Accepted V2 Debt,
-Rollback). **Not merged — waiting for explicit user approval.**
 
 Render readiness: **PASS**. Neon readiness: **PASS**. Both verified directly
 against the integrated code (build command, Vite output path, health check,
@@ -81,11 +71,10 @@ Round 10 merge.
 
 ## Blockers
 
-None. The open decisions are the user's:
-- Review and approve/merge PR #20 (`feature/011-jobquest-capture-extension` -> `development`).
-- Review and approve/merge PR #18 (`development` -> `main`).
+None. JobQuest V2.1 is fully merged into `main` with 100% green CI.
 
 ## Next safe action
 
-Ensure PR #20 has clean local validation passing, stage and push stabilization commits, and deliver the final report. Do NOT merge PR #20 into `development`. Do NOT merge PR #18 into `main`. Do NOT deploy to production.
+JobQuest V2.1 integration complete. The user can deploy to Render/production or load the unpacked extension into Chrome/Edge for live usage. All git history and branches are safely preserved.
+
 

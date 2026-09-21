@@ -55,14 +55,17 @@ approval. Do not merge PR #18 without explicit instruction.
   - `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`: Updated with Defect 4 and Defect 5 analyses and decisions.
   - `brain/DECISIONS.md`: Logged `2026-09-21 — Round 11: Canonical Workflow Stages Synchronization & Duplicate Deep-Linking`.
 
+## Release Status: MERGED TO MAIN (JobQuest V2.1 Released)
+
+- **PR #20 (`feature/011-jobquest-capture-extension` → `development`)**: MERGED (commit `b277569`) with 9/9 CI jobs green.
+- **Sync `origin/main` into `development`**: MERGED (commit `ffcb3e6`) with production build fix (`--include=dev`).
+- **PR #21 (`development` → `main`)**: MERGED (commit `566fc45`) with 9/9 CI jobs green on both PR and push runs.
+- **`main` Head**: `566fc45` — validated locally and remotely across all suites.
+- **Protected Rules Upheld**: All git history, branches, migrations, and untracked files completely preserved. Zero destructive git commands used.
+
 ## Next exact action
 
-Complete the authorized final merge flow:
-1. Merge PR #20 (`feature/011-jobquest-capture-extension` → `development`) via regular merge commit.
-2. Switch to `development`, verify local test suite and CI.
-3. Merge `development` → `main` via regular merge commit or release PR after full validation.
-4. Verify Render/Neon readiness and final status.
-Preserve all history, untracked files, and documentation. DO NOT DELETE ANYTHING.
+Ready for user verification or production deployment. All automated tests, E2E suites, and CI matrices passing.
 
 ## Key Decisions
 
