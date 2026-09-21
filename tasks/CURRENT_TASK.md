@@ -30,18 +30,24 @@ approval. Do not merge PR #18 without explicit instruction.
 - **Fixed Defect 2 (Tailored Resume Manual Entry HTTP 400)**:
   - Root cause: `validateApplication` in `backend/src/service.js` checked `data.resume_id !== undefined && data.resume_id !== ""`. When payload passed `resume_id: null`, `Number(null)` became 0, failing `0 < 1`.
   - Solution: Explicitly allowed `data.resume_id === null` in `service.js` and updated `POST /api/extension/applications`. Added 3-mode resume picker in `extension/popup.html` / `popup.js` (Select from library, Enter manually, None).
+- **Fixed Defect 3 (Non-Standard Career Page & Aggregator Extraction Failure)**:
+  - Root cause: Extractor unconditionally checked metadata (`og:title`, `<title>`) before rendered DOM headings, capturing marketing slogans ("Jobright: Your AI Job Search Copilot") and platform branding ("Jobright AI") on aggregators, or capturing company name as title ("Tensor") and leaving company blank on employer career pages. Also failed on dual-suffix salaries (`$120K/yr - $140K/yr`).
+  - Solution: Enforced strict source-quality hierarchy: high-confidence semantic DOM headings outrank metadata slogans; implemented `isGenericTitle()`; separated aggregator domains (branding never assigned as employer) from direct employer sites (safe domain brand attribution); added multi-location joining (`"; "`), workplace arrangement fallback from location chips, and dual-suffix salary regex.
+  - Fixtures: `extension/fixtures/tensor_career_job.html` & `extension/fixtures/aggregator_jobright_job.html`.
+  - Zero hardcoding of company names or role titles; JobRight-specific adapter remains DEFERRED / ON HOLD.
 - **Real-World Test Suite & Verification**:
-  - `backend/test/app.test.js`: 52/52 passing (added tests for `COMPANY_ONLY`, `SAME_ROLE`, bounded results, and manual resume entry; fixed weekly recurrence date-flake for 2028).
+  - `extension/tests/extractor.test.js`: 16/16 passing (includes Tensor, Aggregator, generic title rejection, and DOM vs metadata priority suites).
+  - `backend/test/app.test.js`: 52/52 passing (added tests for `COMPANY_ONLY`, `SAME_ROLE`, bounded results, and manual resume entry).
   - `extension/tests/api.test.js`: 10/10 passing (added unit tests for `normalizeJobUrl`, `normalizeText`, resume payload formatting, and duplicate classification).
   - `backend/e2e/extension.spec.js`: 10/10 passing across all 5 responsive viewports.
   - `npm run test:frontend`: 44/44 passing.
   - `npm run lint` & `npm run typecheck`: clean.
 - **Documentation Suite Delivered**:
-  - `docs/EXTENSION_ARCHITECTURE.md`: Full architecture specification.
-  - `docs/EXTENSION_TEST_PLAN.md`: 34-scenario matrix & real-world manual testing checklist.
+  - `docs/EXTENSION_ARCHITECTURE.md`: Full architecture specification + Extractor Engine Cascade.
+  - `docs/EXTENSION_TEST_PLAN.md`: 34-scenario matrix, generic extraction matrix, and real-world manual testing checklists.
   - `docs/EXTENSION_SECURITY.md`: Auth scoping, IDOR, input sanitation, rate-limiting, and URL validation posture.
   - `docs/EXTENSION_INSTALLATION.md`: Step-by-step developer unpacked installation guide.
-  - `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`: Updated with stabilization defect analyses and decisions.
+  - `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`: Updated with stabilization defect analyses, generic extraction hardening, and decisions.
   - `tasks/BACKLOG.md`: Formalized JobRight.ai deferred status (ON HOLD).
 
 ## Next exact action
@@ -54,6 +60,8 @@ DO NOT merge PR #20. DO NOT merge to `development` or `main`. DO NOT deploy to p
 - Duplicate detection: Company-first 4-state model (`EXACT_POSTING`, `SAME_ROLE`, `COMPANY_ONLY`, `NONE`).
 - Company-only matches are informational only (`banner.info`), non-blocking.
 - Manual tailored resume strings supported (`resume_id: null`, `resume_version: string`).
+- Generic extraction hierarchy: Semantic rendered DOM headings outrank site-level metadata; marketing slogans and generic portal words rejected; aggregator platform brands never assigned as employer company.
 - JobRight.ai support is explicitly DEFERRED / ON HOLD.
 - No React, no Tailwind, no Selenium (Playwright + vanilla JS only).
+
 

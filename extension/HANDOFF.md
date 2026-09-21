@@ -132,8 +132,8 @@ Planned for CP4:
 - None currently
 
 ## Tests Passing
-- All prior round tests (backend 52, frontend 44, extension unit 10, e2e 10 across 5 viewports) — all green
-- Total extension tests passing: 20/20 (10 unit, 10 E2E)
+- All prior round tests (backend 52, frontend 44, extension extractor 16, extension api 10, e2e 10 across 5 viewports) — all green
+- Total extension tests passing: 36/36 (16 extractor unit, 10 API client unit, 10 E2E across 5 viewports)
 
 ## Tests Failing
 - None
@@ -144,18 +144,20 @@ Planned for CP4:
 ## Fixed Bugs
 - Defect 1: False duplicate banner on fresh captures due to CSS specificity overriding [hidden]
 - Defect 2: HTTP 400 when submitting tailored resume manual entry with resume_id: null
+- Defect 3: Non-standard career page and job aggregator extraction failure (marketing slogan/brand captured instead of job title/company, dual-suffix salary truncation, missing workplace fallback). Solved architecturally via source-quality hierarchy: high-confidence semantic DOM headings outrank metadata slogans; aggregator domain platform brand never assigned as employer company; employer domains attribute domain name; dual-suffix salary regex; multi-location semicolon joining.
 
 ## Technical Debt
 - JobRight.ai support deferred to V2.1/V2.2 (logged in tasks/BACKLOG.md)
 
 ## Current CI Status
-All local CI checks passing (backend 52/52, frontend 44/44, extension 10/10, e2e 10/10 across 5 viewports, lint clean, typecheck clean, build:frontend clean)
+All local CI checks passing (backend 52/52, frontend 44/44, extension extractor 16/16, extension api 10/10, e2e 10/10 across 5 viewports, lint clean, typecheck clean, build:frontend clean)
 
 ## Current PR Status
 PR #20 open against `development`: https://github.com/KrapaGoutam/JobQuest1.0/pull/20
 
 ## Next Exact Action
 Await CI completion and user review/merge of PR #20. Do not merge without user approval. Do not touch `main`.
+
 
 
 ## Do Not Change

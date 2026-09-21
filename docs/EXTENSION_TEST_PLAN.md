@@ -78,6 +78,41 @@ To validate JobQuest Capture in real-world local conditions, execute this manual
 
 ---
 
+## Generic Career Page Extraction Validation
+
+Non-standard employer career portals and job aggregator sites often lack structured JSON-LD schemas or present marketing slogans in `<title>` and OpenGraph tags. The hardened generic extraction pipeline enforces a strict source-quality hierarchy: high-confidence semantic DOM headings outrank site-level metadata.
+
+### Generic Extraction Test Matrix
+
+| # | Scenario | Test Input / Condition | Expected Extraction Behavior |
+|---|---|---|---|
+| **G1** | **Employer Career Portal (`tensor.auto`)** | `<title>Tensor</title>`, `<h1>FPGA Engineer: ISP</h1>`, 4 locations | Title: `"FPGA Engineer: ISP"`, Company: `"Tensor"` (derived from non-aggregator domain), Locations: 4 items joined by `"; "`. |
+| **G2** | **Job Aggregator (`jobright.ai`)** | `og:title="Jobright: Your AI Job Search Copilot"`, `og:site_name="Jobright AI"`, rendered DOM `<h1>QA Automation Engineer...</h1>`, company badge `"GetInsured"`, `$120K/yr - $140K/yr` | Title: `"QA Automation Engineer..."` (marketing slogan rejected), Company: `"GetInsured"` (aggregator brand rejected), Salary: `"$120K/yr - $140K/yr"`, Workplace: `"Onsite"`. |
+| **G3** | **Marketing Slogan Rejection** | `<title>Acme: The #1 Platform for Hiring</title>`, `<h1>Staff Engineer</h1>` | Slogan rejected via `isGenericTitle()`. DOM `<h1>` selected as title: `"Staff Engineer"`. |
+| **G4** | **Site Branding vs Employer Separation** | Page on `myaggregatorsite.com/jobs/456` with employer name in DOM badge `"FinTech Corp"` | Aggregator domain recognized via `AGGREGATOR_AND_BOARD_DOMAINS`. Company set to `"FinTech Corp"`, never `"Myaggregatorsite"`. |
+| **G5** | **Direct Employer Brand Attribution** | Page on direct employer site `https://tensor.auto/careers/role` with no explicit company tag | Direct employer domain clean name `"Tensor"` used as fallback company. |
+| **G6** | **Multiple Location Handling** | Role with multiple locations across distinct tags or list items | All locations preserved and formatted with delimiter (e.g. `"San Jose, CA; Austin, TX; London, UK"`). |
+| **G7** | **Work Arrangement Fallback** | Workplace tag missing, but location tag contains `"Remote"` or `"Hybrid"` | Workplace arrangement correctly inferred (`"Remote"` or `"Hybrid"`) from location text. |
+| **G8** | **Salary Period Suffix Parsing** | Salary range formatted with dual suffixes: `"$120K/yr - $140K/yr"` or `"$60/hr - $75/hr"` | Full range preserved without truncation or suffix corruption. |
+| **G9** | **Title / Company Collision Check** | Title extracted from `<title>` equals Company name (e.g. both `"Tensor"`) | Collision detected; title replaced by dominant role heading from rendered DOM. |
+
+### Generic Career Page Manual Checklist
+
+```markdown
+### Generic Career Page Extraction Checklist
+- [ ] 1. Non-standard career page title resolution: verify role heading is extracted instead of `<title>` when title contains only company name.
+- [ ] 2. Non-standard career page company resolution: verify company is extracted from employer domain or DOM badge, not left blank.
+- [ ] 3. Marketing slogan rejection: verify phrases like "Copilot", "AI Job Search", "Search Jobs" in metadata are rejected in favor of DOM heading.
+- [ ] 4. Site branding vs. employer separation: verify aggregator branding is NEVER saved as employer company name on aggregator listings.
+- [ ] 5. Multiple location handling: verify multi-office or remote+onsite options are captured as semicolon-separated list.
+- [ ] 6. Work arrangement fallback: verify "Remote" / "Hybrid" inside location chips is properly mapped to work arrangement field.
+- [ ] 7. Salary period suffix parsing: verify salaries with dual suffixes ($120K/yr - $140K/yr) capture cleanly.
+- [ ] 8. Aggregator vs. employer career page behavior: verify employer sites attribute domain brand while aggregators require DOM employer badge.
+- [ ] 9. JobRight-specific adapter remains deferred: verify JobRight pages are parsed using generic fallback without hardcoded adapters or rules.
+```
+
+---
+
 ## Supported Extractors & Status
 
 | Target Source | Status | Strategy |
@@ -86,5 +121,5 @@ To validate JobQuest Capture in real-world local conditions, execute this manual
 | **Greenhouse ATS (`greenhouse.io`)** | ✅ Active | Dedicated DOM adapter |
 | **Lever ATS (`jobs.lever.co`)** | ✅ Active | Dedicated DOM adapter |
 | **Indeed (`indeed.com`)** | ✅ Active | Dedicated DOM adapter |
-| **Generic DOM / Meta Fallback** | ✅ Active | OpenGraph, Twitter Cards, `<title>`, heading heuristics |
-| **JobRight.ai** | ⏸️ **ON HOLD** | **DEFERRED TO V2.1/V2.2**. Not part of current acceptance criteria. |
+| **Generic DOM / Meta Fallback** | ✅ Active | Hardened source-quality hierarchy: semantic DOM heading outranks metadata slogans; aggregator vs employer domain separation; dual-suffix salary parser |
+| **JobRight.ai** | ⏸️ **ON HOLD** | **DEFERRED TO V2.1/V2.2**. Parsed via hardened generic extractor fallback without site-specific adapter. |

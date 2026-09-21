@@ -178,18 +178,42 @@ Tailored Resume
 
 ---
 
-## Extractor Engine Cascade
+## Extractor Engine Cascade & Source-Quality Hierarchy
 
-Page extraction runs inside `content.js` without external dependencies:
+Page extraction runs inside `content.js` and `extension/extractors/` following strict source-quality confidence ranking:
 
 ```text
-Priority 1: schema.org/JobPosting JSON-LD (highest precision)
+Priority 1: schema.org/JobPosting JSON-LD (highest precision structured data)
     ↓
-Priority 2: Site Adapters (Greenhouse, Lever, Indeed)
+Priority 2: Verified Site Adapters (Greenhouse, Lever, Indeed)
     ↓
-Priority 3: OpenGraph & Twitter Card Meta Tags
+Priority 3: Semantic Rendered Job DOM
+            - Scored candidate headings (main h1, article h1, [class*='job'] h1)
+            - Proximity to job metadata (location, salary, employment type)
+            - Excludes hidden elements, nav, headers, footers, modals, cookie notices
     ↓
-Priority 4: DOM Heuristics (headings, breadcrumbs, regex matchers)
+Priority 4: Job-Specific Metadata
+            - og:title / twitter:title / meta description
+            - Subject to Title Sanity Guard (rejects marketing slogans, e.g. "Copilot", and site brands)
     ↓
-Fallback: Blank fields (never fabricate missing information)
+Priority 5: Low-Confidence Fallbacks
+            - document.title (lowest priority, stripped of site suffix)
+            - Direct employer hostname brand (only for non-aggregator/non-board sites)
+    ↓
+Fallback: Blank fields (never fabricate missing information; editable in popup)
 ```
+
+### Source-Quality Principles
+
+1. **Actual Job Data Outranks Site Branding**:
+   - Site-level SEO or marketing metadata (e.g. `"Jobright: Your AI Job Search Copilot"` or `<title>Tensor</title>`) must never overwrite a credible rendered job heading (e.g. `"QA Automation Engineer (SDET) AI-Enhanced Testing"` or `"FPGA Engineer: ISP"`).
+2. **Platform / Aggregator vs Hiring Employer**:
+   - For job boards and aggregators (`jobright.ai`, `linkedin.com`, `indeed.com`, `greenhouse.io`, etc.), the platform domain is recorded as `source`, while `company` is extracted from the job content itself. Platform branding is never assigned to `company`.
+   - For direct employer websites (e.g. `tensor.auto`), the site brand may be used as `company` when no conflicting company name is specified.
+3. **Company / Title Cross-Check**:
+   - If a proposed job title is identical to the extracted company name (e.g. `jobTitle === "Tensor"` and `company === "Tensor"`), the title is replaced by the semantic role heading.
+4. **Multiple Locations**:
+   - When multiple locations are listed (e.g. Tensor's four locations), they are preserved cleanly in a semicolon-delimited string (`"San Jose, California, US; Singapore; Dubai, UAE; Barcelona, Spain"`) rather than picking one arbitrarily.
+5. **No Speculation**:
+   - If a field (salary, arrangement, location) is not explicitly present, it remains null/blank. Missing values are filled by the user in the popup.
+

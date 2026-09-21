@@ -315,13 +315,38 @@ During local end-to-end validation of PR #20, two real-world defects were discov
   4. Added mode-switch cleanup ensuring stale IDs or manual strings are discarded on mode transition.
 - **Regression Tests**: Added in `backend/test/app.test.js`, `extension/tests/api.test.js`, and `backend/e2e/extension.spec.js`.
 
+### Defect 3: Non-Standard Career Page & Aggregator Extraction Failure
+- **Symptom**:
+  1. *Job aggregator listing (`jobright.ai/jobs/info/...`)*: Visibly displayed Company: `GetInsured` and Title: `QA Automation Engineer (SDET) AI-Enhanced Testing`, but extension captured Title: `"Jobright: Your AI Job Search Copilot"` and Company: `"Jobright AI"`.
+  2. *Direct employer career portal (`tensor.auto/careers/...`)*: Visibly displayed Title: `FPGA Engineer: ISP` and Company: `Tensor`, but extension captured Title: `"Tensor"` and Company: `blank`.
+- **Root Causes**:
+  1. Generic extractor prioritized metadata (`og:title`, `<title>`) unconditionally before checking DOM `<h1>` elements. On aggregators, `og:title` contains marketing slogans ("Jobright: Your AI Job Search Copilot"), which passed the naive `length >= 3` check and blocked DOM inspection.
+  2. Aggregator `og:site_name` (`"Jobright AI"`) was assigned as `company`, erroneously naming the aggregator platform as the employer.
+  3. On employer career portals like Tensor, `<title>` contained only `"Tensor"`. The extractor accepted `"Tensor"` as the job title, leaving `company` blank, while ignoring the visible rendered `<h1>FPGA Engineer: ISP</h1>`.
+  4. Salary regex only anticipated single period suffixes (e.g. `$120,000/yr` or `$120k - $140k`), failing on dual-suffix representations like `$120K/yr - $140K/yr`.
+  5. Workplace arrangement tag was missing on some career portals where `"Remote"` or `"Hybrid"` was placed directly inside a location chip.
+- **Architectural Resolution (No Hardcoding, No Dedicated JobRight Adapter)**:
+  1. **Source-Quality Extraction Cascade**: High-confidence rendered semantic DOM headings outrank site-level `<title>` and OpenGraph tags.
+  2. **Marketing Slogan & Generic Title Rejection**: Implemented `isGenericTitle(title, siteBrand, domain)` to reject marketing slogans ("Copilot", "AI Job Search"), generic portal labels ("Careers", "Open Positions", "Jobs", "Home"), and company-name-only titles.
+  3. **Semantic DOM Heading Scoring**: Evaluates candidate headings across semantic scopes (`main h1`, `article h1`, `[class*='job'] h1`), penalizing hidden elements (`aria-hidden`, `display: none`), navigation (`<nav>`, `<header>`, `<footer>`), and cookie notices.
+  4. **Aggregator vs Employer Domain Separation**: Maintained `AGGREGATOR_AND_BOARD_DOMAINS` (`jobright.ai`, `greenhouse.io`, `lever.co`, etc.). On aggregator domains, platform branding is **never** assigned as the employer company. On direct employer portals (e.g. `tensor.auto`), clean domain name (`"Tensor"`) is safely attributed as employer company.
+  5. **Company / Title Collision Guard**: If extracted title equals company name, the title is replaced by the dominant role heading from the rendered DOM.
+  6. **Multi-Location & Workplace Arrangement**: Preserves multiple location entries joined by `"; "`. Falls back to checking location chips for `"Remote"`, `"Hybrid"`, or `"Onsite"` when dedicated arrangement tags are absent.
+  7. **Dual-Period Suffix Salary Regex**: Fully supports `$120K/yr - $140K/yr`, `$60/hr - $80/hr`, and standard ranges.
+- **Validation Fixtures & Test Results**:
+  - `extension/fixtures/tensor_career_job.html`: Verified Title: `"FPGA Engineer: ISP"`, Company: `"Tensor"`, Locations: 4 items.
+  - `extension/fixtures/aggregator_jobright_job.html`: Verified Title: `"QA Automation Engineer (SDET) AI-Enhanced Testing"`, Company: `"GetInsured"`, Salary: `"$120K/yr - $140K/yr"`, Workplace: `"Onsite"`.
+  - Unit tests in `extension/tests/extractor.test.js`: 16/16 passed.
+
 ---
 
 ## JobRight.ai Support Status
 
 **Explicitly ON HOLD / Deferred to V2.1/V2.2.**
 
-- No JobRight-specific extractors or selectors were implemented in this round.
+- No JobRight-specific extractors, URL patterns, or proprietary selectors were implemented.
+- JobRight pages are parsed strictly via the **hardened generic extractor fallback**, demonstrating general resilience across aggregators.
 - No Selenium dependencies were added.
-- Dedicated adapter and SPA exploration will be conducted in a subsequent round after inspecting JobRight's rendered DOM and structured metadata.
+- A dedicated JobRight adapter remains a future consideration for later rounds after further production telemetry.
+
 

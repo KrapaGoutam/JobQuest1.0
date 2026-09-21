@@ -181,3 +181,10 @@ Additionally, match history is explicitly bounded to top 3 recent applications (
 
 **Why**: User instruction explicitly confirmed JobRight.ai support is ON HOLD. JobRight.ai relies on dynamic client-side rendering with auth walls and volatile selectors. Attempting to support it via browser automation (like Selenium) violates stack constraints (Playwright only for tests, vanilla JS extension only).
 
+## 2026-09-20 — Round 11: Generic Career Page Extraction Source-Quality Hierarchy
+
+**Decision**: Replaced naive metadata-first title/company resolution with a strict source-quality hierarchy in the generic extractor (`extension/extractors/generic.js` and `extension/content.js`). High-confidence rendered semantic DOM headings (`main h1`, `article h1`, `[class*='job'] h1`) outrank site metadata (`<title>`, `og:title`). Slogans and generic words ("Copilot", "AI Job Search", "Careers", "Open Positions") are rejected via `isGenericTitle()`. Aggregator platform brands (e.g. `jobright.ai`) are cataloged so their domain branding is never assigned as the employer company, whereas direct employer portals (e.g. `tensor.auto`) safely attribute their domain name.
+
+**Why**: Real-world captures on aggregator sites (e.g. JobRight) extracted site marketing slogans ("Jobright: Your AI Job Search Copilot") as the job title and the aggregator platform ("Jobright AI") as the employer, while direct employer portals (e.g. Tensor) extracted the portal brand ("Tensor") as the title and left company blank. The hardened cascade resolves both failure classes architecturally without hardcoded company names or dedicated site-specific adapters.
+
+

@@ -518,3 +518,39 @@ Addressed real-world local validation feedback on branch `feature/011-jobquest-c
 
 **For the next agent**: PR #20 is updated on origin. Do NOT merge PR #20 into `development` without explicit user approval. Do NOT merge to `main` or deploy to production.
 
+## 2026-09-20 (continued) — Antigravity (Google Deepmind) — Generic Career Page Extraction Hardening
+
+Addressed non-standard career portal & job aggregator extraction defects surfaced in real-world testing (Tensor and JobRight examples):
+
+1. **Defect 3 Fixed (Generic Career Page & Aggregator Extraction Failure)**:
+   - Root causes:
+     - Aggregators (e.g. `jobright.ai`): Extractor checked metadata before rendered DOM, selecting marketing slogan (`og:title="Jobright: Your AI Job Search Copilot"`) as title and platform branding (`og:site_name="Jobright AI"`) as company, ignoring rendered `<h1>QA Automation Engineer...</h1>` and employer badge (`GetInsured`).
+     - Employer career portals (e.g. `tensor.auto`): `<title>Tensor</title>` was assigned as title, leaving company blank and ignoring rendered `<h1>FPGA Engineer: ISP</h1>`.
+     - Dual-suffix salaries (`$120K/yr - $140K/yr`): Regex truncated before `/yr`.
+     - Workplace arrangement in location chip (`Remote` inside `<span class="location">`): Arrangement defaulted to undefined.
+   - Architectural resolution (no hardcoding, no dedicated JobRight adapter):
+     - Source-Quality Hierarchy: High-confidence rendered semantic DOM headings (`main h1`, `article h1`, `[class*='job'] h1`) strongly outrank site metadata.
+     - `isGenericTitle()` rejects slogans ("Copilot", "AI Job Search", etc.) and generic portal words ("Careers", "Jobs", "Open Positions", "Home").
+     - `AGGREGATOR_AND_BOARD_DOMAINS` catalog prevents aggregator site branding from ever being assigned as employer company. Direct employer domains safely attribute domain brand.
+     - Multi-location list preservation (semicolon joined).
+     - Location-based workplace arrangement fallback.
+     - Dual-suffix salary regex.
+     - Mirrored exactly between `extension/extractors/generic.js` and `extension/content.js`.
+
+2. **Fixtures & Tests Added**:
+   - `extension/fixtures/tensor_career_job.html`: Verified Title: `"FPGA Engineer: ISP"`, Company: `"Tensor"`, Locations: 4 items.
+   - `extension/fixtures/aggregator_jobright_job.html`: Verified Title: `"QA Automation Engineer (SDET) AI-Enhanced Testing"`, Company: `"GetInsured"`, Salary: `"$120K/yr - $140K/yr"`, Workplace: `"Onsite"`.
+   - `extension/tests/extractor.test.js`: 16/16 tests passing (expanded from 6).
+   - All tests passing: 52/52 backend, 44/44 frontend, 10/10 Playwright E2E viewports, 0 lint/typecheck errors.
+
+3. **Documentation Updated**:
+   - `docs/EXTENSION_ARCHITECTURE.md`: Documented Extractor Engine Cascade, source-quality hierarchy, and aggregator vs employer company attribution.
+   - `docs/EXTENSION_TEST_PLAN.md`: Added Generic Career Page Extraction test matrix and manual checklist.
+   - `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`: Recorded Defect 3 analysis, architectural fix, and re-affirmed JobRight adapter is ON HOLD.
+   - `brain/DECISIONS.md`: Logged extraction hierarchy decision.
+   - `tasks/CURRENT_TASK.md`: Updated with Defect 3 fixes.
+   - `extension/HANDOFF.md`: Updated extension handoff.
+
+**For the next agent**: PR #20 is updated on origin. Do NOT merge PR #20 into `development` without explicit user approval. Do NOT merge to `main` or deploy to production.
+
+
