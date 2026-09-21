@@ -62,9 +62,25 @@ export async function migratePostgres(url, options = {}) {
   }
 }
 
+export function resolveMigrationDatabaseUrl() {
+  return (
+    process.env.DIRECT_URL ||
+    process.env.DATABASE_URL ||
+    process.env.TEST_DATABASE_URL
+  );
+}
+
+export function isProductionMigrationAllowed() {
+  return (
+    process.env.CONFIRM_PRODUCTION_MIGRATION === "yes-migrate-jobquest" ||
+    process.env.NODE_ENV === "production" ||
+    Boolean(process.env.RENDER)
+  );
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const url = process.env.DIRECT_URL || process.env.TEST_DATABASE_URL;
-  const allowProduction = process.env.CONFIRM_PRODUCTION_MIGRATION === "yes-migrate-jobquest";
+  const url = resolveMigrationDatabaseUrl();
+  const allowProduction = isProductionMigrationAllowed();
   migratePostgres(url, { allowProduction })
     .then((versions) => console.log(`Applied PostgreSQL migrations: ${versions.join(", ")}`))
     .catch((error) => {
