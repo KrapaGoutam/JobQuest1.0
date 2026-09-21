@@ -458,3 +458,130 @@ duplicate `push`-triggered one, is what actually matters for merge-readiness).
 **Do not merge PR #18 into `main`, and do not deploy, without the user's separate,
 explicit approval** - this session's instructions were unusually explicit and
 detailed about this exact point.
+
+## 2026-09-20 — Antigravity (Google Deepmind) — Round 11 (Browser Capture Extension) CP0–CP8 implemented
+
+Implemented Round 11: Manifest V3 browser extension ("JobQuest Capture") for Chrome and Edge on branch `feature/011-jobquest-capture-extension` (off `development`).
+
+Completed:
+- CP0: Specification & feature document (`docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`).
+- CP1: Migration 013 (`extension_tokens`), 7 extension API endpoints with bearer-token authentication (`backend/src/extension.js`), wired into server, 16 test cases in `backend/test/app.test.js`.
+- CP2: Frontend token manager UI in Settings (`frontend/src/app.js`), raw token one-time display with copy button, token list, and revocation.
+- CP3: Extension skeleton (Manifest V3, icons, background service worker, options page for server URL and token management, client API library).
+- CP4: Multi-tier job extractor engine (JSON-LD schema.org JobPosting parser, Greenhouse ATS adapter, Lever ATS adapter, Indeed adapter, generic DOM/meta heuristics fallback), unit test fixtures, and extractor tests.
+- CP5: Popup capture interface (`extension/popup.html`, `popup.css`, `popup.js`), content script runner (`extension/content.js`), dynamic resume dropdown, editable pre-filled capture form, and save flow.
+- CP6: Duplicate detection UX (Level-1 exact URL and Level-2 company+role matching) with interactive warning banner and "Open Existing" / "Save Anyway" actions.
+- CP7: Playwright E2E test suite (`backend/e2e/extension.spec.js`) validating the full extension workflow across 5 viewports (`desktop`, `compact-desktop`, `tablet`, `mobile`, `small-mobile`) with 10/10 passing tests.
+- CP8: CI matrix update (`.github/workflows/ci.yml`) adding `extension` test suite; extension documentation (`extension/README.md`).
+
+Verified:
+- Backend tests: 49/49 passed.
+- Frontend tests: 44/44 passed.
+- Extension unit tests: 6/6 passed.
+- Playwright E2E suite: 10/10 passed across all 5 viewports.
+- Linting & typechecking: all JS files across backend, frontend, and extension clean.
+- Frontend production bundle build (`npm run build:frontend`): succeeded.
+
+## 2026-09-20 — Antigravity (Google Deepmind) — Round 11 Pre-Merge Defect Fixes & Stabilization
+
+Addressed real-world local validation feedback on branch `feature/011-jobquest-capture-extension`:
+
+1. **Defect 1 Fixed (False Duplicate Banner on First Capture)**:
+   - Root cause: CSS rule `.banner { display: flex; }` overrode the browser user-agent's `[hidden]` attribute.
+   - Fix: Added `[hidden] { display: none !important; }` in `extension/popup.css`. Removed static placeholder text from `extension/popup.html`.
+   - Refactored `GET /api/extension/duplicate-check` to implement **Company-First duplicate classification**:
+     - `EXACT_POSTING`: Normalized URL match (blocking duplicate).
+     - `SAME_ROLE`: Normalized company + title match (blocking duplicate).
+     - `COMPANY_ONLY`: Prior applications exist at the same company for different roles (informational only, non-blocking `.banner.info` displaying prior vs current role, normal save permitted without override).
+     - `NONE`: No history found.
+     - Match history explicitly bounded to top 3 recent records (`LIMIT 3`).
+
+2. **Defect 2 Fixed (Tailored Resume Manual Entry HTTP 400)**:
+   - Root cause: `validateApplication` in `backend/src/service.js` tested `data.resume_id !== undefined && data.resume_id !== ""`. When payload sent `resume_id: null`, `Number(null)` was evaluated as 0, failing `0 < 1`.
+   - Fix: Explicitly allowed `data.resume_id === null` in `service.js`. Added 3-mode tailored resume interface in `extension/popup.html` and `extension/popup.js` (Select from library, Enter manually with validation, None). Updated `POST /api/extension/applications` to accept `resume_id: null` with `resume_version`.
+
+3. **Realistic Test Suite Additions & Verification**:
+   - `backend/test/app.test.js`: 52/52 passing (added tests for `COMPANY_ONLY`, `SAME_ROLE`, bounded results, and manual resume handling; fixed date-flake in Round 7 recurrence test for 2028).
+   - `extension/tests/api.test.js`: 10/10 passing (added unit tests for `normalizeJobUrl`, `normalizeText`, resume payload formatting, and duplicate classification).
+   - `backend/e2e/extension.spec.js`: 10/10 passing across 5 viewports.
+   - `npm run test:frontend`: 44/44 passing.
+   - `npm run lint` & `npm run typecheck`: clean across all files.
+   - `npm run build:frontend`: clean production bundle.
+
+4. **Documentation Created**:
+   - `docs/EXTENSION_ARCHITECTURE.md`: Complete architectural specification.
+   - `docs/EXTENSION_TEST_PLAN.md`: 34 test matrix scenarios + real-world manual testing checklist.
+   - `docs/EXTENSION_SECURITY.md`: Comprehensive security review.
+   - `docs/EXTENSION_INSTALLATION.md`: Developer unpacked installation guide.
+   - `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`: Updated with stabilization defect analyses and decisions.
+   - `tasks/BACKLOG.md`: Logged JobRight.ai support as deferred (ON HOLD).
+
+**For the next agent**: PR #20 is updated on origin. Do NOT merge PR #20 into `development` without explicit user approval. Do NOT merge to `main` or deploy to production.
+
+## 2026-09-20 (continued) — Antigravity (Google Deepmind) — Generic Career Page Extraction Hardening
+
+Addressed non-standard career portal & job aggregator extraction defects surfaced in real-world testing (Tensor and JobRight examples):
+
+1. **Defect 3 Fixed (Generic Career Page & Aggregator Extraction Failure)**:
+   - Root causes:
+     - Aggregators (e.g. `jobright.ai`): Extractor checked metadata before rendered DOM, selecting marketing slogan (`og:title="Jobright: Your AI Job Search Copilot"`) as title and platform branding (`og:site_name="Jobright AI"`) as company, ignoring rendered `<h1>QA Automation Engineer...</h1>` and employer badge (`GetInsured`).
+     - Employer career portals (e.g. `tensor.auto`): `<title>Tensor</title>` was assigned as title, leaving company blank and ignoring rendered `<h1>FPGA Engineer: ISP</h1>`.
+     - Dual-suffix salaries (`$120K/yr - $140K/yr`): Regex truncated before `/yr`.
+     - Workplace arrangement in location chip (`Remote` inside `<span class="location">`): Arrangement defaulted to undefined.
+   - Architectural resolution (no hardcoding, no dedicated JobRight adapter):
+     - Source-Quality Hierarchy: High-confidence rendered semantic DOM headings (`main h1`, `article h1`, `[class*='job'] h1`) strongly outrank site metadata.
+     - `isGenericTitle()` rejects slogans ("Copilot", "AI Job Search", etc.) and generic portal words ("Careers", "Jobs", "Open Positions", "Home").
+     - `AGGREGATOR_AND_BOARD_DOMAINS` catalog prevents aggregator site branding from ever being assigned as employer company. Direct employer domains safely attribute domain brand.
+     - Multi-location list preservation (semicolon joined).
+     - Location-based workplace arrangement fallback.
+     - Dual-suffix salary regex.
+     - Mirrored exactly between `extension/extractors/generic.js` and `extension/content.js`.
+
+2. **Fixtures & Tests Added**:
+   - `extension/fixtures/tensor_career_job.html`: Verified Title: `"FPGA Engineer: ISP"`, Company: `"Tensor"`, Locations: 4 items.
+   - `extension/fixtures/aggregator_jobright_job.html`: Verified Title: `"QA Automation Engineer (SDET) AI-Enhanced Testing"`, Company: `"GetInsured"`, Salary: `"$120K/yr - $140K/yr"`, Workplace: `"Onsite"`.
+   - `extension/tests/extractor.test.js`: 16/16 tests passing (expanded from 6).
+   - All tests passing: 52/52 backend, 44/44 frontend, 10/10 Playwright E2E viewports, 0 lint/typecheck errors.
+
+3. **Documentation Updated**:
+   - `docs/EXTENSION_ARCHITECTURE.md`: Documented Extractor Engine Cascade, source-quality hierarchy, and aggregator vs employer company attribution.
+   - `docs/EXTENSION_TEST_PLAN.md`: Added Generic Career Page Extraction test matrix and manual checklist.
+   - `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`: Recorded Defect 3 analysis, architectural fix, and re-affirmed JobRight adapter is ON HOLD.
+   - `brain/DECISIONS.md`: Logged extraction hierarchy decision.
+   - `tasks/CURRENT_TASK.md`: Updated with Defect 3 fixes.
+   - `extension/HANDOFF.md`: Updated extension handoff.
+
+**For the next agent**: PR #20 is updated on origin. Do NOT merge PR #20 into `development` without explicit user approval. Do NOT merge to `main` or deploy to production.
+
+## 2026-09-21 — Antigravity (Google Deepmind) — Canonical Workflow Stage Alignment & Duplicate Deep-Linking
+
+Addressed two critical pre-merge real-world defects on branch `feature/011-jobquest-capture-extension`:
+
+1. **Defect 4 Fixed (Extension Stage Values Not Aligned with JobQuest Workflow Actions)**:
+   - Root cause: Extension maintained an independent, hardcoded stage list (`["Bookmarked", "Applied", "Screening", "Interviewing", "Offer"]`). In JobQuest's canonical workflow model, bookmarking before applying is canonically represented by `"Saved"`, and valid stages are defined in `backend/src/service.js:STAGES`. Submitting `"Bookmarked"` failed with HTTP 400 (`Unsupported stage: Bookmarked`).
+   - Architectural resolution:
+     - Exposed `GET /api/extension/stages` and `GET /api/extension/workflow-actions` returning canonical stages and display mappings.
+     - Updated `extension/popup.html` and `extension/popup.js` (`loadWorkflowStages()`) to dynamically populate the selector with JobQuest's canonical stages/workflow actions.
+     - Defaulted to `"Applied"`, with `"Saved"` representing pre-application bookmarking.
+     - Graceful failure handling: if stage fetch fails (auth or network error), the extension displays an error banner and disables saving.
+
+2. **Defect 5 Fixed ("Open Existing" / "View Existing Application" Deep-Linking UX Gap)**:
+   - Root cause: Duplicate warning buttons opened `${instanceUrl}/`, navigating to Dashboard instead of the matched application.
+   - Architectural resolution:
+     - Added `buildSecureJobQuestUrl(instanceUrl, pathAndQuery)` in `extension/api/jobquest.js` to build `/?application=${targetId}` with strict protocol (`http:`, `https:`) and origin boundary validation, rejecting `javascript:`, `data:`, and `//evil.com` escapes.
+     - Enhanced `GET /api/extension/duplicate-check` to explicitly include `id` and `application_id` across `EXACT_POSTING`, `SAME_ROLE`, and `COMPANY_ONLY` tiers.
+     - Updated `frontend/src/app.js` with `resolveInitialRoute()` supporting `?application=<id>`, `?id=<id>`, `#detail:<id>`.
+     - Preserved target parameter through unauthenticated PIN login flow.
+     - Graceful 404 fallback: if application is deleted or not found, `renderDetail()` safely navigates to `applications` with `toast("Application could not be found.")`.
+
+3. **Validation & Test Coverage**:
+   - `extension/tests/api.test.js`: 23/23 tests passing (+7 new tests covering canonical stages, unsupported stage regression, label mapping, URL security, duplicate IDs).
+   - `backend/test/app.test.js`: 57/57 tests passing (+5 new tests covering stages endpoint, all 13 canonical stages, `Bookmarked` rejection, forged stage rejection, duplicate response shape).
+   - `backend/e2e/extension.spec.js`: 6/6 tests passing (covering exact duplicate deep-linking, unauthenticated deep-link preservation, deleted target fallback, and `Saved` stage capture).
+   - `test/frontend.test.js`: 44/44 tests passing.
+   - Lint, typecheck, build: all 0 errors.
+
+**For the next agent**: PR #20 is updated on origin. Do NOT merge PR #20 into `development` without explicit user approval. Do NOT merge to `main` or deploy to production.
+
+
+

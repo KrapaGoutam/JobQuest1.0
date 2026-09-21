@@ -185,10 +185,12 @@ export function validateApplication(input, { partial = false } = {}) {
         "Resume Version may contain letters, numbers, spaces, hyphens, underscores, periods, and parentheses",
       );
   }
-  if (data.resume_id !== undefined && data.resume_id !== "") {
+  if (data.resume_id !== undefined && data.resume_id !== "" && data.resume_id !== null) {
     data.resume_id = Number(data.resume_id);
     if (!Number.isSafeInteger(data.resume_id) || data.resume_id < 1)
       errors.push("resume_id must be a positive integer");
+  } else if (data.resume_id === "" || data.resume_id === null) {
+    data.resume_id = null;
   }
   data.stage ??= "Applied";
   data.priority ??= "Medium";

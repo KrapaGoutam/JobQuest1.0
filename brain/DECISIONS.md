@@ -157,3 +157,44 @@ future round finds a concrete reason to unify them.
 
 **Rejected alternative**: extend `reminders` (nullable `due_date`, dual-purpose
 "Reminder Center" as the Tasks workspace) — considered, rejected for the reasons above.
+
+## 2026-09-20 — Round 11: Company-First Duplicate Detection Hierarchy & Semantics
+
+**Decision**: Refactor duplicate detection (`GET /api/extension/duplicate-check`) to evaluate company context first, returning 4 distinct categorized states:
+1. `EXACT_POSTING`: Exact normalized URL match with existing record. (High confidence duplicate, blocking override required: "Open Existing", "Save Anyway", or "Cancel").
+2. `SAME_ROLE`: Exact normalized company + normalized title match. (High confidence duplicate, blocking override required).
+3. `COMPANY_ONLY`: User has prior applications at the same company, but for different roles. Marked informational (`is_duplicate: false`, `banner.info`). Displays prior role vs current role to aid context. Non-blocking: normal "Save Application" proceeds without friction or requiring "Save Anyway".
+4. `NONE`: No existing applications found at this company or URL. Normal capture proceeds.
+Additionally, match history is explicitly bounded to top 3 recent applications (`LIMIT 3`) to prevent payload bloat.
+
+**Why**: In real-world local validation, user testing surfaced that applying to multiple distinct roles at the same company is common practice and should NOT be penalized as a duplicate conflict. Meanwhile, exact URLs and same-role captures legitimately risk accidental double-tracking. Furthermore, author CSS specificity bug (`.banner { display: flex; }` overriding user agent `[hidden]`) caused the banner to be displayed even when `dupBanner.hidden = true` — fixed with explicit `[hidden] { display: none !important; }`.
+
+## 2026-09-20 — Round 11: Tailored Resume Manual Entry Support (`resume_id: null` + `resume_version`)
+
+**Decision**: Allow captured applications to carry a free-form tailored resume version string (`resume_version`, max 100 chars, alphanumeric + hyphens/underscores/dots/slashes/spaces) with `resume_id: null` when the user created a one-off tailored resume that is not pre-registered in JobQuest's resume library. Updated `backend/src/service.js` validation to explicitly accept `resume_id: null` without coercing `Number(null) === 0` which triggered HTTP 400.
+
+**Why**: Job seekers frequently tailor resumes ad-hoc for a specific posting (e.g. "Senior-Frontend-Google-V3") before uploading it to the JobQuest document library. Forcing an integer `resume_id` or blocking capture broke this realistic flow.
+
+## 2026-09-20 — Round 11: JobRight.ai Support Explicitly Deferred to V2.1/V2.2
+
+**Decision**: Do not implement JobRight.ai scrapers or reverse engineering in Round 11. Support is formally logged in `tasks/BACKLOG.md` as deferred.
+
+**Why**: User instruction explicitly confirmed JobRight.ai support is ON HOLD. JobRight.ai relies on dynamic client-side rendering with auth walls and volatile selectors. Attempting to support it via browser automation (like Selenium) violates stack constraints (Playwright only for tests, vanilla JS extension only).
+
+## 2026-09-20 — Round 11: Generic Career Page Extraction Source-Quality Hierarchy
+
+**Decision**: Replaced naive metadata-first title/company resolution with a strict source-quality hierarchy in the generic extractor (`extension/extractors/generic.js` and `extension/content.js`). High-confidence rendered semantic DOM headings (`main h1`, `article h1`, `[class*='job'] h1`) outrank site metadata (`<title>`, `og:title`). Slogans and generic words ("Copilot", "AI Job Search", "Careers", "Open Positions") are rejected via `isGenericTitle()`. Aggregator platform brands (e.g. `jobright.ai`) are cataloged so their domain branding is never assigned as the employer company, whereas direct employer portals (e.g. `tensor.auto`) safely attribute their domain name.
+
+**Why**: Real-world captures on aggregator sites (e.g. JobRight) extracted site marketing slogans ("Jobright: Your AI Job Search Copilot") as the job title and the aggregator platform ("Jobright AI") as the employer, while direct employer portals (e.g. Tensor) extracted the portal brand ("Tensor") as the title and left company blank. The hardened cascade resolves both failure classes architecturally without hardcoded company names or dedicated site-specific adapters.
+
+## 2026-09-21 — Round 11: Canonical Workflow Stages Synchronization & Duplicate Deep-Linking
+
+**Decision**:
+1. Browser extension stage choices must use the canonical JobQuest Workflow Actions/stage definitions (`STAGES` in `backend/src/service.js`) via `GET /api/extension/stages` and cannot maintain an independent stage enum. The pre-application stage for bookmarking/saving postings before applying is canonically `"Saved"`, and submissions default to `"Applied"`. The invented stage `"Bookmarked"` is rejected.
+2. Duplicate-result navigation must use the matched application's stable ID and open that application directly using the smallest routing/deep-link mechanism supported by the current vanilla JobQuest architecture (`/?application=<id>`). URLs are constructed securely via `buildSecureJobQuestUrl` strictly bound to the configured JobQuest origin. Missing/deleted targets gracefully fall back to the Applications view with toast notice `"Application could not be found."`.
+
+**Why**:
+1. During local validation, selecting `"Bookmarked"` failed with HTTP 400 (`Unsupported stage: Bookmarked`) because the extension HTML previously hardcoded an invented stage list (`Bookmarked`, `Screening`, `Interviewing`) instead of consuming JobQuest's canonical stages.
+2. When duplicate warnings appeared, clicking `Open Existing` navigated to `${instanceUrl}/`, dumping the user onto the Dashboard rather than displaying the existing record. The lightweight `?application=<id>` parameter provides instant direct navigation to `renderDetail(id)` without introducing a heavy router library or breaking existing vanilla architecture.
+
+

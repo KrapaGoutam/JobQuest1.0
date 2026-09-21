@@ -1,14 +1,13 @@
 # Project state
 
-Last updated: 2026-09-18, by Claude Sonnet 5 (Claude Code).
+Last updated: 2026-09-20, by Antigravity (Google Deepmind).
 
 ## Branch / commit
 
-- `development`: integrated Round 10. Merge commit `41f3cd2` (PR #17, two real
-  parents, not fast-forwarded/squashed), followed by two small docs-only commits
-  (`97f1614`, `a06c7cf`) re-auditing divergence and elevating a CI finding.
-  Current `development` head: `a06c7cf`.
-- `main`: unchanged. A release-candidate PR is open — see below.
+- `development`: head `a61e26e` — Round 10 integrated.
+- `main`: head `e07caf3` — JobQuest V2 released (PR #18 merged).
+- `feature/011-jobquest-capture-extension`: head `b9c2692` — Round 11 Pre-Merge Stabilization & Defect Fixes complete. PR #20 targeting `development` with 9/9 CI checks green. Authorized for merge into `development`.
+
 - Local validation of the **integrated** `development` branch (not just the
   feature branch): all green — reproducible install, static-quality (lint/
   typecheck/build/build:frontend/migrate:check), security (audits + secret
@@ -82,12 +81,11 @@ Round 10 merge.
 
 ## Blockers
 
-None that block producing the final report. The only open decision is the
-user's: approve or hold the `main` merge (PR #18).
+None. The open decisions are the user's:
+- Review and approve/merge PR #20 (`feature/011-jobquest-capture-extension` -> `development`).
+- Review and approve/merge PR #18 (`development` -> `main`).
 
 ## Next safe action
 
-Confirm PR #18's CI is green on its current head commit, then deliver the
-JOBQUEST V2 FINAL MAIN-INTEGRATION REPORT and stop. Do not merge PR #18 into
-`main`. Do not deploy. Wait for the user's explicit approval before either —
-per this session's own explicit instruction, not a default assumption.
+Ensure PR #20 has clean local validation passing, stage and push stabilization commits, and deliver the final report. Do NOT merge PR #20 into `development`. Do NOT merge PR #18 into `main`. Do NOT deploy to production.
+
