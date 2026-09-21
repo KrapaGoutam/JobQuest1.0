@@ -20,8 +20,13 @@ const openSettingsBtn = document.getElementById("open-settings-btn")
 const optionsBtn = document.getElementById("options-btn")
 
 const dupBanner = document.getElementById("dup-banner")
+const dupIcon = document.getElementById("dup-icon")
 const dupHeading = document.getElementById("dup-heading")
 const dupMessage = document.getElementById("dup-message")
+const dupActions = document.getElementById("dup-actions")
+const dupOpenBtn = document.getElementById("dup-open-btn")
+const dupSaveAnywayBtn = document.getElementById("dup-save-anyway-btn")
+const dupCancelBtn = document.getElementById("dup-cancel-btn")
 
 const form = document.getElementById("capture-form")
 const inputCompany = document.getElementById("input-company")
@@ -30,7 +35,16 @@ const inputLocation = document.getElementById("input-location")
 const inputArrangement = document.getElementById("input-arrangement")
 const inputEmployment = document.getElementById("input-employment")
 const inputSalary = document.getElementById("input-salary")
+
+// Resume elements
+const modeResumeExisting = document.getElementById("mode-resume-existing")
+const modeResumeManual = document.getElementById("mode-resume-manual")
+const modeResumeNone = document.getElementById("mode-resume-none")
+const groupResumeExisting = document.getElementById("group-resume-existing")
+const groupResumeManual = document.getElementById("group-resume-manual")
 const inputResume = document.getElementById("input-resume")
+const inputResumeManual = document.getElementById("input-resume-manual")
+
 const inputStage = document.getElementById("input-stage")
 const inputDate = document.getElementById("input-date")
 const inputUrl = document.getElementById("input-url")
@@ -45,6 +59,9 @@ const captureAnotherBtn = document.getElementById("capture-another-btn")
 
 let currentSettings = { instanceUrl: "", apiToken: "" }
 let lastCreatedAppId = null
+let activeResumeMode = "existing"
+let currentDuplicateMatch = null
+let bypassDuplicateWarning = false
 
 function showScreen(screen) {
   screenLoading.hidden = true
@@ -60,13 +77,44 @@ function escapeHtml(str) {
   return div.innerHTML
 }
 
+function clearDuplicateBanner() {
+  dupBanner.hidden = true
+  dupHeading.textContent = ""
+  dupMessage.innerHTML = ""
+  dupActions.hidden = true
+  dupOpenBtn.hidden = true
+  dupSaveAnywayBtn.hidden = true
+  dupCancelBtn.hidden = true
+  currentDuplicateMatch = null
+}
+
+function switchResumeMode(mode) {
+  activeResumeMode = mode
+  if (mode === "existing") {
+    groupResumeExisting.hidden = false
+    groupResumeManual.hidden = true
+    inputResumeManual.value = "" // clear stale manual value
+  } else if (mode === "manual") {
+    groupResumeExisting.hidden = true
+    groupResumeManual.hidden = false
+    inputResume.value = "" // clear stale selected value
+  } else {
+    groupResumeExisting.hidden = true
+    groupResumeManual.hidden = true
+    inputResume.value = ""
+    inputResumeManual.value = ""
+  }
+}
+
 async function runDuplicateCheck() {
+  if (bypassDuplicateWarning) return
+
   const job_url = inputUrl.value.trim()
   const company = inputCompany.value.trim()
   const job_title = inputTitle.value.trim()
 
   if (!job_url && (!company || !job_title)) {
-    dupBanner.hidden = true
+    clearDuplicateBanner()
     return
   }
 
@@ -77,24 +125,70 @@ async function runDuplicateCheck() {
       { job_url, company, job_title },
     )
 
-    if (check.has_duplicate && check.matches.length > 0) {
+    const matchType = check.match_type || (check.matches && check.matches[0]?.match_type) || "none"
+
+    if (matchType === "exact_posting" && check.matches && check.matches.length > 0) {
       const match = check.matches[0]
+      currentDuplicateMatch = match
       dupBanner.hidden = false
-      if (match.level === 1) {
-        dupBanner.className = "banner danger"
-        dupHeading.textContent = "Already saved in JobQuest"
-        dupMessage.innerHTML = `You saved this exact posting on <strong>${escapeHtml(match.application.date_applied)}</strong> (Stage: <strong>${escapeHtml(match.application.stage)}</strong>).`
-      } else {
-        dupBanner.className = "banner warning"
-        dupHeading.textContent = "Possible duplicate found"
-        dupMessage.innerHTML = `Found an existing application for <strong>${escapeHtml(match.application.company)}</strong> — <em>${escapeHtml(match.application.job_title)}</em> (Stage: ${escapeHtml(match.application.stage)}).`
-      }
+      dupBanner.className = "banner danger"
+      dupIcon.textContent = "⚠"
+      dupHeading.textContent = "This job posting is already in JobQuest."
+      const dateText = match.application.date_applied ? ` on <strong>${escapeHtml(match.application.date_applied)}</strong>` : ""
+      const stageText = match.application.stage ? ` (Stage: <strong>${escapeHtml(match.application.stage)}</strong>)` : ""
+      dupMessage.innerHTML = `You already saved this posting${dateText}${stageText}.`
+
+      dupActions.hidden = false
+      dupOpenBtn.hidden = false
+      dupOpenBtn.textContent = "Open Existing"
+      dupSaveAnywayBtn.hidden = false
+      dupCancelBtn.hidden = false
+    } else if (matchType === "same_role" && check.matches && check.matches.length > 0) {
+      const match = check.matches[0]
+      currentDuplicateMatch = match
+      dupBanner.hidden = false
+      dupBanner.className = "banner warning"
+      dupIcon.textContent = "⚠"
+      dupHeading.textContent = "An application already exists for this role at this company."
+      const stageText = match.application.stage ? ` (Stage: ${escapeHtml(match.application.stage)})` : ""
+      dupMessage.innerHTML = `Found an existing application for <strong>${escapeHtml(match.application.company)}</strong> — <em>${escapeHtml(match.application.job_title)}</em>${stageText}.`
+
+      dupActions.hidden = false
+      dupOpenBtn.hidden = false
+      dupOpenBtn.textContent = "Open Existing"
+      dupSaveAnywayBtn.hidden = false
+      dupCancelBtn.hidden = false
+    } else if (matchType === "company_only" && check.matches && check.matches.length > 0) {
+      const match = check.matches[0]
+      currentDuplicateMatch = match
+      dupBanner.hidden = false
+      dupBanner.className = "banner info"
+      dupIcon.textContent = "ℹ"
+      dupHeading.textContent = "You already have another application at this company."
+      const currentRole = job_title || "New Role"
+      dupMessage.innerHTML = `Existing role: <strong>${escapeHtml(match.application.job_title)}</strong> (Stage: ${escapeHtml(match.application.stage)}).<br>Current role: <strong>${escapeHtml(currentRole)}</strong>.`
+
+      dupActions.hidden = false
+      dupOpenBtn.hidden = false
+      dupOpenBtn.textContent = "View Existing Application"
+      dupSaveAnywayBtn.hidden = true // Not needed; normal save is available without override
+      dupCancelBtn.hidden = true
     } else {
-      dupBanner.hidden = true
+      clearDuplicateBanner()
     }
   } catch (err) {
     console.warn("Duplicate check failed:", err)
-    dupBanner.hidden = true
+    // Never show "Existing application found" on error
+    dupBanner.hidden = false
+    dupBanner.className = "banner warning"
+    dupIcon.textContent = "ℹ"
+    dupHeading.textContent = "Could not check JobQuest for existing applications."
+    dupMessage.textContent = "JobQuest could not be reached to verify existing applications. You can still save this job."
+    dupActions.hidden = true
+    dupOpenBtn.hidden = true
+    dupSaveAnywayBtn.hidden = true
+    dupCancelBtn.hidden = true
+    currentDuplicateMatch = null
   }
 }
 
@@ -119,6 +213,11 @@ async function loadActiveResumes() {
 
 async function init() {
   showScreen(screenLoading)
+  bypassDuplicateWarning = false
+  currentDuplicateMatch = null
+  clearDuplicateBanner()
+  formError.hidden = true
+  formError.textContent = ""
 
   try {
     currentSettings = await getSettings()
@@ -142,6 +241,10 @@ async function init() {
 
     // Auth succeeded: fetch active resumes in background
     loadActiveResumes()
+
+    // Reset resume mode to existing by default
+    modeResumeExisting.checked = true
+    switchResumeMode("existing")
 
     // Query active tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
@@ -191,7 +294,7 @@ async function init() {
 }
 
 async function handleSave(event) {
-  event.preventDefault()
+  if (event) event.preventDefault()
   formError.hidden = true
   formError.textContent = ""
 
@@ -204,9 +307,46 @@ async function handleSave(event) {
     return
   }
 
-  const selectedOpt = inputResume.selectedOptions[0]
-  const resumeId = inputResume.value ? Number(inputResume.value) : null
-  const resumeVersion = selectedOpt && selectedOpt.value ? selectedOpt.dataset.version : null
+  // Check duplicate override for blocking duplicate states
+  if (
+    !bypassDuplicateWarning &&
+    currentDuplicateMatch &&
+    (currentDuplicateMatch.match_type === "exact_posting" || currentDuplicateMatch.match_type === "same_role")
+  ) {
+    formError.hidden = false
+    formError.textContent = "An existing application was found. Click 'Save Anyway' to save this application."
+    return
+  }
+
+  // Handle Tailored Resume mode values
+  let resumeId = null
+  let resumeVersion = null
+
+  if (activeResumeMode === "existing") {
+    const selectedOpt = inputResume.selectedOptions[0]
+    resumeId = inputResume.value ? Number(inputResume.value) : null
+    resumeVersion = selectedOpt && selectedOpt.value ? selectedOpt.dataset.version : null
+  } else if (activeResumeMode === "manual") {
+    const manualVal = inputResumeManual.value.trim()
+    if (manualVal) {
+      if (manualVal.length > 100) {
+        formError.hidden = false
+        formError.textContent = "Resume Version must be 100 characters or fewer."
+        return
+      }
+      if (!/^[\p{L}\p{N} ._()\-]+$/u.test(manualVal)) {
+        formError.hidden = false
+        formError.textContent = "Resume Version may contain letters, numbers, spaces, hyphens, underscores, periods, and parentheses."
+        return
+      }
+      resumeVersion = manualVal
+    }
+    resumeId = null
+  } else {
+    // None selected
+    resumeId = null
+    resumeVersion = null
+  }
 
   const payload = {
     company,
@@ -253,9 +393,36 @@ document.addEventListener("DOMContentLoaded", () => {
 
   form.addEventListener("submit", handleSave)
 
-  inputCompany.addEventListener("change", runDuplicateCheck)
-  inputTitle.addEventListener("change", runDuplicateCheck)
-  inputUrl.addEventListener("change", runDuplicateCheck)
+  // Resume mode switcher listeners
+  modeResumeExisting.addEventListener("change", () => switchResumeMode("existing"))
+  modeResumeManual.addEventListener("change", () => switchResumeMode("manual"))
+  modeResumeNone.addEventListener("change", () => switchResumeMode("none"))
+
+  // Reset duplicate override if fields change
+  const onFieldChange = () => {
+    bypassDuplicateWarning = false
+    runDuplicateCheck()
+  }
+
+  inputCompany.addEventListener("change", onFieldChange)
+  inputTitle.addEventListener("change", onFieldChange)
+  inputUrl.addEventListener("change", onFieldChange)
+
+  // Duplicate action buttons
+  dupOpenBtn.addEventListener("click", () => {
+    const base = currentSettings.instanceUrl.replace(/\/+$/, "")
+    chrome.tabs.create({ url: `${base}/` })
+  })
+
+  dupSaveAnywayBtn.addEventListener("click", () => {
+    bypassDuplicateWarning = true
+    dupBanner.hidden = true
+    handleSave()
+  })
+
+  dupCancelBtn.addEventListener("click", () => {
+    window.close()
+  })
 
   viewAppBtn.addEventListener("click", () => {
     const base = currentSettings.instanceUrl.replace(/\/+$/, "")

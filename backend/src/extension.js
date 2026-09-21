@@ -43,7 +43,7 @@ function requireExtensionAuth(db, request) {
 // Strips utm_* tracking params, strips trailing slash, lowercases.
 // ---------------------------------------------------------------------------
 
-function normalizeJobUrl(rawUrl) {
+export function normalizeJobUrl(rawUrl) {
   if (!rawUrl) return ""
   let parsed
   try {
@@ -61,10 +61,13 @@ function normalizeJobUrl(rawUrl) {
   return out
 }
 
-function normalizeText(str) {
+export function normalizeText(str) {
   return String(str || "")
     .trim()
     .toLowerCase()
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015]/g, "-") // normalize unicode dashes/hyphens to ASCII hyphen
+    .replace(/[\u2018\u2019]/g, "'") // normalize curly single quotes
+    .replace(/[\u201C\u201D]/g, '"') // normalize curly double quotes
     .replace(/\s+/g, " ")
 }
 
@@ -166,6 +169,11 @@ export async function handleExtension(context, helpers) {
 
   // GET /api/extension/duplicate-check — check for existing applications
   // Query params: job_url, company, job_title
+  // Semantics:
+  //   1. EXACT_POSTING: exact safely-normalized URL match (strongest signal)
+  //   2. SAME_ROLE: same company + same job title
+  //   3. COMPANY_ONLY: same company, different role (informational only, not duplicate)
+  //   4. NONE: no match
   if (path === "/api/extension/duplicate-check" && request.method === "GET") {
     const actor = requireExtensionAuth(db, request)
     const jobUrl = String(url.searchParams.get("job_url") || "").trim()
@@ -173,45 +181,96 @@ export async function handleExtension(context, helpers) {
     const jobTitle = String(url.searchParams.get("job_title") || "").trim()
 
     const matches = []
+    let matchType = "none"
 
-    // Level 1: Exact normalized URL match
+    // 1. Exact safely-normalized URL match (Level 1 / EXACT_POSTING)
     if (jobUrl) {
       const normUrl = normalizeJobUrl(jobUrl)
-      const existing = rows(
-        db.prepare(
-          "SELECT id, company, job_title, stage, date_applied, location, source, resume_version, priority, updated_at, job_url FROM applications WHERE user_id = ? AND job_url IS NOT NULL",
-        ),
-        [actor.user_id],
-      )
-      for (const app of existing) {
-        if (normalizeJobUrl(app.job_url) === normUrl) {
-          matches.push({ level: 1, match: "exact_url", application: app })
+      if (normUrl) {
+        const existing = rows(
+          db.prepare(
+            `SELECT id, company, job_title, stage, date_applied, location, source, resume_version, priority, updated_at, job_url
+             FROM applications
+             WHERE user_id = ? AND job_url IS NOT NULL AND job_url != ''
+             ORDER BY updated_at DESC, id DESC`,
+          ),
+          [actor.user_id],
+        )
+        for (const app of existing) {
+          if (normalizeJobUrl(app.job_url) === normUrl) {
+            matches.push({
+              match_type: "exact_posting",
+              level: 1, // backward compatibility
+              match: "exact_url", // backward compatibility
+              application: app,
+            })
+            if (matches.length >= 3) break
+          }
+        }
+        if (matches.length > 0) {
+          matchType = "exact_posting"
         }
       }
     }
 
-    // Level 2: Exact company + title match (only when no Level-1 match found)
-    if (matches.length === 0 && company && jobTitle) {
+    // 2. Company-first logic (if no exact URL match found)
+    if (matches.length === 0 && company) {
       const normCompany = normalizeText(company)
       const normTitle = normalizeText(jobTitle)
-      const existing = rows(
-        db.prepare(
-          "SELECT id, company, job_title, stage, date_applied, location, source, resume_version, priority, updated_at, job_url FROM applications WHERE user_id = ?",
-        ),
-        [actor.user_id],
-      )
-      for (const app of existing) {
-        if (
-          normalizeText(app.company) === normCompany &&
-          normalizeText(app.job_title) === normTitle
-        ) {
-          matches.push({ level: 2, match: "company_title", application: app })
+
+      if (normCompany) {
+        const existing = rows(
+          db.prepare(
+            `SELECT id, company, job_title, stage, date_applied, location, source, resume_version, priority, updated_at, job_url
+             FROM applications
+             WHERE user_id = ?
+             ORDER BY updated_at DESC, id DESC`,
+          ),
+          [actor.user_id],
+        )
+
+        const sameCompanyApps = []
+        const sameRoleApps = []
+
+        for (const app of existing) {
+          if (normalizeText(app.company) === normCompany) {
+            sameCompanyApps.push(app)
+            if (normTitle && normalizeText(app.job_title) === normTitle) {
+              sameRoleApps.push(app)
+            }
+          }
+        }
+
+        if (sameRoleApps.length > 0) {
+          matchType = "same_role"
+          for (const app of sameRoleApps.slice(0, 3)) {
+            matches.push({
+              match_type: "same_role",
+              level: 2, // backward compatibility
+              match: "company_title", // backward compatibility
+              application: app,
+            })
+          }
+        } else if (sameCompanyApps.length > 0) {
+          matchType = "company_only"
+          for (const app of sameCompanyApps.slice(0, 3)) {
+            matches.push({
+              match_type: "company_only",
+              level: 3,
+              match: "company_only",
+              application: app,
+            })
+          }
         }
       }
     }
 
     return (
-      json(response, 200, { has_duplicate: matches.length > 0, matches }),
+      json(response, 200, {
+        match_type: matchType,
+        has_duplicate: matchType === "exact_posting" || matchType === "same_role",
+        matches,
+      }),
       true
     )
   }
@@ -220,6 +279,12 @@ export async function handleExtension(context, helpers) {
   if (path === "/api/extension/applications" && request.method === "POST") {
     const actor = requireExtensionAuth(db, request)
     const input = await body(request)
+
+    // Ensure null/empty resume_id is cleaned properly
+    if (input.resume_id === "" || input.resume_id === null || input.resume_id === 0) {
+      input.resume_id = null
+    }
+
     // Reuse existing application validation + creation pipeline from service.js
     const result = createApplication(db, actor.user_id, actor.user_id, input)
     if (result.errors) {

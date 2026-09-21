@@ -39,9 +39,14 @@
     <div id="dup-banner" class="banner warning" hidden role="alert">
       <div class="banner-title">
         <span id="dup-icon">⚠</span>
-        <span id="dup-heading">Existing application found</span>
+        <span id="dup-heading"></span>
       </div>
       <p id="dup-message" class="dup-desc"></p>
+      <div id="dup-actions" class="dup-actions" hidden>
+        <button type="button" id="dup-open-btn" class="dup-btn" hidden>Open Existing</button>
+        <button type="button" id="dup-save-anyway-btn" class="dup-btn" hidden>Save Anyway</button>
+        <button type="button" id="dup-cancel-btn" class="dup-btn" hidden>Cancel</button>
+      </div>
     </div>
 
     <form id="capture-form">
@@ -95,12 +100,33 @@
           <input type="text" id="input-salary" class="input" placeholder="e.g. $120k - $150k">
         </div>
 
-        <!-- Resume Version (populated dynamically) -->
+        <!-- Tailored Resume (mode switcher: existing / manual / none) -->
         <div class="field col-full">
-          <label for="input-resume">Tailored Resume</label>
-          <select id="input-resume" class="select">
-            <option value="">None selected</option>
-          </select>
+          <label>Tailored Resume</label>
+          <div class="resume-mode-selector">
+            <label class="resume-mode-option">
+              <input type="radio" name="resume-mode" id="mode-resume-existing" value="existing" checked>
+              <span>Select existing</span>
+            </label>
+            <label class="resume-mode-option">
+              <input type="radio" name="resume-mode" id="mode-resume-manual" value="manual">
+              <span>Enter manually</span>
+            </label>
+            <label class="resume-mode-option">
+              <input type="radio" name="resume-mode" id="mode-resume-none" value="none">
+              <span>None</span>
+            </label>
+          </div>
+
+          <div id="group-resume-existing">
+            <select id="input-resume" class="select" aria-label="Select existing resume">
+              <option value="">None selected</option>
+            </select>
+          </div>
+
+          <div id="group-resume-manual" hidden>
+            <input type="text" id="input-resume-manual" class="input" placeholder="e.g. QA Automation v96" maxlength="100" aria-label="Enter resume version manually">
+          </div>
         </div>
 
         <!-- Stage -->
