@@ -116,8 +116,9 @@ test.describe("Round 11 — Extension Settings & Capture Workflow", () => {
     expect(check1.ok()).toBeTruthy();
     const dupResult1 = await check1.json();
     expect(dupResult1.has_duplicate).toBe(false);
+    expect(dupResult1.match_type).toBe("none");
 
-    // 4. Capture job application via extension API
+    // 4. Capture job application via extension API with manual resume version
     const createRes = await page.request.post("/api/extension/applications", {
       headers: { Authorization: `Bearer ${bearerToken}` },
       data: {
@@ -131,6 +132,8 @@ test.describe("Round 11 — Extension Settings & Capture Workflow", () => {
         date_applied: "2026-09-20",
         job_url: "https://capture.example.com/jobs/42?utm_source=ext",
         source: "Extension",
+        resume_version: "QA Automation v96",
+        resume_id: null,
       },
     });
     expect(createRes.ok()).toBeTruthy();
@@ -138,8 +141,9 @@ test.describe("Round 11 — Extension Settings & Capture Workflow", () => {
     expect(createdApp.id).toBeGreaterThan(0);
     expect(createdApp.company).toBe("CapturedCorp");
     expect(createdApp.job_title).toBe("Senior Capture Lead");
+    expect(createdApp.resume_version).toBe("QA Automation v96");
 
-    // 5. Level-1 duplicate check: exact normalized URL match
+    // 5. Level-1 duplicate check: exact normalized URL match (EXACT_POSTING)
     const check2 = await page.request.get(
       `/api/extension/duplicate-check?job_url=${encodeURIComponent("https://capture.example.com/jobs/42?utm_campaign=newsletter")}`,
       { headers: { Authorization: `Bearer ${bearerToken}` } },
@@ -147,10 +151,10 @@ test.describe("Round 11 — Extension Settings & Capture Workflow", () => {
     expect(check2.ok()).toBeTruthy();
     const dupResult2 = await check2.json();
     expect(dupResult2.has_duplicate).toBe(true);
-    expect(dupResult2.matches[0].level).toBe(1);
-    expect(dupResult2.matches[0].match).toBe("exact_url");
+    expect(dupResult2.match_type).toBe("exact_posting");
+    expect(dupResult2.matches[0].match_type).toBe("exact_posting");
 
-    // 6. Level-2 duplicate check: company + title match
+    // 6. Level-2 duplicate check: company + title match (SAME_ROLE)
     const check3 = await page.request.get(
       `/api/extension/duplicate-check?company=capturedcorp&job_title=SENIOR%20CAPTURE%20LEAD`,
       { headers: { Authorization: `Bearer ${bearerToken}` } },
@@ -158,8 +162,19 @@ test.describe("Round 11 — Extension Settings & Capture Workflow", () => {
     expect(check3.ok()).toBeTruthy();
     const dupResult3 = await check3.json();
     expect(dupResult3.has_duplicate).toBe(true);
-    expect(dupResult3.matches[0].level).toBe(2);
-    expect(dupResult3.matches[0].match).toBe("company_title");
+    expect(dupResult3.match_type).toBe("same_role");
+    expect(dupResult3.matches[0].match_type).toBe("same_role");
+
+    // 6b. Company-only check: same company, different role (COMPANY_ONLY)
+    const check4 = await page.request.get(
+      `/api/extension/duplicate-check?company=capturedcorp&job_title=Junior%20Analyst`,
+      { headers: { Authorization: `Bearer ${bearerToken}` } },
+    );
+    expect(check4.ok()).toBeTruthy();
+    const dupResult4 = await check4.json();
+    expect(dupResult4.has_duplicate).toBe(false); // informational only
+    expect(dupResult4.match_type).toBe("company_only");
+    expect(dupResult4.matches[0].match_type).toBe("company_only");
 
     // 7. Verify the newly captured application appears in JobQuest UI
     const narrow = ["tablet", "mobile", "small-mobile"].includes(

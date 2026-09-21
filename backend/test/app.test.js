@@ -1871,7 +1871,7 @@ test("Round 7: recurrence generates exactly one idempotent next occurrence, and 
   const created = await request("/api/tasks", {
     method: "POST",
     auth: user,
-    input: { title: "Weekly standup notes", due_date: "2026-09-14", recurrence: "weekly" },
+    input: { title: "Weekly standup notes", due_date: "2028-09-14", recurrence: "weekly" },
   });
   assert.equal(created.status, 201);
 
@@ -1886,7 +1886,7 @@ test("Round 7: recurrence generates exactly one idempotent next occurrence, and 
   const nextTask = (await request("/api/tasks?view=upcoming", { auth: user }))
     .data.find((item) => item.id === firstComplete.data.created_next_task_id);
   assert.ok(nextTask, "next occurrence must be visible");
-  assert.equal(nextTask.due_date, "2026-09-21");
+  assert.equal(nextTask.due_date, "2028-09-21");
   assert.equal(nextTask.recurrence, "weekly");
   assert.equal(nextTask.title, "Weekly standup notes");
   assert.equal(nextTask.status, "open");
@@ -2815,4 +2815,117 @@ test("extension: unauthenticated requests to extension routes get 401", async ()
     assert.equal(result.status, 401, `Expected 401 for ${opts.method} ${path}`);
   }
 });
+
+test("extension: duplicate-check distinguishes COMPANY_ONLY from SAME_ROLE", async () => {
+  const user = await register("ext_dup_co_user");
+  const gen = await generateExtToken(user);
+  const token = gen.data.token;
+
+  // Create an application for Software Developer at ABC Technologies
+  await request("/api/applications", {
+    method: "POST",
+    input: {
+      company: "ABC Technologies",
+      job_title: "Software Developer",
+      date_applied: "2026-09-10",
+      job_url: "https://abc.example.com/jobs/dev",
+    },
+    auth: user,
+  });
+
+  // Query for different role at ABC Technologies -> COMPANY_ONLY
+  const checkCompanyOnly = await extRequest(
+    `/api/extension/duplicate-check?company=${encodeURIComponent("ABC Technologies")}&job_title=${encodeURIComponent("QA Engineer")}`,
+    { token },
+  );
+  assert.equal(checkCompanyOnly.status, 200);
+  assert.equal(checkCompanyOnly.data.match_type, "company_only");
+  assert.equal(checkCompanyOnly.data.has_duplicate, false); // NOT considered a blocking duplicate
+  assert.equal(checkCompanyOnly.data.matches.length, 1);
+  assert.equal(checkCompanyOnly.data.matches[0].match_type, "company_only");
+  assert.equal(checkCompanyOnly.data.matches[0].application.job_title, "Software Developer");
+
+  // Query for same role at ABC Technologies -> SAME_ROLE
+  const checkSameRole = await extRequest(
+    `/api/extension/duplicate-check?company=${encodeURIComponent("abc technologies")}&job_title=${encodeURIComponent("software developer")}`,
+    { token },
+  );
+  assert.equal(checkSameRole.status, 200);
+  assert.equal(checkSameRole.data.match_type, "same_role");
+  assert.equal(checkSameRole.data.has_duplicate, true);
+  assert.equal(checkSameRole.data.matches[0].match_type, "same_role");
+
+  // Seniority distinction: QA Engineer vs Senior QA Engineer must NOT be same_role
+  const checkSeniority = await extRequest(
+    `/api/extension/duplicate-check?company=${encodeURIComponent("ABC Technologies")}&job_title=${encodeURIComponent("Senior Software Developer")}`,
+    { token },
+  );
+  assert.equal(checkSeniority.status, 200);
+  assert.equal(checkSeniority.data.match_type, "company_only");
+  assert.equal(checkSeniority.data.has_duplicate, false);
+});
+
+test("extension: duplicate-check bounds matches to maximum 3 recent applications", async () => {
+  const user = await register("ext_dup_bound_user");
+  const gen = await generateExtToken(user);
+  const token = gen.data.token;
+
+  // Create 5 applications at the same company
+  for (let i = 1; i <= 5; i++) {
+    await request("/api/applications", {
+      method: "POST",
+      input: {
+        company: "MegaCorp",
+        job_title: `Role ${i}`,
+        date_applied: `2026-09-0${i}`,
+      },
+      auth: user,
+    });
+  }
+
+  const check = await extRequest(
+    `/api/extension/duplicate-check?company=MegaCorp&job_title=Role%2099`,
+    { token },
+  );
+  assert.equal(check.status, 200);
+  assert.equal(check.data.match_type, "company_only");
+  assert.equal(check.data.matches.length, 3, "must bound matches to at most 3 records");
+});
+
+test("extension: manual tailored resume saves resume_version without invalid resume_id", async () => {
+  const user = await register("ext_manual_res_user");
+  const gen = await generateExtToken(user);
+  const token = gen.data.token;
+
+  // Case 1: manual resume version text provided with resume_id: null
+  const res1 = await extRequest("/api/extension/applications", {
+    method: "POST",
+    token,
+    input: {
+      company: "ManualResumeCorp",
+      job_title: "Automation Engineer",
+      date_applied: "2026-09-20",
+      resume_version: "QA Automation v96",
+      resume_id: null,
+    },
+  });
+  assert.equal(res1.status, 201);
+  assert.equal(res1.data.resume_version, "QA Automation v96");
+  assert.equal(res1.data.resume_id, null);
+
+  // Case 2: resume_id is null and resume_version is omitted (None selected)
+  const res2 = await extRequest("/api/extension/applications", {
+    method: "POST",
+    token,
+    input: {
+      company: "NoResumeCorp",
+      job_title: "Tester",
+      date_applied: "2026-09-20",
+      resume_id: null,
+    },
+  });
+  assert.equal(res2.status, 201);
+  assert.equal(res2.data.resume_id, null);
+});
+
 
