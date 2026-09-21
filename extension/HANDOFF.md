@@ -29,10 +29,10 @@ feature/011-jobquest-capture-extension
 development (head: a61e26e)
 
 ## Current Checkpoint
-CP9 completed. PR #20 opened targeting `development`.
+Pre-Merge Stabilization & Real-World Local Validation completed. PR #20 updated targeting `development`.
 
 ## Current Objective
-Implement the JobQuest V2.1 Browser Capture Extension — a Manifest V3 Chrome/Edge extension for capturing job postings and saving them to JobQuest.
+Stabilize JobQuest V2.1 Browser Capture Extension by resolving local real-world test defects, establishing company-first duplicate semantics, supporting tailored resume manual entry, and providing realistic test coverage and documentation.
 
 ## Completed
 - CP0: Branch created off development; docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md written; this HANDOFF.md written; CURRENT_TASK.md and PROJECT_STATE.md updated
@@ -45,18 +45,23 @@ Implement the JobQuest V2.1 Browser Capture Extension — a Manifest V3 Chrome/E
 - CP7: Playwright E2E tests (`backend/e2e/extension.spec.js`, covering settings token UI, capture auth, duplicate check, and workspace UI reflection across 5 viewports — 10/10 passed)
 - CP8: CI integration (`.github/workflows/ci.yml` matrix updated) and extension documentation (`extension/README.md`)
 - CP9: Final verification sweep, documentation sync, branch pushed to origin, and PR #20 opened targeting `development`
+- Pre-Merge Stabilization:
+  - Defect 1 Fixed: CSS specificity override on `[hidden]` attribute resolved (`[hidden] { display: none !important; }`), static placeholder removed from HTML. Company-first duplicate classification (`EXACT_POSTING`, `SAME_ROLE`, `COMPANY_ONLY`, `NONE`) implemented in `backend/src/extension.js` and `extension/popup.js`.
+  - Defect 2 Fixed: Support `resume_id: null` with `resume_version` in `backend/src/service.js` and `backend/src/extension.js`. Added 3-mode tailored resume interface in `extension/popup.html` and `popup.js`.
+  - Realistic Test Suite: Added backend tests (52/52 passing), extension unit tests (10/10 passing), and multi-viewport E2E tests (10/10 passing).
+  - Documentation Suite: Produced `docs/EXTENSION_ARCHITECTURE.md`, `docs/EXTENSION_TEST_PLAN.md`, `docs/EXTENSION_SECURITY.md`, `docs/EXTENSION_INSTALLATION.md`, updated `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`, and marked JobRight.ai support as deferred in `tasks/BACKLOG.md`.
 
 ## Partially Complete
 - None
 
 ## Currently In Progress
-- Awaiting user review and CI completion on PR #20
+- Awaiting user review and merge approval on PR #20
 
 ## Pending
-- PR #20 review and eventual merge by user into `development`
+- User approval and merge into `development`
 
 ## Roadmap Remaining
-- Round 11 complete. All checkpoints CP0–CP9 fulfilled.
+- PR #20 user review. (JobRight.ai support deferred to V2.1/V2.2).
 
 ## Files Currently Being Modified
 - (none yet — CP1 about to begin)
@@ -127,7 +132,8 @@ Planned for CP4:
 - None currently
 
 ## Tests Passing
-- All prior round tests (backend 33, frontend 44, integration 33, e2e 33, browser 63) — unchanged
+- All prior round tests (backend 52, frontend 44, extension unit 10, e2e 10 across 5 viewports) — all green
+- Total extension tests passing: 20/20 (10 unit, 10 E2E)
 
 ## Tests Failing
 - None
@@ -136,28 +142,21 @@ Planned for CP4:
 - None
 
 ## Fixed Bugs
-- N/A (new feature)
+- Defect 1: False duplicate banner on fresh captures due to CSS specificity overriding [hidden]
+- Defect 2: HTTP 400 when submitting tailored resume manual entry with resume_id: null
 
 ## Technical Debt
-- None introduced yet
-
-## Last Successful Command
-git switch -c feature/011-jobquest-capture-extension
-
-## Last Failing Command
-N/A
-
-## Last Commit
-5415396 docs(extension): update project state, feature upgrade tracking, and agent handoff log [CP9]
+- JobRight.ai support deferred to V2.1/V2.2 (logged in tasks/BACKLOG.md)
 
 ## Current CI Status
-All local CI checks passing (backend, frontend, extension, e2e, lint, typecheck)
+All local CI checks passing (backend 52/52, frontend 44/44, extension 10/10, e2e 10/10 across 5 viewports, lint clean, typecheck clean, build:frontend clean)
 
 ## Current PR Status
 PR #20 open against `development`: https://github.com/KrapaGoutam/JobQuest1.0/pull/20
 
 ## Next Exact Action
 Await CI completion and user review/merge of PR #20. Do not merge without user approval. Do not touch `main`.
+
 
 ## Do Not Change
 - Work only in KrapaGoutam/JobQuest1.0.

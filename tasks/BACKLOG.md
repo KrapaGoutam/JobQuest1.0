@@ -146,3 +146,9 @@ package, plan-only).
   investigating an unrelated test fix and are flagged, not chased further, since
   the specific test line that could trigger either was reverted — see Phase 10H
   notes in `docs/FEATURE_UPGRADE_10_FINAL.md`.
+
+## Items discovered / deferred during Round 11 (Browser Extension)
+
+- **Deferred: JobRight.ai dedicated capture adapter and SPA validation.**
+  Reason: Pre-merge stabilization is focused on duplicate correctness, resume handling, authentication/error-state separation, stale-state prevention, and existing supported extraction paths. Future work should first inspect JobRight's rendered DOM/structured data using Playwright/DevTools before deciding whether a dedicated adapter is required.
+

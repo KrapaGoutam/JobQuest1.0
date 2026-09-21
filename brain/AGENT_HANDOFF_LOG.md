@@ -482,3 +482,39 @@ Verified:
 - Linting & typechecking: all JS files across backend, frontend, and extension clean.
 - Frontend production bundle build (`npm run build:frontend`): succeeded.
 
+## 2026-09-20 — Antigravity (Google Deepmind) — Round 11 Pre-Merge Defect Fixes & Stabilization
+
+Addressed real-world local validation feedback on branch `feature/011-jobquest-capture-extension`:
+
+1. **Defect 1 Fixed (False Duplicate Banner on First Capture)**:
+   - Root cause: CSS rule `.banner { display: flex; }` overrode the browser user-agent's `[hidden]` attribute.
+   - Fix: Added `[hidden] { display: none !important; }` in `extension/popup.css`. Removed static placeholder text from `extension/popup.html`.
+   - Refactored `GET /api/extension/duplicate-check` to implement **Company-First duplicate classification**:
+     - `EXACT_POSTING`: Normalized URL match (blocking duplicate).
+     - `SAME_ROLE`: Normalized company + title match (blocking duplicate).
+     - `COMPANY_ONLY`: Prior applications exist at the same company for different roles (informational only, non-blocking `.banner.info` displaying prior vs current role, normal save permitted without override).
+     - `NONE`: No history found.
+     - Match history explicitly bounded to top 3 recent records (`LIMIT 3`).
+
+2. **Defect 2 Fixed (Tailored Resume Manual Entry HTTP 400)**:
+   - Root cause: `validateApplication` in `backend/src/service.js` tested `data.resume_id !== undefined && data.resume_id !== ""`. When payload sent `resume_id: null`, `Number(null)` was evaluated as 0, failing `0 < 1`.
+   - Fix: Explicitly allowed `data.resume_id === null` in `service.js`. Added 3-mode tailored resume interface in `extension/popup.html` and `extension/popup.js` (Select from library, Enter manually with validation, None). Updated `POST /api/extension/applications` to accept `resume_id: null` with `resume_version`.
+
+3. **Realistic Test Suite Additions & Verification**:
+   - `backend/test/app.test.js`: 52/52 passing (added tests for `COMPANY_ONLY`, `SAME_ROLE`, bounded results, and manual resume handling; fixed date-flake in Round 7 recurrence test for 2028).
+   - `extension/tests/api.test.js`: 10/10 passing (added unit tests for `normalizeJobUrl`, `normalizeText`, resume payload formatting, and duplicate classification).
+   - `backend/e2e/extension.spec.js`: 10/10 passing across 5 viewports.
+   - `npm run test:frontend`: 44/44 passing.
+   - `npm run lint` & `npm run typecheck`: clean across all files.
+   - `npm run build:frontend`: clean production bundle.
+
+4. **Documentation Created**:
+   - `docs/EXTENSION_ARCHITECTURE.md`: Complete architectural specification.
+   - `docs/EXTENSION_TEST_PLAN.md`: 34 test matrix scenarios + real-world manual testing checklist.
+   - `docs/EXTENSION_SECURITY.md`: Comprehensive security review.
+   - `docs/EXTENSION_INSTALLATION.md`: Developer unpacked installation guide.
+   - `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`: Updated with stabilization defect analyses and decisions.
+   - `tasks/BACKLOG.md`: Logged JobRight.ai support as deferred (ON HOLD).
+
+**For the next agent**: PR #20 is updated on origin. Do NOT merge PR #20 into `development` without explicit user approval. Do NOT merge to `main` or deploy to production.
+

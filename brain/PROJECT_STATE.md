@@ -7,8 +7,7 @@ Last updated: 2026-09-20, by Antigravity (Google Deepmind).
 - `development`: head `a06c7cf` — Round 10 integrated, all tests green, PR #18
   open (`development → main`), awaiting user approval. **Do not merge PR #18.**
 - `main`: unchanged. Three commits behind `development` (the Neon-crash fix).
-- `feature/011-jobquest-capture-extension`: Round 11 complete (CP0–CP9). PR #20
-  opened targeting `development`. All tests passing, awaiting user review.
+- `feature/011-jobquest-capture-extension`: Round 11 Pre-Merge Stabilization & Defect Fixes complete. PR #20 updated on origin targeting `development`. All 52 backend, 10 extension unit, 10 Playwright E2E across 5 viewports, and 44 frontend unit tests passing. Awaiting user review. **Do not merge PR #20.**
 
 - Local validation of the **integrated** `development` branch (not just the
   feature branch): all green — reproducible install, static-quality (lint/
@@ -83,12 +82,11 @@ Round 10 merge.
 
 ## Blockers
 
-None that block producing the final report. The only open decision is the
-user's: approve or hold the `main` merge (PR #18).
+None. The open decisions are the user's:
+- Review and approve/merge PR #20 (`feature/011-jobquest-capture-extension` -> `development`).
+- Review and approve/merge PR #18 (`development` -> `main`).
 
 ## Next safe action
 
-Confirm PR #18's CI is green on its current head commit, then deliver the
-JOBQUEST V2 FINAL MAIN-INTEGRATION REPORT and stop. Do not merge PR #18 into
-`main`. Do not deploy. Wait for the user's explicit approval before either —
-per this session's own explicit instruction, not a default assumption.
+Ensure PR #20 has clean local validation passing, stage and push stabilization commits, and deliver the final report. Do NOT merge PR #20 into `development`. Do NOT merge PR #18 into `main`. Do NOT deploy to production.
+

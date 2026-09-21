@@ -271,7 +271,57 @@ Playwright extension E2E added to existing `browser-and-visual` job.
 ## Decisions
 
 - **Auth**: Extension bearer tokens (Option A) — not session cookie reuse
-- **Duplicate levels**: URL exact + company/title exact — no fuzzy/AI
-- **Resume selection**: Free-text `resume_version` populated from `resumes.version_name` + `resume_id` FK; user must explicitly choose, never auto-selected
+- **Duplicate levels**: URL exact (`EXACT_POSTING`) + Company history (`SAME_ROLE` vs `COMPANY_ONLY`) + `NONE`
+- **Resume selection**: Segmented choice supporting existing resume selection, manual version text entry, and none
+- **JobRight.ai adapter**: Explicitly deferred to V2.1/V2.2
 - **Extension store**: Not publishing; load-unpacked only
 - **No new frontend framework**: Vanilla JS, matching rest of project
+
+---
+
+## Pre-Merge Stabilization & Real-World Validation
+
+During local end-to-end validation of PR #20, two real-world defects were discovered, root-caused, and resolved.
+
+### Defect 1: False Duplicate on First Capture
+- **Symptom**: On the first capture of a job from a company with no prior application in the database, the extension still displayed a warning banner: `"Existing application found"`.
+- **Root Cause**:
+  1. In `extension/popup.html`, `#dup-banner` had default static markup: `<span id="dup-heading">Existing application found</span>` with attribute `hidden`.
+  2. In `extension/popup.css`, `.banner { display: flex; }` was declared without an author-level `[hidden]` rule. Because class selector `.banner` (specificity 0,1,0) overrides the user agent stylesheet's `[hidden] { display: none; }` (specificity 0,0,0), the banner remained permanently visible on screen regardless of whether `dupBanner.hidden = true` was set.
+  3. The duplicate endpoint previously returned an ambiguous boolean (`has_duplicate`) and did not distinguish having previous history at a company for a different role (`COMPANY_ONLY`) from a true duplicate.
+- **Resolution**:
+  1. Added global `[hidden] { display: none !important; }` and `.banner[hidden] { display: none !important; }` in `extension/popup.css`.
+  2. Removed static fallback text from `popup.html`, ensuring banner text is strictly dynamic.
+  3. Refactored `/api/extension/duplicate-check` and popup controller into four distinct semantic states:
+     - `NONE`: No warning banner, normal save.
+     - `COMPANY_ONLY`: Informational banner ("You already have another application at this company"); normal save available without duplicate override; provides "View Existing" link.
+     - `SAME_ROLE`: Warning banner with `[Open Existing]`, `[Save Anyway]`, `[Cancel]`.
+     - `EXACT_POSTING`: Danger banner with `[Open Existing]`, `[Save Anyway]`, `[Cancel]`.
+     - `CHECK_ERROR`: Network/server failure notice; never misclassified as an existing application.
+- **Regression Tests**: Added in `backend/test/app.test.js`, `extension/tests/api.test.js`, and `backend/e2e/extension.spec.js`.
+
+### Defect 2: Manual Tailored Resume `resume_id must be a positive integer`
+- **Symptom**: When entering a custom tailored resume version or saving without selecting a resume, the application save failed with HTTP 400: `"resume_id must be a positive integer"`.
+- **Root Cause**:
+  1. In `backend/src/service.js`, `validateApplication()` evaluated `if (data.resume_id !== undefined && data.resume_id !== "")`. When JSON transmitted `resume_id: null`, `Number(null)` coerced to `0`, which failed `0 < 1` and pushed the error.
+  2. The popup UI only offered a single `<select>` without an explicit manual entry mode for users wishing to record tailored versions (e.g. `"QA Automation v96"`) without creating a formal resume record in JobQuest.
+- **Resolution**:
+  1. Updated `backend/src/service.js` to treat `null` and empty string as clean `null` values for `resume_id`, only validating positive integer when a non-null value is provided.
+  2. Enhanced `extension/popup.html` and `extension/popup.js` with a 3-mode selector:
+     - **Select existing**: maps to `resume_id` integer and `resume_version` text.
+     - **Enter manually**: maps to `resume_version` text with `resume_id: null`.
+     - **None**: maps to `resume_id: null` and `resume_version: null`.
+  3. Added client-side character set and length (&le; 100) validation for manual input.
+  4. Added mode-switch cleanup ensuring stale IDs or manual strings are discarded on mode transition.
+- **Regression Tests**: Added in `backend/test/app.test.js`, `extension/tests/api.test.js`, and `backend/e2e/extension.spec.js`.
+
+---
+
+## JobRight.ai Support Status
+
+**Explicitly ON HOLD / Deferred to V2.1/V2.2.**
+
+- No JobRight-specific extractors or selectors were implemented in this round.
+- No Selenium dependencies were added.
+- Dedicated adapter and SPA exploration will be conducted in a subsequent round after inspecting JobRight's rendered DOM and structured metadata.
+

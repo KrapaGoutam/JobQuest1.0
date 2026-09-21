@@ -8,13 +8,14 @@ Manifest V3 browser extension for Google Chrome and Microsoft Edge that captures
 
 - **Multi-Tier Smart Extractor**:
   1. **schema.org `JobPosting` JSON-LD**: High-fidelity structured metadata (title, company, address, telecommute, salary ranges).
-  2. **Site-Specific ATS Adapters**: Built-in support for Greenhouse (`greenhouse.io`), Lever (`jobs.lever.co`), and Indeed (`indeed.com`).
+  2. **Site-Specific ATS Adapters**: Built-in support for Greenhouse (`greenhouse.io`), Lever (`jobs.lever.co`), and Indeed (`indeed.com`). *(Note: JobRight.ai support is ON HOLD and deferred to V2.1/V2.2).*
   3. **Page Meta Tags**: OpenGraph, Twitter Cards, and canonical `<title>` parsing.
   4. **DOM Heuristics**: Automatic extraction of headings and page metadata without fabricating missing data.
-- **Two-Level Duplicate Detection**:
-  - **Level 1 (Exact URL)**: Normalizes URLs (strips tracking parameters like `utm_*` and trailing slashes) to detect identical postings you previously saved.
-  - **Level 2 (Company + Job Title)**: Case-insensitive, whitespace-normalized matching across your active applications.
-- **Resume Tailoring Support**: Dynamically loads your active resume versions from JobQuest so you can explicitly tag which resume version you used.
+- **Company-First Duplicate & History Detection**:
+  - **Exact Posting (`EXACT_POSTING`)**: Normalizes URLs (strips `utm_*` tracking and trailing slashes) to identify identical postings previously saved.
+  - **Same Role (`SAME_ROLE`)**: Detects applications with matching normalized company and job title; offers "Open Existing" and "Save Anyway".
+  - **Company History (`COMPANY_ONLY`)**: Identifies previous applications at the same company for a different job; provides non-blocking informational guidance without requiring duplicate overrides.
+- **Tailored Resume Support**: Supports selecting an existing resume version from JobQuest or manually entering a custom version label (e.g. `QA Automation v96`).
 - **Secure Bearer Token Auth**: Connects using scoped extension tokens (stored as SHA-256 hashes, revocable at any time from JobQuest Settings).
 
 ---
