@@ -123,3 +123,50 @@ Non-standard employer career portals and job aggregator sites often lack structu
 | **Indeed (`indeed.com`)** | ✅ Active | Dedicated DOM adapter |
 | **Generic DOM / Meta Fallback** | ✅ Active | Hardened source-quality hierarchy: semantic DOM heading outranks metadata slogans; aggregator vs employer domain separation; dual-suffix salary parser |
 | **JobRight.ai** | ⏸️ **ON HOLD** | **DEFERRED TO V2.1/V2.2**. Parsed via hardened generic extractor fallback without site-specific adapter. |
+
+---
+
+## Canonical Stage Alignment & Open Existing Deep-Link Test Plan
+
+### Canonical Stage Test Matrix
+
+| # | Scenario | Test Input / Condition | Expected Behavior |
+|---|---|---|---|
+| **S1** | **Canonical Stage Parity** | `GET /api/extension/stages` | Returns all 13 canonical JobQuest `STAGES` matching `backend/src/service.js`. Default is `"Applied"`. First stage is `"Saved"`. |
+| **S2** | **Bookmarked Stage Regression** | Extension options or forged API input with `stage: "Bookmarked"` | Normal UI no longer offers `"Bookmarked"`. Direct API submission returns HTTP 400 with `Unsupported stage: Bookmarked`. |
+| **S3** | **Pre-Application Bookmark Capture** | User selects `"Saved"` in popup and submits | Backend accepts `"Saved"`, saves application with `stage: "Saved"` (201 Created). |
+| **S4** | **Every Supported Stage** | Loop testing all 13 canonical stages | Every canonical stage succeeds with 201 Created. |
+| **S5** | **Workflow Action Mapping** | Workflow action items `{ label, value }` | Every label maps to a valid, supported canonical stage value. |
+| **S6** | **Arbitrary Stage Forgery** | `POST /api/extension/applications` with `{ stage: "InvalidStage" }` | Backend rejects with HTTP 400 `Unsupported stage: InvalidStage`. |
+| **S7** | **Stage Loading Failure Guard** | Unreachable server or invalid token during stage fetch | Popup displays error notice and disables save button rather than falling back to unvalidated stages. |
+
+### Open Existing Deep-Link Test Matrix
+
+| # | Scenario | Test Input / Condition | Expected Behavior |
+|---|---|---|---|
+| **D1** | **Exact Duplicate Navigation** | Duplicate check returns `EXACT_POSTING` with matched `application.id = 123`. User clicks `Open Existing`. | Browser opens `http://localhost:3000/?application=123`. Application #123 detail view is displayed. Dashboard is NOT the terminal destination. |
+| **D2** | **Same-Role Duplicate Navigation** | Duplicate check returns `SAME_ROLE` with matched `application.id = 234`. User clicks `Open Existing`. | Browser opens `http://localhost:3000/?application=234`. Application #234 detail view is displayed. |
+| **D3** | **Company-Only History Navigation** | Duplicate check returns `COMPANY_ONLY` with prior application `id = 345`. User clicks `View Existing Application`. | Browser opens `http://localhost:3000/?application=345`. Prior application #345 detail view is displayed. |
+| **D4** | **Unauthenticated Deep-Link** | User opens `/?application=123` in logged-out session. | JobQuest shows auth form (`#auth-form`). After PIN login, user is immediately routed to application #123 detail view. |
+| **D5** | **Deleted / Non-Existent Target** | User opens `/?application=999999` (deleted or invalid ID). | App does not crash. Navigates gracefully to Applications view and displays toast: `"Application could not be found."`. |
+| **D6** | **Open-Redirect Prevention** | Crafted path: `//evil.com` or `javascript:...` | `buildSecureJobQuestUrl` rejects navigation outside configured JobQuest origin. |
+| **D7** | **Configured Origin Preserved** | Custom instance URL: `https://my-jobquest.example.com` | Navigation is strictly bound to `https://my-jobquest.example.com/?application=123`. No localhost hardcoding. |
+
+### Test Plan Checklist
+
+```markdown
+- [x] Every extension Stage option is backend-supported
+- [x] Bookmarked unsupported-stage regression
+- [x] Workflow label -> canonical value mapping
+- [x] Invalid stage still rejected by backend
+- [x] Exact duplicate -> Open Existing
+- [x] Correct application ID opened
+- [x] Same-role duplicate -> correct application opened
+- [x] Company-only history -> correct prior application opened
+- [x] Missing target ID handled safely
+- [x] Deleted target handled with Applications fallback and toast
+- [x] Different configured JobQuest origin preserved
+- [x] Open redirect prevented
+- [x] Authentication preserved through login
+- [x] Dashboard is not final destination when target exists
+```

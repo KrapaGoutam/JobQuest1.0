@@ -35,20 +35,25 @@ approval. Do not merge PR #18 without explicit instruction.
   - Solution: Enforced strict source-quality hierarchy: high-confidence semantic DOM headings outrank metadata slogans; implemented `isGenericTitle()`; separated aggregator domains (branding never assigned as employer) from direct employer sites (safe domain brand attribution); added multi-location joining (`"; "`), workplace arrangement fallback from location chips, and dual-suffix salary regex.
   - Fixtures: `extension/fixtures/tensor_career_job.html` & `extension/fixtures/aggregator_jobright_job.html`.
   - Zero hardcoding of company names or role titles; JobRight-specific adapter remains DEFERRED / ON HOLD.
+- **Fixed Defect 4 (Extension Stage Alignment with JobQuest Workflow Actions)**:
+  - Root cause: Extension maintained an independent, hardcoded stage list (`["Bookmarked", "Applied", "Screening", "Interviewing", "Offer"]`). In JobQuest's canonical workflow model, bookmarking before applying is canonically represented by `"Saved"`, and valid stages are defined in `backend/src/service.js:STAGES`. Submitting `"Bookmarked"` failed with HTTP 400 (`Unsupported stage: Bookmarked`).
+  - Solution: Exposed `GET /api/extension/stages` and `GET /api/extension/workflow-actions`. Updated `extension/popup.html` and `popup.js` (`loadWorkflowStages()`) to fetch and dynamically render canonical options. Display labels map to valid stored values (`"Saved"` for pre-application bookmarking, `"Applied"` as default). Robust failure handling displays an error banner and disables save button if fetch fails.
+- **Fixed Defect 5 ("Open Existing" / "View Existing Application" Deep-Linking UX Gap)**:
+  - Root cause: Duplicate warning buttons navigated to `${instanceUrl}/` (landing on Dashboard) instead of opening the matched application.
+  - Solution: Added `buildSecureJobQuestUrl()` in `extension/api/jobquest.js` to build `/?application=${targetId}` with protocol (`http:`, `https:`) and origin boundary security. Updated `backend/src/extension.js` duplicate-check endpoint to include stable `id` and `application_id` across all match tiers. Added `resolveInitialRoute()` in `frontend/src/app.js` supporting `?application=<id>`, `?id=<id>`, `#detail:<id>`. Preserved target parameter across unauthenticated PIN login flow. Added graceful 404 fallback in `renderDetail()` navigating to `applications` with `toast("Application could not be found.")`.
 - **Real-World Test Suite & Verification**:
-  - `extension/tests/extractor.test.js`: 16/16 passing (includes Tensor, Aggregator, generic title rejection, and DOM vs metadata priority suites).
-  - `backend/test/app.test.js`: 52/52 passing (added tests for `COMPANY_ONLY`, `SAME_ROLE`, bounded results, and manual resume entry).
-  - `extension/tests/api.test.js`: 10/10 passing (added unit tests for `normalizeJobUrl`, `normalizeText`, resume payload formatting, and duplicate classification).
-  - `backend/e2e/extension.spec.js`: 10/10 passing across all 5 responsive viewports.
+  - `backend/test/app.test.js`: 57/57 passing (added tests for canonical stages endpoint, all 13 canonical stages, `Bookmarked` rejection with 400, forged stage rejection, and duplicate response IDs).
+  - `extension/tests/api.test.js` & `extractor.test.js`: 23/23 passing (added unit tests for canonical stages parity, unsupported stage regression, label mapping, URL security, duplicate IDs, and extractor fixtures).
+  - `backend/e2e/extension.spec.js`: 6/6 passing (covering exact duplicate deep-linking, unauthenticated deep-link preservation, deleted target fallback, and `Saved` stage capture).
   - `npm run test:frontend`: 44/44 passing.
   - `npm run lint` & `npm run typecheck`: clean.
+  - `npm run build:frontend`: clean production bundle.
 - **Documentation Suite Delivered**:
-  - `docs/EXTENSION_ARCHITECTURE.md`: Full architecture specification + Extractor Engine Cascade.
-  - `docs/EXTENSION_TEST_PLAN.md`: 34-scenario matrix, generic extraction matrix, and real-world manual testing checklists.
-  - `docs/EXTENSION_SECURITY.md`: Auth scoping, IDOR, input sanitation, rate-limiting, and URL validation posture.
-  - `docs/EXTENSION_INSTALLATION.md`: Step-by-step developer unpacked installation guide.
-  - `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`: Updated with stabilization defect analyses, generic extraction hardening, and decisions.
-  - `tasks/BACKLOG.md`: Formalized JobRight.ai deferred status (ON HOLD).
+  - `docs/EXTENSION_ARCHITECTURE.md`: Full architecture specification + Extractor Engine Cascade + Canonical Stage Synchronization + Duplicate Deep-Linking.
+  - `docs/EXTENSION_TEST_PLAN.md`: Complete test matrix + real-world manual testing checklists.
+  - `docs/EXTENSION_SECURITY.md`: Auth scoping, IDOR, input sanitation, URL security, and deep-link validation.
+  - `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`: Updated with Defect 4 and Defect 5 analyses and decisions.
+  - `brain/DECISIONS.md`: Logged `2026-09-21 — Round 11: Canonical Workflow Stages Synchronization & Duplicate Deep-Linking`.
 
 ## Next exact action
 

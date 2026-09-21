@@ -108,6 +108,14 @@ export async function checkDuplicate(instanceUrl, apiToken, { job_url, company, 
 }
 
 /**
+ * Retrieves the canonical list of workflow stages and actions supported by JobQuest.
+ * Returns: { stages: string[], default: string, workflow_actions: [{ label, value }] }
+ */
+export async function getStages(instanceUrl, apiToken) {
+  return extFetch(instanceUrl, apiToken, "/api/extension/stages")
+}
+
+/**
  * Saves a new job application from the extension to JobQuest.
  * Returns: newly created application record with id
  */
@@ -116,4 +124,46 @@ export async function createApplication(instanceUrl, apiToken, applicationData) 
     method: "POST",
     body: JSON.stringify(applicationData),
   })
+}
+
+/**
+ * Securely constructs a URL within the configured JobQuest instance.
+ * Validates protocol (http: or https:) and binds strictly to the configured origin
+ * to prevent open redirects to arbitrary domains or javascript: URIs.
+ */
+export function buildSecureJobQuestUrl(instanceUrl, pathAndQuery = "/") {
+  const raw = String(instanceUrl || "").trim()
+  if (!raw) {
+    throw new Error("JobQuest instance URL is not configured")
+  }
+  if (/^(javascript|data|vbscript|file):/i.test(raw)) {
+    throw new Error("JobQuest instance URL must use http: or https:")
+  }
+
+  const cleanBase = normalizeInstanceUrl(raw)
+  let parsed
+  try {
+    parsed = new URL(cleanBase)
+  } catch {
+    throw new Error("Invalid JobQuest instance URL")
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("JobQuest instance URL must use http: or https:")
+  }
+
+  const origin = parsed.origin
+  const rawPath = String(pathAndQuery || "/").trim()
+  if (rawPath.startsWith("//")) {
+    throw new Error("Target destination violates JobQuest instance origin boundary")
+  }
+  const pathWithSlash = rawPath.startsWith("/") || rawPath.startsWith("#") ? rawPath : `/${rawPath}`
+  const target = new URL(pathWithSlash, origin)
+
+  // Double check origin hasn't been altered by path tricks
+  if (target.origin !== origin) {
+    throw new Error("Target destination violates JobQuest instance origin boundary")
+  }
+
+  return target.toString()
 }

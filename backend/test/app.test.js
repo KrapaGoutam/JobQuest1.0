@@ -2928,4 +2928,147 @@ test("extension: manual tailored resume saves resume_version without invalid res
   assert.equal(res2.data.resume_id, null);
 });
 
+test("extension api: GET /api/extension/stages returns canonical STAGES and workflow actions", async () => {
+  const user = await register("ext_stages_user");
+  const gen = await generateExtToken(user, "Stages Token");
+  const token = gen.data.token;
+
+  const res = await extRequest("/api/extension/stages", { token });
+  assert.equal(res.status, 200);
+  assert.ok(Array.isArray(res.data.stages));
+  assert.equal(res.data.stages.length, 13);
+  assert.ok(res.data.stages.includes("Saved"));
+  assert.ok(res.data.stages.includes("Applied"));
+  assert.equal(res.data.default, "Applied");
+  assert.ok(Array.isArray(res.data.workflow_actions));
+  assert.equal(res.data.workflow_actions.length, 13);
+  assert.equal(res.data.workflow_actions[0].value, "Saved");
+
+  // Alias route /api/extension/workflow-actions
+  const aliasRes = await extRequest("/api/extension/workflow-actions", { token });
+  assert.equal(aliasRes.status, 200);
+  assert.equal(aliasRes.data.stages.length, 13);
+});
+
+test("extension api: POST /api/extension/applications accepts all canonical STAGES including 'Saved'", async () => {
+  const user = await register("ext_stageall_user");
+  const gen = await generateExtToken(user, "Stages All Token");
+  const token = gen.data.token;
+
+  // Stages endpoint
+  const stagesRes = await extRequest("/api/extension/stages", { token });
+  const canonicalStages = stagesRes.data.stages;
+
+  for (let i = 0; i < canonicalStages.length; i++) {
+    const stage = canonicalStages[i];
+    const res = await extRequest("/api/extension/applications", {
+      method: "POST",
+      token,
+      input: {
+        company: `StageCo-${i}`,
+        job_title: `Role-${stage}`,
+        date_applied: "2026-09-20",
+        stage,
+      },
+    });
+    assert.equal(res.status, 201, `Failed to create application with canonical stage: ${stage}`);
+    assert.equal(res.data.stage, stage);
+    assert.ok(res.data.id > 0);
+  }
+});
+
+test("extension api: POST /api/extension/applications rejects unsupported stage 'Bookmarked' with 400", async () => {
+  const user = await register("ext_stagebm_user");
+  const gen = await generateExtToken(user, "Bookmarked Token");
+  const token = gen.data.token;
+
+  const res = await extRequest("/api/extension/applications", {
+    method: "POST",
+    token,
+    input: {
+      company: "BookmarkCorp",
+      job_title: "QA Engineer",
+      date_applied: "2026-09-20",
+      stage: "Bookmarked",
+    },
+  });
+  assert.equal(res.status, 400);
+  assert.ok(
+    res.data.errors?.some((e) => e.includes("Unsupported stage: Bookmarked")),
+    `Expected Unsupported stage: Bookmarked error, got: ${JSON.stringify(res.data)}`,
+  );
+});
+
+test("extension api: POST /api/extension/applications rejects forged arbitrary invalid stage", async () => {
+  const user = await register("ext_stageforge_user");
+  const gen = await generateExtToken(user, "Forge Token");
+  const token = gen.data.token;
+
+  const res = await extRequest("/api/extension/applications", {
+    method: "POST",
+    token,
+    input: {
+      company: "ForgeCorp",
+      job_title: "Engineer",
+      date_applied: "2026-09-20",
+      stage: "ArbitraryInventedStage",
+    },
+  });
+  assert.equal(res.status, 400);
+  assert.ok(res.data.errors?.some((e) => e.includes("Unsupported stage: ArbitraryInventedStage")));
+});
+
+test("extension api: duplicate check responses include stable application id and application_id", async () => {
+  const user = await register("ext_dupid_user");
+  const gen = await generateExtToken(user, "Dup ID Token");
+  const token = gen.data.token;
+
+  // Seed application
+  const createRes = await extRequest("/api/extension/applications", {
+    method: "POST",
+    token,
+    input: {
+      company: "DupIdCorp",
+      job_title: "Staff QA",
+      date_applied: "2026-09-20",
+      job_url: "https://dupid.example.com/jobs/99",
+      stage: "Saved",
+    },
+  });
+  assert.equal(createRes.status, 201);
+  const seededId = createRes.data.id;
+
+  // Level 1: exact URL
+  const check1 = await extRequest(
+    `/api/extension/duplicate-check?job_url=${encodeURIComponent("https://dupid.example.com/jobs/99")}`,
+    { token },
+  );
+  assert.equal(check1.status, 200);
+  assert.equal(check1.data.match_type, "exact_posting");
+  assert.equal(check1.data.matches[0].id, seededId);
+  assert.equal(check1.data.matches[0].application_id, seededId);
+  assert.equal(check1.data.matches[0].application.id, seededId);
+
+  // Level 2: same role
+  const check2 = await extRequest(
+    `/api/extension/duplicate-check?company=dupidcorp&job_title=staff%20qa`,
+    { token },
+  );
+  assert.equal(check2.status, 200);
+  assert.equal(check2.data.match_type, "same_role");
+  assert.equal(check2.data.matches[0].id, seededId);
+  assert.equal(check2.data.matches[0].application_id, seededId);
+
+  // Level 3: company only
+  const check3 = await extRequest(
+    `/api/extension/duplicate-check?company=dupidcorp&job_title=Other%20Role`,
+    { token },
+  );
+  assert.equal(check3.status, 200);
+  assert.equal(check3.data.match_type, "company_only");
+  assert.equal(check3.data.matches[0].id, seededId);
+  assert.equal(check3.data.matches[0].application_id, seededId);
+});
+
+
 

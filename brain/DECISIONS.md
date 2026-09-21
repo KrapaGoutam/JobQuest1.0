@@ -187,4 +187,14 @@ Additionally, match history is explicitly bounded to top 3 recent applications (
 
 **Why**: Real-world captures on aggregator sites (e.g. JobRight) extracted site marketing slogans ("Jobright: Your AI Job Search Copilot") as the job title and the aggregator platform ("Jobright AI") as the employer, while direct employer portals (e.g. Tensor) extracted the portal brand ("Tensor") as the title and left company blank. The hardened cascade resolves both failure classes architecturally without hardcoded company names or dedicated site-specific adapters.
 
+## 2026-09-21 — Round 11: Canonical Workflow Stages Synchronization & Duplicate Deep-Linking
+
+**Decision**:
+1. Browser extension stage choices must use the canonical JobQuest Workflow Actions/stage definitions (`STAGES` in `backend/src/service.js`) via `GET /api/extension/stages` and cannot maintain an independent stage enum. The pre-application stage for bookmarking/saving postings before applying is canonically `"Saved"`, and submissions default to `"Applied"`. The invented stage `"Bookmarked"` is rejected.
+2. Duplicate-result navigation must use the matched application's stable ID and open that application directly using the smallest routing/deep-link mechanism supported by the current vanilla JobQuest architecture (`/?application=<id>`). URLs are constructed securely via `buildSecureJobQuestUrl` strictly bound to the configured JobQuest origin. Missing/deleted targets gracefully fall back to the Applications view with toast notice `"Application could not be found."`.
+
+**Why**:
+1. During local validation, selecting `"Bookmarked"` failed with HTTP 400 (`Unsupported stage: Bookmarked`) because the extension HTML previously hardcoded an invented stage list (`Bookmarked`, `Screening`, `Interviewing`) instead of consuming JobQuest's canonical stages.
+2. When duplicate warnings appeared, clicking `Open Existing` navigated to `${instanceUrl}/`, dumping the user onto the Dashboard rather than displaying the existing record. The lightweight `?application=<id>` parameter provides instant direct navigation to `renderDetail(id)` without introducing a heavy router library or breaking existing vanilla architecture.
+
 

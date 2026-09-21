@@ -217,3 +217,42 @@ Fallback: Blank fields (never fabricate missing information; editable in popup)
 5. **No Speculation**:
    - If a field (salary, arrangement, location) is not explicitly present, it remains null/blank. Missing values are filled by the user in the popup.
 
+---
+
+## Canonical Workflow Actions & Stage Synchronization
+
+The extension's stage field does not maintain an independent or diverged list of stages. It is populated directly from JobQuest's canonical workflow model:
+
+1. **Source of Truth**:
+   - `backend/src/service.js` exports `STAGES = ["Saved", "Preparing", "Applied", "Assessment", "Recruiter Screen", "Interview", "Final Interview", "Offer", "Rejected", "Withdrawn", "Ghosted", "Position Closed", "Accepted"]`.
+   - The pre-application stage for saving/bookmarking a posting is canonically `"Saved"`.
+2. **API Endpoint (`GET /api/extension/stages`)**:
+   - Protected by Bearer token authentication.
+   - Returns `{ stages: STAGES, default: "Applied", workflow_actions: [...] }`.
+3. **Popup Initialization**:
+   - `extension/popup.js` fetches canonical stages during `init()` via `getStages()`.
+   - Dynamically populates `#input-stage`.
+   - If connection or authentication fails, the save button is disabled with an explanatory banner, preventing submission of invalid/invented stages.
+4. **Backend Enforcement**:
+   - `backend/src/service.js` validates `data.stage` against `STAGES`, rejecting invalid values (e.g. `Bookmarked`) with HTTP 400: `Unsupported stage: <stage>`.
+
+---
+
+## Duplicate Result Navigation & Deep-Linking Architecture
+
+When a duplicate warning is presented (`EXACT_POSTING`, `SAME_ROLE`, or `COMPANY_ONLY`), clicking `Open Existing` deep-links directly to the matched application:
+
+1. **Stable ID Exposure**:
+   - Backend `/api/extension/duplicate-check` includes `id: app.id` and `application_id: app.id` in every match item.
+2. **URL Construction & Security**:
+   - `extension/api/jobquest.js` exports `buildSecureJobQuestUrl(instanceUrl, pathAndQuery)`.
+   - Validates that `instanceUrl` uses `http:` or `https:`.
+   - Binds navigation strictly to `new URL(instanceUrl).origin` (preventing open redirects, `//evil.com`, `javascript:`, or `data:` URIs).
+   - Generates `${origin}/?application=${id}`.
+3. **Frontend Resolution**:
+   - In `frontend/src/app.js`, `resolveInitialRoute()` inspects `?application=<id>` (and `#detail:<id>`) on initial boot and post-login.
+   - If present, JobQuest navigates directly to `go("detail:" + id)` without a full SPA routing rewrite.
+   - Preserves normal authentication: if unauthenticated, the user logs in via PIN, and post-auth navigation lands directly on the intended application.
+4. **Safe 404 / Missing Target Handling**:
+   - If the application was deleted or does not exist, `renderDetail(id)` catches the error, navigates safely to `applications`, and displays `toast("Application could not be found.")`.
+

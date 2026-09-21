@@ -4,6 +4,8 @@ import {
   getSettings,
   testConnection,
   getActiveResumes,
+  getStages,
+  buildSecureJobQuestUrl,
   checkDuplicate,
   createApplication,
 } from "./api/jobquest.js"
@@ -192,6 +194,36 @@ async function runDuplicateCheck() {
   }
 }
 
+async function loadWorkflowStages() {
+  try {
+    const data = await getStages(
+      currentSettings.instanceUrl,
+      currentSettings.apiToken,
+    )
+    const actions =
+      data.workflow_actions ||
+      (data.stages || []).map((s) => ({ label: s, value: s }))
+    const defaultStage = data.default || "Applied"
+
+    inputStage.innerHTML = ""
+    for (const item of actions) {
+      const opt = document.createElement("option")
+      opt.value = item.value
+      opt.textContent = item.label
+      if (item.value === defaultStage) {
+        opt.selected = true
+      }
+      inputStage.appendChild(opt)
+    }
+    saveBtn.disabled = false
+  } catch (err) {
+    console.warn("Failed to load canonical workflow stages:", err)
+    formError.hidden = false
+    formError.textContent = `Could not load canonical JobQuest stages: ${err.message}. Saving is disabled until connected.`
+    saveBtn.disabled = true
+  }
+}
+
 async function loadActiveResumes() {
   try {
     const resumes = await getActiveResumes(
@@ -239,7 +271,8 @@ async function init() {
       return
     }
 
-    // Auth succeeded: fetch active resumes in background
+    // Auth succeeded: fetch canonical workflow stages and active resumes
+    await loadWorkflowStages()
     loadActiveResumes()
 
     // Reset resume mode to existing by default
@@ -410,8 +443,33 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Duplicate action buttons
   dupOpenBtn.addEventListener("click", () => {
-    const base = currentSettings.instanceUrl.replace(/\/+$/, "")
-    chrome.tabs.create({ url: `${base}/` })
+    const targetId =
+      currentDuplicateMatch?.application?.id ||
+      currentDuplicateMatch?.id ||
+      currentDuplicateMatch?.application_id
+    if (targetId) {
+      try {
+        const targetUrl = buildSecureJobQuestUrl(
+          currentSettings.instanceUrl,
+          `/?application=${encodeURIComponent(targetId)}`,
+        )
+        chrome.tabs.create({ url: targetUrl })
+        return
+      } catch (err) {
+        console.error("Failed to construct secure deep-link URL:", err)
+      }
+    }
+    // Fallback to Applications page if target ID is not available
+    try {
+      const fallbackUrl = buildSecureJobQuestUrl(
+        currentSettings.instanceUrl,
+        "/?page=applications",
+      )
+      chrome.tabs.create({ url: fallbackUrl })
+    } catch {
+      const base = currentSettings.instanceUrl.replace(/\/+$/, "")
+      chrome.tabs.create({ url: `${base}/` })
+    }
   })
 
   dupSaveAnywayBtn.addEventListener("click", () => {
@@ -425,6 +483,18 @@ document.addEventListener("DOMContentLoaded", () => {
   })
 
   viewAppBtn.addEventListener("click", () => {
+    if (lastCreatedAppId) {
+      try {
+        const targetUrl = buildSecureJobQuestUrl(
+          currentSettings.instanceUrl,
+          `/?application=${encodeURIComponent(lastCreatedAppId)}`,
+        )
+        chrome.tabs.create({ url: targetUrl })
+        return
+      } catch (err) {
+        console.error("Failed to construct secure deep-link URL:", err)
+      }
+    }
     const base = currentSettings.instanceUrl.replace(/\/+$/, "")
     chrome.tabs.create({ url: `${base}/` })
   })

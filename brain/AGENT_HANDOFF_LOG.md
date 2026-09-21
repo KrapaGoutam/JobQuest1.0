@@ -553,4 +553,35 @@ Addressed non-standard career portal & job aggregator extraction defects surface
 
 **For the next agent**: PR #20 is updated on origin. Do NOT merge PR #20 into `development` without explicit user approval. Do NOT merge to `main` or deploy to production.
 
+## 2026-09-21 — Antigravity (Google Deepmind) — Canonical Workflow Stage Alignment & Duplicate Deep-Linking
+
+Addressed two critical pre-merge real-world defects on branch `feature/011-jobquest-capture-extension`:
+
+1. **Defect 4 Fixed (Extension Stage Values Not Aligned with JobQuest Workflow Actions)**:
+   - Root cause: Extension maintained an independent, hardcoded stage list (`["Bookmarked", "Applied", "Screening", "Interviewing", "Offer"]`). In JobQuest's canonical workflow model, bookmarking before applying is canonically represented by `"Saved"`, and valid stages are defined in `backend/src/service.js:STAGES`. Submitting `"Bookmarked"` failed with HTTP 400 (`Unsupported stage: Bookmarked`).
+   - Architectural resolution:
+     - Exposed `GET /api/extension/stages` and `GET /api/extension/workflow-actions` returning canonical stages and display mappings.
+     - Updated `extension/popup.html` and `extension/popup.js` (`loadWorkflowStages()`) to dynamically populate the selector with JobQuest's canonical stages/workflow actions.
+     - Defaulted to `"Applied"`, with `"Saved"` representing pre-application bookmarking.
+     - Graceful failure handling: if stage fetch fails (auth or network error), the extension displays an error banner and disables saving.
+
+2. **Defect 5 Fixed ("Open Existing" / "View Existing Application" Deep-Linking UX Gap)**:
+   - Root cause: Duplicate warning buttons opened `${instanceUrl}/`, navigating to Dashboard instead of the matched application.
+   - Architectural resolution:
+     - Added `buildSecureJobQuestUrl(instanceUrl, pathAndQuery)` in `extension/api/jobquest.js` to build `/?application=${targetId}` with strict protocol (`http:`, `https:`) and origin boundary validation, rejecting `javascript:`, `data:`, and `//evil.com` escapes.
+     - Enhanced `GET /api/extension/duplicate-check` to explicitly include `id` and `application_id` across `EXACT_POSTING`, `SAME_ROLE`, and `COMPANY_ONLY` tiers.
+     - Updated `frontend/src/app.js` with `resolveInitialRoute()` supporting `?application=<id>`, `?id=<id>`, `#detail:<id>`.
+     - Preserved target parameter through unauthenticated PIN login flow.
+     - Graceful 404 fallback: if application is deleted or not found, `renderDetail()` safely navigates to `applications` with `toast("Application could not be found.")`.
+
+3. **Validation & Test Coverage**:
+   - `extension/tests/api.test.js`: 23/23 tests passing (+7 new tests covering canonical stages, unsupported stage regression, label mapping, URL security, duplicate IDs).
+   - `backend/test/app.test.js`: 57/57 tests passing (+5 new tests covering stages endpoint, all 13 canonical stages, `Bookmarked` rejection, forged stage rejection, duplicate response shape).
+   - `backend/e2e/extension.spec.js`: 6/6 tests passing (covering exact duplicate deep-linking, unauthenticated deep-link preservation, deleted target fallback, and `Saved` stage capture).
+   - `test/frontend.test.js`: 44/44 tests passing.
+   - Lint, typecheck, build: all 0 errors.
+
+**For the next agent**: PR #20 is updated on origin. Do NOT merge PR #20 into `development` without explicit user approval. Do NOT merge to `main` or deploy to production.
+
+
 

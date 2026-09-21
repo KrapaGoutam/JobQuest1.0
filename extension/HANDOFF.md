@@ -48,14 +48,17 @@ Stabilize JobQuest V2.1 Browser Capture Extension by resolving local real-world 
 - Pre-Merge Stabilization:
   - Defect 1 Fixed: CSS specificity override on `[hidden]` attribute resolved (`[hidden] { display: none !important; }`), static placeholder removed from HTML. Company-first duplicate classification (`EXACT_POSTING`, `SAME_ROLE`, `COMPANY_ONLY`, `NONE`) implemented in `backend/src/extension.js` and `extension/popup.js`.
   - Defect 2 Fixed: Support `resume_id: null` with `resume_version` in `backend/src/service.js` and `backend/src/extension.js`. Added 3-mode tailored resume interface in `extension/popup.html` and `popup.js`.
-  - Realistic Test Suite: Added backend tests (52/52 passing), extension unit tests (10/10 passing), and multi-viewport E2E tests (10/10 passing).
+  - Defect 3 Fixed: Hardened generic extraction cascade prioritizing semantic rendered DOM headings over metadata marketing slogans; aggregator domain branding never treated as employer company; dual-suffix salary regex support.
+  - Defect 4 Fixed: Extension stage alignment with JobQuest workflow actions. Added `GET /api/extension/stages`, removed invented `Bookmarked` stage in favor of canonical `Saved` stage for bookmarks and `Applied` default.
+  - Defect 5 Fixed: Open Existing duplicate navigation deep-links directly to matched application via `?application=<id>` in `frontend/src/app.js`, origin-validated via `buildSecureJobQuestUrl`, with graceful 404 fallback to Applications view and toast notice.
+  - Realistic Test Suite: Backend tests (57/57 passing), extension unit tests (23/23 passing), frontend unit tests (44/44 passing), Playwright E2E tests (6/6 passing).
   - Documentation Suite: Produced `docs/EXTENSION_ARCHITECTURE.md`, `docs/EXTENSION_TEST_PLAN.md`, `docs/EXTENSION_SECURITY.md`, `docs/EXTENSION_INSTALLATION.md`, updated `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md`, and marked JobRight.ai support as deferred in `tasks/BACKLOG.md`.
 
 ## Partially Complete
 - None
 
 ## Currently In Progress
-- Awaiting user review and merge approval on PR #20
+- Final verification sweep before updating PR #20 with green CI
 
 ## Pending
 - User approval and merge into `development`

@@ -192,4 +192,166 @@ test.describe("Round 11 — Extension Settings & Capture Workflow", () => {
       page.locator('tr:has-text("Senior Capture Lead")'),
     ).toBeVisible();
   });
+
+  test("deep-link: 'Open Existing' navigates directly to application detail view (exact posting)", async ({
+    page,
+  }, testInfo) => {
+    const auth = await authenticatedPage(page, testInfo);
+
+    // 1. Create extension token
+    const tokenRes = await page.request.post("/api/extension/tokens", {
+      headers: { "X-CSRF-Token": auth.csrf_token },
+      data: { label: "Deep-Link Test Token" },
+    });
+    expect(tokenRes.ok()).toBeTruthy();
+    const { token: bearerToken } = await tokenRes.json();
+
+    // 2. Seed application: Company = ABC, Title = QA Engineer, Stage = Applied
+    const seedRes = await page.request.post("/api/extension/applications", {
+      headers: { Authorization: `Bearer ${bearerToken}` },
+      data: {
+        company: "ABC",
+        job_title: "QA Engineer",
+        job_url: "https://abc.example.com/jobs/123",
+        stage: "Applied",
+        date_applied: "2026-09-20",
+      },
+    });
+    expect(seedRes.ok()).toBeTruthy();
+    const seededApp = await seedRes.json();
+    expect(seededApp.id).toBeGreaterThan(0);
+
+    // 3. Duplicate check returns EXACT_POSTING with matched application ID
+    const checkRes = await page.request.get(
+      `/api/extension/duplicate-check?job_url=${encodeURIComponent("https://abc.example.com/jobs/123")}`,
+      { headers: { Authorization: `Bearer ${bearerToken}` } },
+    );
+    expect(checkRes.ok()).toBeTruthy();
+    const dupCheck = await checkRes.json();
+    expect(dupCheck.match_type).toBe("exact_posting");
+    expect(dupCheck.matches[0].id).toBe(seededApp.id);
+    expect(dupCheck.matches[0].application_id).toBe(seededApp.id);
+
+    // 4. Navigate directly to target application via deep-link
+    await page.goto(`/?application=${seededApp.id}`);
+
+    // 5. Verify application detail view is open
+    await expect(page.locator("h1")).toContainText("ABC — QA Engineer");
+    await expect(page.locator(".stage-badge")).toContainText("Applied");
+    await expect(page.locator("#detail-stage")).toHaveValue("Applied");
+
+    // 6. Verify Dashboard is NOT the terminal destination
+    await expect(page.locator(".dashboard-hero")).not.toBeVisible();
+  });
+
+  test("deep-link: unauthenticated deep-link preserves target through login", async ({
+    page,
+    context,
+  }, testInfo) => {
+    // 1. Create user and seed an application
+    const suffix = `${testInfo.project.name}-${Date.now()}`.replace(/[^a-z0-9]/gi, "");
+    const username = `unauthuser${suffix}`.slice(0, 40);
+    const regRes = await page.request.post("/api/auth/register", {
+      data: {
+        full_name: "Unauthenticated Target User",
+        username,
+        pin: "4321",
+        confirm_pin: "4321",
+      },
+    });
+    expect(regRes.ok()).toBeTruthy();
+    const auth = await regRes.json();
+
+    const tokenRes = await page.request.post("/api/extension/tokens", {
+      headers: { "X-CSRF-Token": auth.csrf_token },
+      data: { label: "Unauth Test Token" },
+    });
+    expect(tokenRes.ok()).toBeTruthy();
+    const { token: bearerToken } = await tokenRes.json();
+
+    const seedRes = await page.request.post("/api/extension/applications", {
+      headers: { Authorization: `Bearer ${bearerToken}` },
+      data: {
+        company: "TargetCorp",
+        job_title: "Deep Link Lead",
+        stage: "Applied",
+        date_applied: "2026-09-20",
+      },
+    });
+    const seededApp = await seedRes.json();
+
+    // 2. Clear browser session cookies to ensure unauthenticated state
+    await context.clearCookies();
+
+    // 3. Navigate directly to deep-link URL while logged out
+    await page.goto(`/?application=${seededApp.id}`);
+
+    // 4. Verify auth view is displayed
+    await expect(page.locator("#auth-form")).toBeVisible();
+
+    // 5. Sign in
+    await page.locator('#auth-form input[name="username"]').fill(username);
+    await page.locator('#auth-form input[name="pin"]').fill("4321");
+    await page.locator('#auth-form button:has-text("Sign in")').click();
+
+    // 6. Verify user is taken directly to the target application detail
+    await expect(page.locator("h1")).toContainText("TargetCorp — Deep Link Lead");
+    await expect(page.locator(".stage-badge")).toContainText("Applied");
+    await expect(page.locator(".dashboard-hero")).not.toBeVisible();
+  });
+
+  test("deep-link: missing or deleted target application falls back gracefully with toast", async ({
+    page,
+  }, testInfo) => {
+    await authenticatedPage(page, testInfo);
+
+    // Navigate to non-existent application ID
+    await page.goto("/?application=999999");
+
+    // Must not crash; falls back to applications workspace and displays toast
+    await expect(page.locator(".application-workspace, #applications-table-root, h1:has-text('Applications')").first()).toBeVisible();
+    await expect(page.locator("#toast")).toContainText("Application could not be found.");
+    await expect(page.locator(".dashboard-hero")).not.toBeVisible();
+  });
+
+  test("extension stage: capture with 'Saved' stage (bookmarking) is supported and displayed in UI", async ({
+    page,
+  }, testInfo) => {
+    const auth = await authenticatedPage(page, testInfo);
+
+    const tokenRes = await page.request.post("/api/extension/tokens", {
+      headers: { "X-CSRF-Token": auth.csrf_token },
+      data: { label: "Saved Stage Token" },
+    });
+    const { token: bearerToken } = await tokenRes.json();
+
+    // Verify GET /api/extension/stages returns Saved
+    const stagesRes = await page.request.get("/api/extension/stages", {
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    });
+    expect(stagesRes.ok()).toBeTruthy();
+    const { stages } = await stagesRes.json();
+    expect(stages).toContain("Saved");
+
+    // Save posting as "Saved" (bookmarking)
+    const createRes = await page.request.post("/api/extension/applications", {
+      headers: { Authorization: `Bearer ${bearerToken}` },
+      data: {
+        company: "BookmarkedCo",
+        job_title: "Pre-Application Researcher",
+        stage: "Saved",
+        date_applied: "2026-09-20",
+      },
+    });
+    expect(createRes.ok()).toBeTruthy();
+    const savedApp = await createRes.json();
+    expect(savedApp.stage).toBe("Saved");
+
+    // Open via deep-link
+    await page.goto(`/?application=${savedApp.id}`);
+    await expect(page.locator("h1")).toContainText("BookmarkedCo — Pre-Application Researcher");
+    await expect(page.locator(".stage-badge")).toContainText("Saved");
+    await expect(page.locator("#detail-stage")).toHaveValue("Saved");
+  });
 });
+

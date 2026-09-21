@@ -1,6 +1,6 @@
 import { rows } from "./db.js"
 import { newToken, tokenHash } from "./security.js"
-import { createApplication } from "./service.js"
+import { createApplication, STAGES } from "./service.js"
 
 // ---------------------------------------------------------------------------
 // Bearer-token authentication for extension endpoints.
@@ -167,6 +167,25 @@ export async function handleExtension(context, helpers) {
     return (json(response, 200, resumes), true)
   }
 
+  // GET /api/extension/stages (or /api/extension/workflow-actions) — canonical workflow stages & display labels
+  if (
+    (path === "/api/extension/stages" || path === "/api/extension/workflow-actions") &&
+    request.method === "GET"
+  ) {
+    requireExtensionAuth(db, request)
+    return (
+      json(response, 200, {
+        stages: STAGES,
+        default: "Applied",
+        workflow_actions: STAGES.map((stage) => ({
+          label: stage,
+          value: stage,
+        })),
+      }),
+      true
+    )
+  }
+
   // GET /api/extension/duplicate-check — check for existing applications
   // Query params: job_url, company, job_title
   // Semantics:
@@ -199,6 +218,8 @@ export async function handleExtension(context, helpers) {
         for (const app of existing) {
           if (normalizeJobUrl(app.job_url) === normUrl) {
             matches.push({
+              id: app.id,
+              application_id: app.id,
               match_type: "exact_posting",
               level: 1, // backward compatibility
               match: "exact_url", // backward compatibility
@@ -245,6 +266,8 @@ export async function handleExtension(context, helpers) {
           matchType = "same_role"
           for (const app of sameRoleApps.slice(0, 3)) {
             matches.push({
+              id: app.id,
+              application_id: app.id,
               match_type: "same_role",
               level: 2, // backward compatibility
               match: "company_title", // backward compatibility
@@ -255,6 +278,8 @@ export async function handleExtension(context, helpers) {
           matchType = "company_only"
           for (const app of sameCompanyApps.slice(0, 3)) {
             matches.push({
+              id: app.id,
+              application_id: app.id,
               match_type: "company_only",
               level: 3,
               match: "company_only",

@@ -349,4 +349,42 @@ During local end-to-end validation of PR #20, two real-world defects were discov
 - No Selenium dependencies were added.
 - A dedicated JobRight adapter remains a future consideration for later rounds after further production telemetry.
 
+---
+
+## Real-world defect — unsupported workflow stage
+
+### Defect 4: Extension Stage Values Alignment with JobQuest Workflow Actions
+- **Symptom**: User selected `"Bookmarked"` in the extension popup and the save failed with HTTP 400: `"Unsupported stage: Bookmarked"`.
+- **Root Cause**: The extension popup previously hardcoded an invented, independent stage list (`Applied`, `Bookmarked`, `Screening`, `Interviewing`, `Offer`) inside `extension/popup.html`. JobQuest's canonical source of truth for workflow actions and application stages is `STAGES` defined in `backend/src/service.js` and `frontend/src/ui-utils.js`: `["Saved", "Preparing", "Applied", "Assessment", "Recruiter Screen", "Interview", "Final Interview", "Offer", "Rejected", "Withdrawn", "Ghosted", "Position Closed", "Accepted"]`. In JobQuest, saving or bookmarking an unsubmitted posting before applying is canonically represented by the `"Saved"` stage. `"Bookmarked"` never existed in JobQuest's canonical workflow model.
+- **Resolution**:
+  1. Exposed canonical stages via a new authenticated endpoint: `GET /api/extension/stages` (and alias `/api/extension/workflow-actions`) in `backend/src/extension.js`, returning `{ stages: STAGES, default: "Applied", workflow_actions: [...] }`.
+  2. Implemented `getStages()` in `extension/api/jobquest.js`.
+  3. Replaced invented hardcoded options in `extension/popup.html` with a dynamic loader in `extension/popup.js` (`loadWorkflowStages()`) that loads canonical stages on boot.
+  4. If stage loading fails (e.g. invalid connection or token), saving is disabled with an explanatory error to prevent submission of unvalidated data.
+  5. The default stage remains `"Applied"` for tracking submissions, while `"Saved"` is available for bookmarking/saving for later.
+- **Regression Coverage**:
+  - `extension/tests/api.test.js`: Parity test asserting extension options match `STAGES`; negative test asserting `"Bookmarked"` is not in canonical stages and fails validation; workflow action mapping test; loop testing all 13 canonical stages.
+  - `backend/test/app.test.js`: Verified `GET /api/extension/stages` returns 200 with 13 canonical stages; verified `POST /api/extension/applications` accepts all 13 canonical stages (including `"Saved"`); verified `stage: "Bookmarked"` and forged stages are rejected with 400.
+  - `backend/e2e/extension.spec.js`: Playwright E2E test verifying capture with stage `"Saved"` displays properly in JobQuest UI.
+
+---
+
+## Real-world UX defect — Open Existing navigation
+
+### Defect 5: Open Existing Duplicate Navigation to Dashboard Instead of Matched Application
+- **Symptom**: When duplicate detection identified an existing application (`EXACT_POSTING`, `SAME_ROLE`, or `COMPANY_ONLY`), clicking `Open Existing` (or `View Existing Application`) navigated the user to the JobQuest base URL (`${instanceUrl}/`), landing on the Dashboard instead of the matched application.
+- **Root Cause**:
+  1. In `extension/popup.js`, the click handlers for `dupOpenBtn` and `viewAppBtn` executed `chrome.tabs.create({ url: `${base}/` })`, discarding the matched application's identity.
+  2. In `frontend/src/app.js`, initial boot and post-login flow executed `go("dashboard")` unconditionally, without inspecting URL query parameters or hash.
+- **Resolution**:
+  1. Minimal Deep-Link Mechanism: Added `resolveInitialRoute()` in `frontend/src/app.js` inspecting `?application=<id>`, `?id=<id>`, or `#detail:<id>`. If present, JobQuest navigates directly to `renderDetail(id)` on boot or immediately after PIN authentication without requiring a full routing rewrite.
+  2. Safe Fallback for Deleted/Missing Target: In `frontend/src/app.js`, `renderDetail(id)` catches 404/not found errors, navigates safely to `applications` (`await go("applications")`), and displays `toast("Application could not be found.")` without crashing.
+  3. Stable ID Propagation: Updated `backend/src/extension.js` duplicate check to ensure every match item explicitly includes `id: app.id` and `application_id: app.id`.
+  4. Secure URL Construction: Added `buildSecureJobQuestUrl(instanceUrl, pathAndQuery)` in `extension/api/jobquest.js`, validating `http:` or `https:` protocol and strictly binding navigation to `new URL(instanceUrl).origin` to prevent open redirects (rejecting `javascript:`, `data:`, `//evil.com`, etc.).
+  5. Extension Navigation: Updated `dupOpenBtn` and `viewAppBtn` in `extension/popup.js` to construct `/?application=${targetId}` using `buildSecureJobQuestUrl`.
+- **Regression Coverage**:
+  - `extension/tests/api.test.js`: Verified `buildSecureJobQuestUrl` correctly formats valid links and blocks open redirects, external protocols, and double-slash origin escapes; verified match items provide stable IDs across all match tiers.
+  - `backend/test/app.test.js`: Verified duplicate check responses include stable `id` and `application_id` for exact, same-role, and company-only matches.
+  - `backend/e2e/extension.spec.js`: Playwright E2E test verifying clicking `Open Existing` for an exact duplicate opens the matched application directly; verified title, company, and stage match seeded values; verified unauthenticated deep link preserves target through PIN login; verified non-existent target ID falls back to Applications view with toast.
+
 

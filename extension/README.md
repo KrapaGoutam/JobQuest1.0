@@ -16,6 +16,8 @@ Manifest V3 browser extension for Google Chrome and Microsoft Edge that captures
   - **Same Role (`SAME_ROLE`)**: Detects applications with matching normalized company and job title; offers "Open Existing" and "Save Anyway".
   - **Company History (`COMPANY_ONLY`)**: Identifies previous applications at the same company for a different job; provides non-blocking informational guidance without requiring duplicate overrides.
 - **Tailored Resume Support**: Supports selecting an existing resume version from JobQuest or manually entering a custom version label (e.g. `QA Automation v96`).
+- **Canonical Workflow Stages**: Dynamically loads JobQuest's canonical stages (`Saved`, `Preparing`, `Applied`, ..., `Accepted`) from the backend. Pre-application bookmarking is represented by `"Saved"`, and submissions default to `"Applied"`.
+- **Application Deep-Linking**: Clicking "Open Existing" on duplicate warnings or "View Application" on the success screen deep-links directly to the matched application in JobQuest.
 - **Secure Bearer Token Auth**: Connects using scoped extension tokens (stored as SHA-256 hashes, revocable at any time from JobQuest Settings).
 
 ---

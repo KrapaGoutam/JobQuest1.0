@@ -14,6 +14,7 @@ detailed spec in the round's own `docs/FEATURE_UPGRADE_N.md` once it starts.
 | 8 | Habit tracker — genuinely net-new `habits`/`habit_logs`; daily/weekdays/weekly frequency, unified boolean+count completion model, idempotent progress writes, derived streaks — see `docs/FEATURE_UPGRADE_8.md` | Merged (PR #15) |
 | 9 | Journal / notes — genuinely net-new `notes` table, distinct from the 8 existing domain-specific notes fields (left untouched); search, type/pinned filters, optional application link, safe plain-text rendering — see `docs/FEATURE_UPGRADE_9.md` | Merged (PR #16) |
 | 10 (FINAL) | Analytics + Capstone Hardening — Analytics page, full backlog reconciliation, UI/UX + design-system capstone, accessibility root-fix, formal security audit, performance audit, refactor/dead-code pass, full regression validation, `development`-vs-`main` integration plan + release notes — see `docs/FEATURE_UPGRADE_10_FINAL.md` | Implemented locally; PR pending |
+| 11 | Browser Capture Extension — Manifest V3 extension, token management, duplicate detection, generic career page heuristics, canonical workflow actions alignment, deep-linking — see `docs/FEATURE_UPGRADE_11_BROWSER_EXTENSION.md` | Pre-merge stabilization complete; PR #20 open |
 
 Not sequenced, on request only: `docs/design/STITCH_PROMPT.md` (Google Stitch prompt
 package, plan-only).

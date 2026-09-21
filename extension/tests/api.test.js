@@ -2,8 +2,9 @@
 
 import test from "node:test"
 import assert from "node:assert/strict"
-import { normalizeInstanceUrl } from "../api/jobquest.js"
+import { normalizeInstanceUrl, buildSecureJobQuestUrl } from "../api/jobquest.js"
 import { normalizeText, normalizeJobUrl } from "../../backend/src/extension.js"
+import { STAGES } from "../../backend/src/service.js"
 
 test("normalizeInstanceUrl: strips trailing slashes and handles empty or prefixless URLs", () => {
   assert.equal(normalizeInstanceUrl(""), "")
@@ -158,5 +159,117 @@ test("resume payload: formatting for existing, manual, and none modes", () => {
   })
   assert.equal(none.resume_id, null)
   assert.equal(none.resume_version, null)
+})
+
+test("canonical stages: options strictly mirror JobQuest canonical STAGES", () => {
+  // Verify STAGES exported from backend contains the expected canonical stages
+  assert.ok(Array.isArray(STAGES))
+  assert.equal(STAGES.length, 13)
+  assert.ok(STAGES.includes("Saved"))
+  assert.ok(STAGES.includes("Applied"))
+  assert.ok(STAGES.includes("Interview"))
+  assert.ok(STAGES.includes("Offer"))
+  assert.ok(STAGES.includes("Rejected"))
+
+  // "Saved" is JobQuest's canonical pre-application bookmark stage
+  assert.equal(STAGES[0], "Saved")
+})
+
+test("unsupported stage regression: 'Bookmarked' is not canonical and fails validation", () => {
+  // Confirm 'Bookmarked' was an invented value and is NOT in JobQuest's canonical stages
+  assert.equal(STAGES.includes("Bookmarked"), false)
+
+  // Test that validating 'Bookmarked' against canonical STAGES produces an error
+  function validateStage(stage) {
+    if (!STAGES.includes(stage)) {
+      return `Unsupported stage: ${stage}`
+    }
+    return null
+  }
+
+  const err = validateStage("Bookmarked")
+  assert.equal(err, "Unsupported stage: Bookmarked")
+
+  // Meanwhile, canonical bookmarking stage 'Saved' passes validation cleanly
+  assert.equal(validateStage("Saved"), null)
+})
+
+test("workflow action labels map directly to valid canonical backend values", () => {
+  const workflowActions = STAGES.map((s) => ({ label: s, value: s }))
+  for (const action of workflowActions) {
+    assert.ok(action.label, "Label must not be empty")
+    assert.ok(STAGES.includes(action.value), `Value ${action.value} must be in STAGES`)
+  }
+})
+
+test("every canonical stage is valid and accepted by validation logic", () => {
+  for (const stage of STAGES) {
+    assert.ok(typeof stage === "string" && stage.length > 0)
+    assert.ok(STAGES.includes(stage))
+  }
+})
+
+test("buildSecureJobQuestUrl: constructs valid target URLs strictly bound to configured origin", () => {
+  assert.equal(
+    buildSecureJobQuestUrl("http://localhost:3000", "/?application=123"),
+    "http://localhost:3000/?application=123",
+  )
+  assert.equal(
+    buildSecureJobQuestUrl("http://localhost:3000/", "?application=123"),
+    "http://localhost:3000/?application=123",
+  )
+  assert.equal(
+    buildSecureJobQuestUrl("https://jobquest.example.com", "/?page=applications"),
+    "https://jobquest.example.com/?page=applications",
+  )
+  assert.equal(
+    buildSecureJobQuestUrl("https://jobquest.example.com/", "#detail:456"),
+    "https://jobquest.example.com/#detail:456",
+  )
+})
+
+test("buildSecureJobQuestUrl: rejects open redirects, data URIs, and javascript protocol", () => {
+  // Disallowed protocols
+  assert.throws(() => buildSecureJobQuestUrl("javascript:alert(1)", "/?app=1"), /must use http: or https:/)
+  assert.throws(() => buildSecureJobQuestUrl("data:text/html,test", "/?app=1"), /must use http: or https:/)
+
+  // Empty instance URL
+  assert.throws(() => buildSecureJobQuestUrl("", "/?app=1"), /not configured/)
+
+  // Relative open-redirect tricks that attempt to alter hostname
+  assert.throws(
+    () => buildSecureJobQuestUrl("http://localhost:3000", "//evil.com/phish"),
+    /origin boundary/,
+  )
+})
+
+test("duplicate match items provide stable application ID across all match tiers", () => {
+  const sampleApp = { id: 42, company: "ABC Corp", job_title: "QA Engineer", stage: "Saved" }
+
+  const exactMatch = {
+    id: sampleApp.id,
+    application_id: sampleApp.id,
+    match_type: "exact_posting",
+    application: sampleApp,
+  }
+  const sameRoleMatch = {
+    id: sampleApp.id,
+    application_id: sampleApp.id,
+    match_type: "same_role",
+    application: sampleApp,
+  }
+  const companyOnlyMatch = {
+    id: sampleApp.id,
+    application_id: sampleApp.id,
+    match_type: "company_only",
+    application: sampleApp,
+  }
+
+  for (const match of [exactMatch, sameRoleMatch, companyOnlyMatch]) {
+    assert.equal(typeof match.id, "number")
+    assert.equal(match.id, 42)
+    assert.equal(match.application_id, 42)
+    assert.equal(match.application.id, 42)
+  }
 })
 

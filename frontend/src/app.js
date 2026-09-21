@@ -484,7 +484,7 @@ function authView(register = false, error = "", transition = false) {
       state.user = result.user;
       state.csrf = result.csrf_token;
       applyTheme(state.user.theme || "system");
-      go("dashboard");
+      go(resolveInitialRoute());
     } catch (error) {
       authView(register, error, transition);
     }
@@ -505,6 +505,24 @@ async function logout() {
   state.user = null;
   state.csrf = null;
   authView();
+}
+function resolveInitialRoute() {
+  const params = new URLSearchParams(window.location.search);
+  const targetApp = params.get("application") || params.get("id");
+  if (targetApp && /^\d+$/.test(targetApp.trim())) {
+    return `detail:${targetApp.trim()}`;
+  }
+  const pageParam = params.get("page");
+  if (pageParam) {
+    return pageParam;
+  }
+  const hash = window.location.hash || "";
+  const hashMatch =
+    hash.match(/#detail:(\d+)/) || hash.match(/#application-(\d+)/);
+  if (hashMatch) {
+    return `detail:${hashMatch[1]}`;
+  }
+  return "dashboard";
 }
 async function go(page) {
   state.page = page;
@@ -1721,8 +1739,15 @@ async function renderApplications(params = new URLSearchParams()) {
 }
 
 async function renderDetail(id) {
-  const data = await api(`/api/applications/${id}/detail`),
-    item = data.application,
+  let data;
+  try {
+    data = await api(`/api/applications/${id}/detail`);
+  } catch (err) {
+    await go("applications");
+    toast("Application could not be found.");
+    return;
+  }
+  const item = data.application,
     form = await applicationForm(item),
     jobUrlHref = safeExternalUrl(item.job_url);
   shell(
@@ -3639,7 +3664,7 @@ applyTheme(localStorage.getItem("jobquest-theme") || "system");
     state.user = result.user;
     state.csrf = result.csrf_token;
     applyTheme(state.user.theme || "system");
-    go("dashboard");
+    go(resolveInitialRoute());
   } catch {
     authView();
   }
