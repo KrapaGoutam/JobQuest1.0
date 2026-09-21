@@ -4,10 +4,9 @@ Last updated: 2026-09-20, by Antigravity (Google Deepmind).
 
 ## Branch / commit
 
-- `development`: head `a06c7cf` — Round 10 integrated, all tests green, PR #18
-  open (`development → main`), awaiting user approval. **Do not merge PR #18.**
-- `main`: unchanged. Three commits behind `development` (the Neon-crash fix).
-- `feature/011-jobquest-capture-extension`: Round 11 Pre-Merge Stabilization & Defect Fixes complete (including Defect 4 Canonical Stage Alignment and Defect 5 "Open Existing" Deep-Linking). PR #20 updated on origin targeting `development`. All 57 backend, 23 extension unit, 6 Playwright E2E, and 44 frontend unit tests passing. Awaiting user review. **Do not merge PR #20.**
+- `development`: head `a61e26e` — Round 10 integrated.
+- `main`: head `e07caf3` — JobQuest V2 released (PR #18 merged).
+- `feature/011-jobquest-capture-extension`: head `b9c2692` — Round 11 Pre-Merge Stabilization & Defect Fixes complete. PR #20 targeting `development` with 9/9 CI checks green. Authorized for merge into `development`.
 
 - Local validation of the **integrated** `development` branch (not just the
   feature branch): all green — reproducible install, static-quality (lint/

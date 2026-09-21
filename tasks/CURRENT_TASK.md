@@ -57,8 +57,12 @@ approval. Do not merge PR #18 without explicit instruction.
 
 ## Next exact action
 
-Awaiting user review and approval of PR #20 into `development`.
-DO NOT merge PR #20. DO NOT merge to `development` or `main`. DO NOT deploy to production. DO NOT publish extension to store.
+Complete the authorized final merge flow:
+1. Merge PR #20 (`feature/011-jobquest-capture-extension` → `development`) via regular merge commit.
+2. Switch to `development`, verify local test suite and CI.
+3. Merge `development` → `main` via regular merge commit or release PR after full validation.
+4. Verify Render/Neon readiness and final status.
+Preserve all history, untracked files, and documentation. DO NOT DELETE ANYTHING.
 
 ## Key Decisions
 
