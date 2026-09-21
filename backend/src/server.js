@@ -417,10 +417,10 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
   if (db.dialect === "postgres") {
     const ready = db
       .prepare("SELECT version FROM schema_migrations WHERE version=?")
-      .get("006_feature_upgrade_one.sql");
+      .get("013_extension_tokens.sql");
     if (!ready)
       throw new Error(
-        "PostgreSQL schema is not current; run the controlled migration command",
+        "PostgreSQL schema is not current; run the controlled migration command (missing 013_extension_tokens.sql)",
       );
   } else migrate(db);
   return async function handler(request, response) {
@@ -957,6 +957,15 @@ export function createRequestHandler({ db = openDatabase() } = {}) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const url = process.env.DIRECT_URL || process.env.DATABASE_URL;
+  if (url && /^postgres(?:ql)?:\/\//i.test(url)) {
+    const { migratePostgres, isProductionMigrationAllowed } = await import(
+      "./postgres-migrate.js"
+    );
+    await migratePostgres(url, {
+      allowProduction: isProductionMigrationAllowed(),
+    });
+  }
   const db = openDatabase();
   const server = createServer(createRequestHandler({ db }));
   const port = Number(process.env.PORT || 3000);

@@ -4,6 +4,11 @@ import { createServer } from "node:http";
 import { openDatabase } from "../src/db.js";
 import { createRequestHandler } from "../src/server.js";
 import { hashPassword } from "../src/security.js";
+import {
+  assertSafeDatabaseUrl,
+  resolveMigrationDatabaseUrl,
+  isProductionMigrationAllowed,
+} from "../src/postgres-migrate.js";
 
 const db = openDatabase(process.env.TEST_DATABASE_URL || ":memory:");
 const server = createServer(createRequestHandler({ db }));
@@ -3069,6 +3074,111 @@ test("extension api: duplicate check responses include stable application id and
   assert.equal(check3.data.matches[0].id, seededId);
   assert.equal(check3.data.matches[0].application_id, seededId);
 });
+
+test("postgres-migrate: resolveMigrationDatabaseUrl prioritizes DIRECT_URL, then DATABASE_URL, then TEST_DATABASE_URL", () => {
+  const origDirect = process.env.DIRECT_URL;
+  const origDb = process.env.DATABASE_URL;
+  const origTest = process.env.TEST_DATABASE_URL;
+
+  try {
+    delete process.env.DIRECT_URL;
+    delete process.env.DATABASE_URL;
+    delete process.env.TEST_DATABASE_URL;
+    assert.equal(resolveMigrationDatabaseUrl(), undefined);
+
+    process.env.TEST_DATABASE_URL = "postgresql://localhost/test_db";
+    assert.equal(resolveMigrationDatabaseUrl(), "postgresql://localhost/test_db");
+
+    process.env.DATABASE_URL = "postgresql://localhost/prod_db";
+    assert.equal(resolveMigrationDatabaseUrl(), "postgresql://localhost/prod_db");
+
+    process.env.DIRECT_URL = "postgresql://localhost/direct_prod_db";
+    assert.equal(resolveMigrationDatabaseUrl(), "postgresql://localhost/direct_prod_db");
+  } finally {
+    if (origDirect !== undefined) process.env.DIRECT_URL = origDirect;
+    else delete process.env.DIRECT_URL;
+    if (origDb !== undefined) process.env.DATABASE_URL = origDb;
+    else delete process.env.DATABASE_URL;
+    if (origTest !== undefined) process.env.TEST_DATABASE_URL = origTest;
+    else delete process.env.TEST_DATABASE_URL;
+  }
+});
+
+test("postgres-migrate: isProductionMigrationAllowed recognizes production, render, and confirmation flag", () => {
+  const origConfirm = process.env.CONFIRM_PRODUCTION_MIGRATION;
+  const origNodeEnv = process.env.NODE_ENV;
+  const origRender = process.env.RENDER;
+
+  try {
+    delete process.env.CONFIRM_PRODUCTION_MIGRATION;
+    delete process.env.NODE_ENV;
+    delete process.env.RENDER;
+    assert.equal(isProductionMigrationAllowed(), false);
+
+    process.env.CONFIRM_PRODUCTION_MIGRATION = "yes-migrate-jobquest";
+    assert.equal(isProductionMigrationAllowed(), true);
+
+    delete process.env.CONFIRM_PRODUCTION_MIGRATION;
+    process.env.NODE_ENV = "production";
+    assert.equal(isProductionMigrationAllowed(), true);
+
+    delete process.env.NODE_ENV;
+    process.env.RENDER = "true";
+    assert.equal(isProductionMigrationAllowed(), true);
+  } finally {
+    if (origConfirm !== undefined) process.env.CONFIRM_PRODUCTION_MIGRATION = origConfirm;
+    else delete process.env.CONFIRM_PRODUCTION_MIGRATION;
+    if (origNodeEnv !== undefined) process.env.NODE_ENV = origNodeEnv;
+    else delete process.env.NODE_ENV;
+    if (origRender !== undefined) process.env.RENDER = origRender;
+    else delete process.env.RENDER;
+  }
+});
+
+test("postgres-migrate: assertSafeDatabaseUrl guards production targets unless allowed", () => {
+  assert.throws(() => assertSafeDatabaseUrl("not-a-url"), /A PostgreSQL URL is required/);
+  assert.throws(
+    () => assertSafeDatabaseUrl("postgresql://user:pass@ep.neon.tech/neondb", { allowProduction: false }),
+    /Refusing database operation: test database name must end in _test/,
+  );
+  assert.doesNotThrow(() =>
+    assertSafeDatabaseUrl("postgresql://user:pass@ep.neon.tech/neondb", { allowProduction: true }),
+  );
+  assert.doesNotThrow(() =>
+    assertSafeDatabaseUrl("postgresql://user:pass@localhost:5432/my_app_test", { allowProduction: false }),
+  );
+});
+
+test("server: createRequestHandler requires 013_extension_tokens.sql on postgres dialect", () => {
+  const mockMissingDb = {
+    dialect: "postgres",
+    prepare(sql) {
+      return {
+        get(version) {
+          if (version === "013_extension_tokens.sql") return null;
+          return { version };
+        },
+      };
+    },
+  };
+  assert.throws(
+    () => createRequestHandler({ db: mockMissingDb }),
+    /missing 013_extension_tokens\.sql/,
+  );
+
+  const mockReadyDb = {
+    dialect: "postgres",
+    prepare(sql) {
+      return {
+        get(version) {
+          return { version };
+        },
+      };
+    },
+  };
+  assert.doesNotThrow(() => createRequestHandler({ db: mockReadyDb }));
+});
+
 
 
 
